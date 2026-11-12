@@ -1,0 +1,181 @@
+using System;
+using System.Drawing;
+using System.Drawing.Drawing2D;
+using System.Windows.Forms;
+
+namespace AdlibComposer.App.Controls;
+
+/// <summary>Instrument Maker의 슬라이더(◁ ▒▒■▒▒ ▷ + 숫자). ShowWaveGlyph면 숫자 대신 파형 그림을 그린다.</summary>
+internal sealed class RetroSlider : Control
+{
+    private const int ButtonW = 16;
+    private const int ValueW = 40;
+    private const int ThumbW = 26;
+
+    private int min, max = 15, value;
+    private bool dragging;
+
+    public event EventHandler ValueChanged;
+    public bool ShowWaveGlyph { get; set; }
+
+    public RetroSlider()
+    {
+        SetStyle(ControlStyles.Selectable, true);
+        SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
+        TabStop = true;
+        Height = 20;
+        BackColor = Theme.Back;
+    }
+
+    public int Minimum { get { return min; } set { min = value; Invalidate(); } }
+    public int Maximum { get { return max; } set { max = value; Invalidate(); } }
+
+    public int Value
+    {
+        get { return value; }
+        set
+        {
+            int v = value < min ? min : (value > max ? max : value);
+            if (v == this.value) return;
+            this.value = v;
+            Invalidate();
+            if (ValueChanged != null) ValueChanged(this, EventArgs.Empty);
+        }
+    }
+
+    /// <summary>이벤트 없이 값만 바꾼다 (화면 갱신용).</summary>
+    public void SetValueSilently(int v)
+    {
+        this.value = v < min ? min : (v > max ? max : v);
+        Invalidate();
+    }
+
+    private Rectangle LeftButton { get { return new Rectangle(0, 0, ButtonW, Height - 1); } }
+    private Rectangle TrackRect { get { return new Rectangle(ButtonW, 0, Math.Max(10, Width - ButtonW * 2 - ValueW), Height - 1); } }
+    private Rectangle RightButton { get { return new Rectangle(TrackRect.Right, 0, ButtonW, Height - 1); } }
+
+    private Rectangle ThumbRect
+    {
+        get
+        {
+            var t = TrackRect;
+            int span = Math.Max(1, t.Width - ThumbW - 1);
+            int range = Math.Max(1, max - min);
+            int x = t.X + (int)((long)span * (value - min) / range);
+            return new Rectangle(x, t.Y, ThumbW, t.Height);
+        }
+    }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        var g = e.Graphics;
+        g.Clear(Theme.Back);
+        var left = LeftButton; var right = RightButton; var track = TrackRect;
+
+        using (var hatch = new HatchBrush(HatchStyle.Percent50, Color.Black, Color.White))
+            g.FillRectangle(hatch, track);
+        g.DrawRectangle(Pens.Black, track);
+
+        DrawButton(g, left, true);
+        DrawButton(g, right, false);
+
+        var thumb = ThumbRect;
+        g.FillRectangle(Brushes.White, thumb);
+        g.DrawRectangle(Pens.Black, thumb);
+        if (Focused) g.DrawRectangle(Pens.Black, new Rectangle(thumb.X + 3, thumb.Y + 3, thumb.Width - 6, thumb.Height - 6));
+
+        int vx = right.Right + 6;
+        if (ShowWaveGlyph) DrawWave(g, new Rectangle(vx, 3, ValueW - 8, Height - 7), value);
+        else g.DrawString(value.ToString(), Theme.UiFont, Brushes.Black, vx, 1);
+    }
+
+    private static void DrawButton(Graphics g, Rectangle r, bool leftArrow)
+    {
+        g.FillRectangle(Brushes.White, r);
+        g.DrawRectangle(Pens.Black, r);
+        int cx = r.X + r.Width / 2, cy = r.Y + r.Height / 2;
+        Point[] tri = leftArrow
+            ? new[] { new Point(cx + 3, cy - 4), new Point(cx + 3, cy + 4), new Point(cx - 3, cy) }
+            : new[] { new Point(cx - 3, cy - 4), new Point(cx - 3, cy + 4), new Point(cx + 3, cy) };
+        g.FillPolygon(Brushes.Black, tri);
+    }
+
+    /// <summary>OPL 웨이브폼 0~3 (사인, 반파, 절대값, 펄스형)의 작은 그림.</summary>
+    internal static void DrawWave(Graphics g, Rectangle r, int wave)
+    {
+        int n = Math.Max(8, r.Width);
+        var pts = new PointF[n];
+        for (int i = 0; i < n; i++)
+        {
+            double ph = (double)i / (n - 1) * 2.0 * Math.PI;
+            double s = Math.Sin(ph);
+            double v;
+            switch (wave)
+            {
+                case 1: v = s > 0 ? s : 0; break;
+                case 2: v = Math.Abs(s); break;
+                case 3: v = (s > 0 && (ph % Math.PI) < Math.PI / 2) ? s : ((s < 0 && ((ph % Math.PI) < Math.PI / 2)) ? -s : 0); break;
+                default: v = s; break;
+            }
+            float y = wave == 0 ? (float)(r.Y + r.Height / 2.0 - v * r.Height / 2.0)
+                                : (float)(r.Bottom - v * r.Height);
+            pts[i] = new PointF(r.X + i, y);
+        }
+        g.DrawLines(Pens.Black, pts);
+    }
+
+    private void SetFromX(int x)
+    {
+        var t = TrackRect;
+        int span = Math.Max(1, t.Width - ThumbW);
+        double f = (double)(x - t.X - ThumbW / 2) / span;
+        Value = min + (int)Math.Round(f * (max - min));
+    }
+
+    protected override void OnMouseDown(MouseEventArgs e)
+    {
+        base.OnMouseDown(e);
+        Focus();
+        if (e.Button != MouseButtons.Left) return;
+        if (LeftButton.Contains(e.Location)) Value = value - 1;
+        else if (RightButton.Contains(e.Location)) Value = value + 1;
+        else if (TrackRect.Contains(e.Location)) { dragging = true; Capture = true; SetFromX(e.X); }
+    }
+
+    protected override void OnMouseMove(MouseEventArgs e)
+    {
+        base.OnMouseMove(e);
+        if (dragging) SetFromX(e.X);
+    }
+
+    protected override void OnMouseUp(MouseEventArgs e)
+    {
+        base.OnMouseUp(e);
+        dragging = false;
+        Capture = false;
+    }
+
+    protected override void OnMouseWheel(MouseEventArgs e)
+    {
+        base.OnMouseWheel(e);
+        Value = value + (e.Delta > 0 ? 1 : -1);
+    }
+
+    protected override bool IsInputKey(Keys keyData)
+    {
+        if (keyData == Keys.Left || keyData == Keys.Right) return true;
+        return base.IsInputKey(keyData);
+    }
+
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        base.OnKeyDown(e);
+        if (e.KeyCode == Keys.Left) { Value = value - 1; e.Handled = true; }
+        else if (e.KeyCode == Keys.Right) { Value = value + 1; e.Handled = true; }
+        else if (e.KeyCode == Keys.Home) { Value = min; e.Handled = true; }
+        else if (e.KeyCode == Keys.End) { Value = max; e.Handled = true; }
+    }
+
+    protected override void OnGotFocus(EventArgs e) { base.OnGotFocus(e); Invalidate(); }
+    protected override void OnLostFocus(EventArgs e) { base.OnLostFocus(e); Invalidate(); }
+}

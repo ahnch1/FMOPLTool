@@ -1,0 +1,212 @@
+using System;
+using System.Collections.Generic;
+
+namespace AdlibComposer.Core;
+
+public sealed class Note
+{
+    public int StartTick;
+    public int Duration;
+    /// <summary>ROL 노트 번호 (12..107, 48 = 가운데 도).</summary>
+    public int Pitch;
+    public int EndTick { get { return StartTick + Duration; } }
+    public Note Clone() { return (Note)MemberwiseClone(); }
+}
+
+public sealed class TempoEvent { public int Tick; public float Multiplier = 1f; }
+public sealed class TimbreEvent { public int Tick; public string InstrumentName = ""; public int Unknown; }
+public sealed class VolumeEvent { public int Tick; public float Volume = 1f; }
+public sealed class PitchEvent { public int Tick; public float Pitch = 1f; }
+
+/// <summary>ROL의 보이스 1개 = 노트 + 악기교체 + 볼륨 + 피치 트랙 4종.</summary>
+public sealed class VoiceTrack
+{
+    public string Name { get; set; }
+    public List<Note> Notes { get; } = new List<Note>();
+    public List<TimbreEvent> Timbres { get; } = new List<TimbreEvent>();
+    public List<VolumeEvent> Volumes { get; } = new List<VolumeEvent>();
+    public List<PitchEvent> Pitches { get; } = new List<PitchEvent>();
+    /// <summary>파일에 기록돼 있던 트랙 총 틱 (마지막 쉼표 보존용).</summary>
+    public int DeclaredTicks { get; set; }
+
+    public VoiceTrack(string name) { Name = name; }
+
+    public int EndTick
+    {
+        get
+        {
+            int e = DeclaredTicks;
+            foreach (var n in Notes) if (n.EndTick > e) e = n.EndTick;
+            return e;
+        }
+    }
+
+    /// <summary>한 보이스는 동시에 한 음만 낼 수 있으므로 겹치는 노트를 잘라내거나 지운다.</summary>
+    public void InsertNote(Note n)
+    {
+        for (int i = Notes.Count - 1; i >= 0; i--)
+        {
+            var o = Notes[i];
+            if (ReferenceEquals(o, n)) continue;
+            if (o.EndTick <= n.StartTick || o.StartTick >= n.EndTick) continue;
+            if (o.StartTick < n.StartTick) o.Duration = n.StartTick - o.StartTick;
+            else if (o.EndTick > n.EndTick)
+            {
+                int end = o.EndTick;
+                o.StartTick = n.EndTick;
+                o.Duration = end - n.EndTick;
+            }
+            else Notes.RemoveAt(i);
+        }
+        if (!Notes.Contains(n)) Notes.Add(n);
+        SortNotes();
+    }
+
+    public void SortNotes() { Notes.Sort((a, b) => a.StartTick.CompareTo(b.StartTick)); }
+
+    public Note FindNote(int tick, int pitch)
+    {
+        foreach (var n in Notes)
+            if (n.Pitch == pitch && tick >= n.StartTick && tick < n.EndTick) return n;
+        return null;
+    }
+
+    /// <summary>해당 틱에 유효한 악기 교체 이벤트 (없으면 null).</summary>
+    public TimbreEvent TimbreAt(int tick)
+    {
+        TimbreEvent best = null;
+        foreach (var t in Timbres)
+            if (t.Tick <= tick && (best == null || t.Tick >= best.Tick)) best = t;
+        return best;
+    }
+
+    public void SetTimbre(int tick, string name)
+    {
+        foreach (var t in Timbres) if (t.Tick == tick) { t.InstrumentName = name; return; }
+        Timbres.Add(new TimbreEvent { Tick = tick, InstrumentName = name });
+        Timbres.Sort((a, b) => a.Tick.CompareTo(b.Tick));
+    }
+
+    public VoiceTrack Clone()
+    {
+        var c = new VoiceTrack(Name) { DeclaredTicks = DeclaredTicks };
+        foreach (var n in Notes) c.Notes.Add(n.Clone());
+        foreach (var t in Timbres) c.Timbres.Add(new TimbreEvent { Tick = t.Tick, InstrumentName = t.InstrumentName, Unknown = t.Unknown });
+        foreach (var v in Volumes) c.Volumes.Add(new VolumeEvent { Tick = v.Tick, Volume = v.Volume });
+        foreach (var p in Pitches) c.Pitches.Add(new PitchEvent { Tick = p.Tick, Pitch = p.Pitch });
+        return c;
+    }
+}
+
+/// <summary>곡 전체 (ROL 1개에 해당). 내부 모델은 ROL 구조(틱 기반, 보이스별 4트랙)를 따른다.</summary>
+public sealed class Song
+{
+    public const int MaxVoices = 11;
+    public const int MelodicVoices = 9;
+    public const int MinNote = 12;
+    public const int MaxNote = 107;
+    public const int MiddleC = 48;
+
+    public int VersionMajor { get; set; } = 0;
+    public int VersionMinor { get; set; } = 4;
+    public string Signature { get; set; } = "\\roll\\default";
+    public int TickBeat { get; set; } = 48;
+    public int BeatsPerMeasure { get; set; } = 4;
+    public int ScaleY { get; set; } = 1;
+    public int ScaleX { get; set; } = 1;
+    /// <summary>true = 멜로딕 9채널, false = 리듬 모드 11채널 (파일의 isMelodic).</summary>
+    public bool IsMelodic { get; set; } = true;
+    public float BasicTempo { get; set; } = 120f;
+    public string Title { get; set; } = "Untitled";
+    public string FilePath { get; set; }
+    public List<TempoEvent> TempoEvents { get; } = new List<TempoEvent>();
+    public VoiceTrack[] Voices { get; } = new VoiceTrack[MaxVoices];
+
+    public Song()
+    {
+        for (int i = 0; i < MaxVoices; i++) Voices[i] = new VoiceTrack("Voix " + i.ToString("00"));
+    }
+
+    public int VoiceCount { get { return IsMelodic ? MelodicVoices : MaxVoices; } }
+    public int MeasureTicks { get { return TickBeat * BeatsPerMeasure; } }
+
+    public int LengthTicks
+    {
+        get
+        {
+            int e = 0;
+            foreach (var v in Voices) if (v.EndTick > e) e = v.EndTick;
+            return e;
+        }
+    }
+
+    public static string[] VoiceLabels(bool melodic)
+    {
+        if (melodic) return new[] { "1", "2", "3", "4", "5", "6", "7", "8", "9" };
+        return new[] { "1", "2", "3", "4", "5", "6", "BD", "SD", "TO", "CY", "HH" };
+    }
+
+    public Song Clone()
+    {
+        var c = new Song
+        {
+            VersionMajor = VersionMajor, VersionMinor = VersionMinor, Signature = Signature,
+            TickBeat = TickBeat, BeatsPerMeasure = BeatsPerMeasure, ScaleX = ScaleX, ScaleY = ScaleY,
+            IsMelodic = IsMelodic, BasicTempo = BasicTempo, Title = Title, FilePath = FilePath
+        };
+        foreach (var t in TempoEvents) c.TempoEvents.Add(new TempoEvent { Tick = t.Tick, Multiplier = t.Multiplier });
+        for (int i = 0; i < MaxVoices; i++) c.Voices[i] = Voices[i].Clone();
+        return c;
+    }
+}
+
+public static class NoteHelper
+{
+    private static readonly string[] Names = { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
+
+    public static string Name(int note)
+    {
+        if (note < 0) return "-";
+        return Names[note % 12] + (note / 12).ToString();
+    }
+
+    public static bool IsBlack(int note)
+    {
+        switch (note % 12) { case 1: case 3: case 6: case 8: case 10: return true; }
+        return false;
+    }
+
+    /// <summary>ROL 노트 번호 → 주파수 (48 = 가운데 도 = 261.63Hz).</summary>
+    public static double Frequency(double note)
+    {
+        return 261.6255653 * Math.Pow(2.0, (note - Song.MiddleC) / 12.0);
+    }
+}
+
+/// <summary>틱 ↔ 초 변환 (템포 배수 이벤트 반영).</summary>
+public sealed class TempoMap
+{
+    private readonly List<TempoEvent> events = new List<TempoEvent>();
+    private readonly double basicTicksPerSecond;
+
+    public TempoMap(Song song)
+    {
+        basicTicksPerSecond = song.BasicTempo / 60.0 * song.TickBeat;
+        events.AddRange(song.TempoEvents);
+        events.Sort((a, b) => a.Tick.CompareTo(b.Tick));
+    }
+
+    public double SecondsAt(int tick)
+    {
+        double seconds = 0, mult = 1.0;
+        int last = 0;
+        foreach (var e in events)
+        {
+            if (e.Tick >= tick) break;
+            seconds += (e.Tick - last) / (basicTicksPerSecond * mult);
+            last = e.Tick;
+            mult = e.Multiplier;
+        }
+        return seconds + (tick - last) / (basicTicksPerSecond * mult);
+    }
+}

@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <RootNamespace>AdlibComposer.App</RootNamespace>
+    <AssemblyName>AdlibComposer</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\AdlibComposer.Core\AdlibComposer.Core.csproj" />
+    <ProjectReference Include="..\AdlibComposer.Formats\AdlibComposer.Formats.csproj" />
+    <ProjectReference Include="..\AdlibComposer.Audio\AdlibComposer.Audio.csproj" />
+    <ProjectReference Include="..\AdlibComposer.Notation\AdlibComposer.Notation.csproj" />
+  </ItemGroup>
+</Project>

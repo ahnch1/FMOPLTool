@@ -19,21 +19,21 @@ public static class DemoRender
         song.Voices[7].Timbres.Add(new TimbreEvent { Tick = 0, InstrumentName = "SNARE" });
         song.Voices[10].Timbres.Add(new TimbreEvent { Tick = 0, InstrumentName = "HAT" });
 
-        int[] melody = { 48, 52, 55, 60, 59, 55, 52, 50, 48, 52, 55, 64, 62, 59, 55, 52 };   // 2마디, 8분음표 x 16
+        int[] melody = { 60, 64, 67, 72, 71, 67, 64, 62, 60, 64, 67, 76, 74, 71, 67, 64 };   // 2마디, 8분음표 x 16
         for (int i = 0; i < melody.Length; i++)
             song.Voices[0].Notes.Add(new Note { StartTick = i * 24, Duration = 22, Pitch = melody[i] });
 
-        int[] bass = { 36, 36, 43, 43, 36, 36, 41, 43 };
+        int[] bass = { 48, 48, 55, 55, 48, 48, 53, 55 };
         for (int i = 0; i < bass.Length; i++)
             song.Voices[1].Notes.Add(new Note { StartTick = i * 48, Duration = 44, Pitch = bass[i] });
 
         for (int beat = 0; beat < 8; beat++)
         {
-            if (beat % 2 == 0) song.Voices[6].Notes.Add(new Note { StartTick = beat * 48, Duration = 12, Pitch = 24 });
-            else song.Voices[7].Notes.Add(new Note { StartTick = beat * 48, Duration = 12, Pitch = 24 });
+            if (beat % 2 == 0) song.Voices[6].Notes.Add(new Note { StartTick = beat * 48, Duration = 12, Pitch = 36 });
+            else song.Voices[7].Notes.Add(new Note { StartTick = beat * 48, Duration = 12, Pitch = 36 });
         }
         for (int i = 0; i < 16; i++)
-            song.Voices[10].Notes.Add(new Note { StartTick = i * 24, Duration = 6, Pitch = 24 });
+            song.Voices[10].Notes.Add(new Note { StartTick = i * 24, Duration = 6, Pitch = 36 });
         return song;
     }
 
@@ -42,26 +42,26 @@ public static class DemoRender
         var bank = new InstrumentBank();
 
         var lead = AdlibInstrument.CreateDefault("LEAD");
-        lead.Modulator.Multiple = 2; lead.Modulator.TotalLevel = 36; lead.Modulator.Feedback = 4;
+        lead.Modulator.Multiple = 2; lead.Modulator.TotalLevel = 27; lead.Modulator.Feedback = 4;
         lead.Carrier.Eg = 1; lead.Carrier.Sustain = 3; lead.Carrier.Decay = 2; lead.Carrier.ReleaseRate = 8;
         bank.Add(lead);
 
         var bass = AdlibInstrument.CreateDefault("BASS");
-        bass.Modulator.Multiple = 1; bass.Modulator.TotalLevel = 30; bass.Modulator.Feedback = 2; bass.Modulator.Decay = 5;
+        bass.Modulator.Multiple = 1; bass.Modulator.TotalLevel = 33; bass.Modulator.Feedback = 2; bass.Modulator.Decay = 5;
         bass.Carrier.Eg = 1; bass.Carrier.Sustain = 4; bass.Carrier.ReleaseRate = 8;
         bank.Add(bass);
 
         var kick = AdlibInstrument.CreateDefault("KICK");   // 베이스 드럼: 두 오퍼레이터 모두 사용
-        kick.Modulator.Multiple = 1; kick.Modulator.Feedback = 6; kick.Modulator.Attack = 15; kick.Modulator.Decay = 8; kick.Modulator.Sustain = 15; kick.Modulator.TotalLevel = 50;
-        kick.Carrier.Multiple = 0; kick.Carrier.Attack = 15; kick.Carrier.Decay = 7; kick.Carrier.Sustain = 15; kick.Carrier.ReleaseRate = 7; kick.Carrier.TotalLevel = 63;
+        kick.Modulator.Multiple = 1; kick.Modulator.Feedback = 6; kick.Modulator.Attack = 15; kick.Modulator.Decay = 8; kick.Modulator.Sustain = 15; kick.Modulator.TotalLevel = 13;
+        kick.Carrier.Multiple = 0; kick.Carrier.Attack = 15; kick.Carrier.Decay = 7; kick.Carrier.Sustain = 15; kick.Carrier.ReleaseRate = 7; kick.Carrier.TotalLevel = 0;
         bank.Add(kick);
 
         var snare = AdlibInstrument.CreateDefault("SNARE"); // 스네어: 모듈레이터 필드만 사용
-        snare.Modulator.Multiple = 1; snare.Modulator.Attack = 15; snare.Modulator.Decay = 7; snare.Modulator.Sustain = 15; snare.Modulator.ReleaseRate = 7; snare.Modulator.TotalLevel = 63; snare.Modulator.Feedback = 0;
+        snare.Modulator.Multiple = 1; snare.Modulator.Attack = 15; snare.Modulator.Decay = 7; snare.Modulator.Sustain = 15; snare.Modulator.ReleaseRate = 7; snare.Modulator.TotalLevel = 0; snare.Modulator.Feedback = 0;
         bank.Add(snare);
 
         var hat = AdlibInstrument.CreateDefault("HAT");     // 하이햇: 모듈레이터 필드만 사용
-        hat.Modulator.Multiple = 1; hat.Modulator.Attack = 15; hat.Modulator.Decay = 10; hat.Modulator.Sustain = 15; hat.Modulator.ReleaseRate = 10; hat.Modulator.TotalLevel = 56;
+        hat.Modulator.Multiple = 1; hat.Modulator.Attack = 15; hat.Modulator.Decay = 10; hat.Modulator.Sustain = 15; hat.Modulator.ReleaseRate = 10; hat.Modulator.TotalLevel = 7;
         bank.Add(hat);
         return bank;
     }

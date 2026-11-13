@@ -24,7 +24,7 @@ internal sealed class MainForm : Form
     private readonly Timer timer = new Timer();
 
     private ToolStripMenuItem fileMenu, editMenu, playMenu, displayMenu, optionsMenu, helpMenu;
-    private ToolStripMenuItem modeComposer, modeInstrument, rhythmItem, invertItem, loopItem, showAllItem, previewMenu;
+    private ToolStripMenuItem modeComposer, modeInstrument, rhythmItem, loopItem, showAllItem, previewMenu;
     private readonly List<ToolStripMenuItem> snapItems = new List<ToolStripMenuItem>();
     private readonly List<ToolStripMenuItem> previewItems = new List<ToolStripMenuItem>();
     private bool composerMode = true;
@@ -157,13 +157,6 @@ internal sealed class MainForm : Form
 
         rhythmItem = Item("Rhythm Mode (6 melodic + BD/SD/TOM/CYM/HH)", delegate { ComposerOnly(delegate { composer.SetRhythmMode(rhythmItem.Checked); }); });
         rhythmItem.CheckOnClick = true;
-        invertItem = Item("Output Level: larger = louder (playback mapping)", delegate
-        {
-            ws.Audio.Mapping.InvertOutputLevel = invertItem.Checked;
-            instrument.ApplyPreview();
-        });
-        invertItem.CheckOnClick = true;
-        invertItem.Checked = ws.Audio.Mapping.InvertOutputLevel;
 
         previewMenu = new ToolStripMenuItem("Preview Voice");
         string[] pv = { "Melodic (voice 1)", "BD (bass drum)", "SD (snare)", "TO (tom)", "CY (cymbal)", "HH (hi-hat)" };
@@ -183,7 +176,6 @@ internal sealed class MainForm : Form
         optionsMenu.DropDownItems.AddRange(new ToolStripItem[]
         {
             rhythmItem,
-            invertItem,
             new ToolStripSeparator(),
             Item("Pitch Bend Range...", delegate { PromptPitchBend(); }),
             Item("Master Volume...", delegate { PromptVolume(); }),
@@ -272,7 +264,7 @@ internal sealed class MainForm : Form
 
     private void PromptPitchBend()
     {
-        string v = Prompt.Show(this, "Pitch bend range", "Semitones for pitch 0.0 / 2.0 (default 2):", ws.Audio.Mapping.PitchBendSemitones.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        string v = Prompt.Show(this, "Pitch bend range", "Semitones for pitch 0.0 / 2.0 (default 1):", ws.Audio.Mapping.PitchBendSemitones.ToString(System.Globalization.CultureInfo.InvariantCulture));
         double d;
         if (v != null && double.TryParse(v, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out d) && d >= 0 && d <= 24)
             ws.Audio.Mapping.PitchBendSemitones = d;

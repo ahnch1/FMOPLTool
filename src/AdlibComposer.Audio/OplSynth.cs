@@ -23,7 +23,7 @@ public sealed class OplSynth
     private readonly int[] chBlock = new int[9];
     private readonly AdlibInstrument fallback = AdlibInstrument.CreateDefault("DEFAULT");
     private int drumBits;
-    private int tomNote = 24;
+    private int tomNote = 36;   // adlib.c TOM_PITCH 24 (칩 노트) = ROL 36
 
     public OplMapping Mapping { get; } = new OplMapping();
     public bool RhythmMode { get; private set; }

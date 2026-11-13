@@ -60,8 +60,9 @@ public sealed class OplOperator
     public int Eg { get; set; }
     public int Decay { get; set; }
     public int ReleaseRate { get; set; } = 4;
-    /// <summary>BNK의 totalLevel 필드. 화면의 "Output Level"과 같은 값으로 취급 (재생 시 매핑은 OplMapping).</summary>
-    public int TotalLevel { get; set; } = 63;
+    /// <summary>BNK/INS의 totalLevel 필드 = OPL TL 레지스터 값 그대로 (0 = 가장 큼, 63 = 무음).
+    /// 실제 BNK에서 캐리어가 거의 모두 0인 것으로 확인. 화면의 "Output Level"은 63 - TotalLevel.</summary>
+    public int TotalLevel { get; set; } = 0;
     public int Am { get; set; }
     public int Vib { get; set; }
     public int Ksr { get; set; }
@@ -82,7 +83,7 @@ public sealed class OplOperator
             case OperatorParameter.FrequencyMultiplier: return Multiple;
             case OperatorParameter.ModulationFeedback: return Feedback;
             case OperatorParameter.PitchVibrato: return Vib;
-            case OperatorParameter.OutputLevel: return TotalLevel;
+            case OperatorParameter.OutputLevel: return 63 - (TotalLevel & 0x3F);
             case OperatorParameter.LevelScaling: return Ksl;
             case OperatorParameter.AmplitudeVibrato: return Am;
             case OperatorParameter.WaveForm: return WaveSelect;
@@ -105,7 +106,7 @@ public sealed class OplOperator
             case OperatorParameter.FrequencyMultiplier: Multiple = v; break;
             case OperatorParameter.ModulationFeedback: Feedback = v; break;
             case OperatorParameter.PitchVibrato: Vib = v; break;
-            case OperatorParameter.OutputLevel: TotalLevel = v; break;
+            case OperatorParameter.OutputLevel: TotalLevel = 63 - v; break;
             case OperatorParameter.LevelScaling: Ksl = v; break;
             case OperatorParameter.AmplitudeVibrato: Am = v; break;
             case OperatorParameter.WaveForm: WaveSelect = v; break;
@@ -161,12 +162,12 @@ public sealed class AdlibInstrument
         var ins = new AdlibInstrument { Name = NormalizeName(name) };
         ins.Modulator = new OplOperator
         {
-            Multiple = 1, Attack = 15, Decay = 4, Sustain = 7, ReleaseRate = 5, TotalLevel = 40,
+            Multiple = 1, Attack = 15, Decay = 4, Sustain = 7, ReleaseRate = 5, TotalLevel = 23,
             Feedback = 3, Con = 1
         };
         ins.Carrier = new OplOperator
         {
-            Multiple = 1, Attack = 15, Decay = 3, Sustain = 6, ReleaseRate = 5, TotalLevel = 63, Con = 1
+            Multiple = 1, Attack = 15, Decay = 3, Sustain = 6, ReleaseRate = 5, TotalLevel = 0, Con = 1
         };
         return ins;
     }

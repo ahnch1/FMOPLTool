@@ -7,7 +7,7 @@ public sealed class Note
 {
     public int StartTick;
     public int Duration;
-    /// <summary>ROL 노트 번호 (12..107, 48 = 가운데 도).</summary>
+    /// <summary>ROL 노트 번호 (MIDI 번호와 같음, 12..107, 60 = 가운데 도).</summary>
     public int Pitch;
     public int EndTick { get { return StartTick + Duration; } }
     public Note Clone() { return (Note)MemberwiseClone(); }
@@ -105,7 +105,8 @@ public sealed class Song
     public const int MelodicVoices = 9;
     public const int MinNote = 12;
     public const int MaxNote = 107;
-    public const int MiddleC = 48;
+    /// <summary>ROL/MIDI 가운데 도. 실제 ROL 파일과 adlib.c(MID_C 60, 칩 노트 = ROL - 12)로 확인.</summary>
+    public const int MiddleC = 60;
 
     public int VersionMajor { get; set; } = 0;
     public int VersionMinor { get; set; } = 4;
@@ -167,7 +168,7 @@ public static class NoteHelper
     public static string Name(int note)
     {
         if (note < 0) return "-";
-        return Names[note % 12] + (note / 12).ToString();
+        return Names[note % 12] + (note / 12 - 1).ToString();   // MIDI 표기: 60 = C4
     }
 
     public static bool IsBlack(int note)
@@ -176,7 +177,7 @@ public static class NoteHelper
         return false;
     }
 
-    /// <summary>ROL 노트 번호 → 주파수 (48 = 가운데 도 = 261.63Hz).</summary>
+    /// <summary>ROL 노트 번호 → 주파수 (60 = 가운데 도 = 261.63Hz, 69 = 440Hz).</summary>
     public static double Frequency(double note)
     {
         return 261.6255653 * Math.Pow(2.0, (note - Song.MiddleC) / 12.0);

@@ -1,0 +1,112 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using AdlibComposer.Core;
+using AdlibComposer.Formats;
+
+namespace AdlibComposer.SelfTest;
+
+/// <summary>실제 파일 점검용: --probe file... (구조 덤프), --render song.rol bank.bnk out.wav [seconds]</summary>
+public static class Probe
+{
+    public static int Run(string[] args)
+    {
+        if (args[0] == "--render")
+        {
+            Song song; InstrumentBank bank;
+            using (var fs = File.OpenRead(args[1])) song = new RolFormat().Read(fs);
+            using (var fs = File.OpenRead(args[2])) bank = new BnkFormat().Read(fs);
+            double sec = args.Length > 4 ? double.Parse(args[4]) : 20;
+            var missing = new HashSet<string>();
+            foreach (var v in song.Voices) foreach (var t in v.Timbres) if (bank.Find(t.InstrumentName) == null) missing.Add(t.InstrumentName);
+            Console.WriteLine("missing instruments: " + string.Join(",", missing));
+            var pcm = DemoRender.Render(song, bank, sec);
+            DemoRender.WriteWav(args[3], pcm, AdlibComposer.Audio.AudioEngine.OutputRate);
+            int peak = 0; double sum = 0;
+            foreach (short s in pcm) { peak = Math.Max(peak, Math.Abs((int)s)); sum += (double)s * s; }
+            Console.WriteLine("rendered peak=" + peak + " rms=" + Math.Sqrt(sum / pcm.Length).ToString("0"));
+            return 0;
+        }
+        for (int i = 1; i < args.Length; i++)
+        {
+            string p = args[i];
+            Console.WriteLine("==== " + p);
+            try
+            {
+                string ext = Path.GetExtension(p).ToLowerInvariant();
+                if (ext == ".rol") DumpRol(p);
+                else if (ext == ".bnk") DumpBnk(p);
+                else if (ext == ".ins") DumpIns(p);
+            }
+            catch (Exception ex) { Console.WriteLine("ERROR " + ex); }
+        }
+        return 0;
+    }
+
+    private static string Op(OplOperator o)
+    {
+        return $"ksl={o.Ksl} mul={o.Multiple} fb={o.Feedback} ar={o.Attack} sl={o.Sustain} eg={o.Eg} dr={o.Decay} rr={o.ReleaseRate} tl={o.TotalLevel} am={o.Am} vib={o.Vib} ksr={o.Ksr} con={o.Con} ws={o.WaveSelect}";
+    }
+
+    private static void DumpIns(string p)
+    {
+        AdlibInstrument ins;
+        using (var fs = File.OpenRead(p)) ins = new InsFormat().Read(fs, Path.GetFileNameWithoutExtension(p));
+        Console.WriteLine(" mod " + Op(ins.Modulator));
+        Console.WriteLine(" car " + Op(ins.Carrier));
+        var ms = new MemoryStream();
+        new InsFormat().Write(ins, ms);
+        Console.WriteLine(" rewrite identical: " + ms.ToArray().SequenceEqual(File.ReadAllBytes(p)));
+    }
+
+    private static void DumpBnk(string p)
+    {
+        InstrumentBank bank;
+        using (var fs = File.OpenRead(p)) bank = new BnkFormat().Read(fs);
+        Console.WriteLine($" ver={bank.VersionMajor}.{bank.VersionMinor} count={bank.Instruments.Count} used={bank.UsedCount}");
+        var maxes = new Dictionary<string, int>();
+        foreach (var ins in bank.Instruments)
+            foreach (var pair in new[] { ("m", ins.Modulator), ("c", ins.Carrier) })
+                foreach (OperatorParameter op in Enum.GetValues(typeof(OperatorParameter)))
+                {
+                    string k = pair.Item1 + op; int v = pair.Item2.Get(op);
+                    if (!maxes.ContainsKey(k) || maxes[k] < v) maxes[k] = v;
+                }
+        Console.WriteLine(" max: " + string.Join(" ", maxes.Select(kv => kv.Key + "=" + kv.Value)));
+        int conMod0 = bank.Instruments.Count(i => i.Modulator.Con == 0), conCar0 = bank.Instruments.Count(i => i.Carrier.Con == 0);
+        Console.WriteLine($" mod.con==0: {conMod0}  car.con==0: {conCar0}  perc: {bank.Instruments.Count(i => i.Percussive)}");
+        foreach (var ins in bank.Instruments.Take(12))
+        {
+            Console.WriteLine($" [{ins.Name}] used={ins.IsUsed} perc={ins.Percussive} vn={ins.VoiceNum}");
+            Console.WriteLine("   mod " + Op(ins.Modulator));
+            Console.WriteLine("   car " + Op(ins.Carrier));
+        }
+        var ms = new MemoryStream();
+        new BnkFormat().Write(bank, ms);
+        Console.WriteLine(" rewrite identical: " + ms.ToArray().SequenceEqual(File.ReadAllBytes(p)) + " (orig " + new FileInfo(p).Length + ", new " + ms.Length + ")");
+    }
+
+    private static void DumpRol(string p)
+    {
+        Song song;
+        using (var fs = File.OpenRead(p)) { song = new RolFormat().Read(fs); Console.WriteLine($" consumed {fs.Position}/{fs.Length}"); }
+        Console.WriteLine($" ver={song.VersionMajor}.{song.VersionMinor} sig='{song.Signature}' tickBeat={song.TickBeat} bpm={song.BeatsPerMeasure} scale={song.ScaleX}x{song.ScaleY} melodic={song.IsMelodic} tempo={song.BasicTempo} tempoEv={song.TempoEvents.Count} len={song.LengthTicks}");
+        foreach (var t in song.TempoEvents.Take(5)) Console.WriteLine($"   tempo @{t.Tick} x{t.Multiplier}");
+        for (int v = 0; v < Song.MaxVoices; v++)
+        {
+            var vt = song.Voices[v];
+            string range = vt.Notes.Count > 0 ? vt.Notes.Min(n => n.Pitch) + ".." + vt.Notes.Max(n => n.Pitch) : "-";
+            Console.WriteLine($" v{v} '{vt.Name}' ticks={vt.DeclaredTicks} notes={vt.Notes.Count} range={range} timbres={vt.Timbres.Count} vols={vt.Volumes.Count} pitches={vt.Pitches.Count}");
+            foreach (var t in vt.Timbres.Take(3)) Console.WriteLine($"    timbre @{t.Tick} '{t.InstrumentName}' unk={t.Unknown}");
+            foreach (var e in vt.Volumes.Take(3)) Console.WriteLine($"    vol @{e.Tick} {e.Volume}");
+            foreach (var e in vt.Pitches.Take(3)) Console.WriteLine($"    pitch @{e.Tick} {e.Pitch}");
+        }
+        var ms = new MemoryStream();
+        new RolFormat().Write(song, ms);
+        var orig = File.ReadAllBytes(p); var neu = ms.ToArray();
+        int diff = -1;
+        for (int i = 0; i < Math.Min(orig.Length, neu.Length); i++) if (orig[i] != neu[i]) { diff = i; break; }
+        Console.WriteLine($" rewrite: orig {orig.Length} new {neu.Length} firstDiff={diff}");
+    }
+}

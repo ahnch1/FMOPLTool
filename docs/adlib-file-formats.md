@@ -186,7 +186,7 @@ reg 0xC0+ch : FB<<1 | CNT      (CNT: con==0 → 1, 아니면 0)
 | UINT16LE | nTicks | 트랙 총 틱 |
 | E_NOTE[] | | `{ UINT16LE note; UINT16LE duration }` — duration 합이 nTicks에 도달할 때까지 반복 |
 
-- `note`: 0 = 쉼표, 12~107 = 노트온 (MIDI 호환, **48 = 가운데 도**)
+- `note`: 0 = 쉼표, 12~107 = 노트온 (MIDI 번호, **60 = 가운데 도**. 칩 노트 0~95 = ROL − 12. 실제 곡 파일과 adlib.c `MID_C 60`으로 확인)
 - 노트 이벤트에 시작 시각이 없음 → **duration을 누적해서 시작 틱 계산**
 - 피아노롤 ↔ ROL 변환 시 빈 구간은 쉼표(note=0) 노트로 채워야 함
 

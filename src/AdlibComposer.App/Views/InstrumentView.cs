@@ -38,7 +38,7 @@ internal sealed class InstrumentView : UserControl
     private AdlibInstrument current;
     private bool binding;
     private bool activeCarrier = true;
-    private int baseNote = 48;
+    private int baseNote = Song.MiddleC;
 
     public event Action InstrumentEdited;
 
@@ -286,7 +286,7 @@ internal sealed class InstrumentView : UserControl
     {
         if (key == Keys.PageUp || key == Keys.PageDown)
         {
-            baseNote = Math.Max(24, Math.Min(72, baseNote + (key == Keys.PageUp ? 12 : -12)));
+            baseNote = Math.Max(36, Math.Min(84, baseNote + (key == Keys.PageUp ? 12 : -12)));
             RefreshKeyLabels();
             return true;
         }

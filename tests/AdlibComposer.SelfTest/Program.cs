@@ -21,6 +21,7 @@ public static class Program
 
     public static int Main(string[] args)
     {
+        if (args.Length > 0 && (args[0] == "--probe" || args[0] == "--render")) return Probe.Run(args);
         if (args.Length > 0 && args[0].StartsWith("--")) return DemoRender.Run(args);
         TestBnk();
         TestIns();
@@ -31,6 +32,7 @@ public static class Program
         TestSequencerTiming();
         TestNotation();
         TestRegistry();
+        RealFileTests.Run(Check);
         Console.WriteLine();
         Console.WriteLine("passed=" + passed + " failed=" + failed);
         return failed == 0 ? 0 : 1;
@@ -44,7 +46,7 @@ public static class Program
         ins.Modulator.Decay = seed % 7; ins.Modulator.ReleaseRate = 3 + seed % 9; ins.Modulator.TotalLevel = 20 + seed;
         ins.Modulator.Am = seed % 2; ins.Modulator.Vib = (seed + 1) % 2; ins.Modulator.Ksr = seed % 2; ins.Modulator.Con = 1;
         ins.Modulator.WaveSelect = seed % 4;
-        ins.Carrier.Multiple = 2; ins.Carrier.TotalLevel = 63 - seed; ins.Carrier.WaveSelect = (seed + 1) % 4;
+        ins.Carrier.Multiple = 2; ins.Carrier.TotalLevel = seed; ins.Carrier.WaveSelect = (seed + 1) % 4;
         ins.Percussive = seed % 2 == 1; ins.VoiceNum = seed % 5;
         return ins;
     }
@@ -165,8 +167,8 @@ public static class Program
     {
         var ins = AdlibInstrument.CreateDefault("SINE");
         ins.Modulator.Con = 0;                 // additive
-        ins.Modulator.TotalLevel = 0;          // 모듈레이터 소리 없음 (Output Level 0)
-        ins.Carrier.TotalLevel = 63;
+        ins.Modulator.TotalLevel = 63;         // 모듈레이터 소리 없음 (TL 63 = 무음)
+        ins.Carrier.TotalLevel = 0;
         ins.Carrier.Attack = 15; ins.Carrier.Decay = 0; ins.Carrier.Sustain = 0;
         ins.Carrier.Eg = 1; ins.Carrier.ReleaseRate = release;
         return ins;
@@ -176,7 +178,7 @@ public static class Program
     {
         var synth = new OplSynth();
         synth.SetInstrument(0, PureSine(15));
-        synth.NoteOn(0, 57);   // ROL 57 = A4 = 440Hz
+        synth.NoteOn(0, 69);   // ROL 69 = A4 = 440Hz
         int rate = synth.NativeRate;
         int crossings = 0, peak = 0;
         short last = 0;
@@ -191,13 +193,13 @@ public static class Program
             last = s;
         }
         double hz1 = crossings * (double)rate / (rate - 2001);
-        Check("OPL pitch: ROL note 57 ~ 440Hz", Math.Abs(hz1 - 440) <= 2.5, "measured=" + hz1.ToString("0.0") + "Hz");
+        Check("OPL pitch: ROL note 69 ~ 440Hz", Math.Abs(hz1 - 440) <= 2.5, "measured=" + hz1.ToString("0.0") + "Hz");
         Check("OPL output level audible", peak > 1000, "peak=" + peak);
 
         // 한 옥타브 위 = 2배
         synth.NoteOff(0);
         for (int i = 0; i < 2000; i++) synth.Generate();
-        synth.NoteOn(0, 69);
+        synth.NoteOn(0, 81);
         crossings = 0; last = 0;
         for (int i = 0; i < rate; i++)
         {
@@ -206,13 +208,18 @@ public static class Program
             last = s;
         }
         double hz2 = crossings * (double)rate / (rate - 2001);
-        Check("OPL pitch: ROL note 69 ~ 880Hz", Math.Abs(hz2 - 880) <= 4, "measured=" + hz2.ToString("0.0") + "Hz");
+        Check("OPL pitch: ROL note 81 ~ 880Hz", Math.Abs(hz2 - 880) <= 4, "measured=" + hz2.ToString("0.0") + "Hz");
 
-        // Output Level 반전 매핑 방향
+        // 파일 TL = OPL 레지스터 (0 = 최대). 화면 Output Level = 63 - TL.
         var map = new OplMapping();
-        Check("Mapping: output level 63 -> TL 0 (loudest)", map.TlRegister(63, 1.0) == 0);
-        Check("Mapping: output level 0 -> TL 63 (silent)", map.TlRegister(0, 1.0) == 63);
-        Check("Mapping: volume 0.5 halves level", map.TlRegister(63, 0.5) == 63 - 32 || map.TlRegister(63, 0.5) == 63 - 31);
+        Check("Mapping: file TL 0 -> register 0 (loudest)", map.TlRegister(0, 1.0) == 0);
+        Check("Mapping: file TL 63 -> register 63 (silent)", map.TlRegister(63, 1.0) == 63);
+        Check("Mapping: volume 0.5 halves amplitude", map.TlRegister(0, 0.5) == 31 || map.TlRegister(0, 0.5) == 32);
+        var op = new OplOperator { TotalLevel = 0 };
+        Check("UI Output Level = 63 - TL", op.Get(OperatorParameter.OutputLevel) == 63);
+        op.Set(OperatorParameter.OutputLevel, 50);
+        Check("UI Output Level set -> TL", op.TotalLevel == 13);
+        Check("Note names: 60 = C4, 69 = A4", NoteHelper.Name(60) == "C4" && NoteHelper.Name(69) == "A4");
     }
 
     private static int PeakOf(OplSynth synth, int samples)
@@ -231,7 +238,7 @@ public static class Program
             synth.SetRhythmMode(true);
             var ins = AdlibInstrument.CreateDefault(names[k]);
             ins.Modulator.Attack = 15; ins.Modulator.Decay = 2; ins.Modulator.Sustain = 4; ins.Modulator.ReleaseRate = 8;
-            ins.Modulator.TotalLevel = 63; ins.Carrier.TotalLevel = 63;
+            ins.Modulator.TotalLevel = 0; ins.Carrier.TotalLevel = 0;
             int voice = 6 + k;
             synth.SetInstrument(voice, ins);
             synth.NoteOn(voice, 36);
@@ -249,7 +256,7 @@ public static class Program
 
         var song = new Song { TickBeat = 48, BeatsPerMeasure = 4, BasicTempo = 120f, IsMelodic = true };
         song.Voices[0].Timbres.Add(new TimbreEvent { Tick = 0, InstrumentName = "SINE" });
-        song.Voices[0].Notes.Add(new Note { StartTick = 0, Duration = 48, Pitch = 57 });   // 120BPM, 48틱/박 → 0.5초
+        song.Voices[0].Notes.Add(new Note { StartTick = 0, Duration = 48, Pitch = 69 });   // 120BPM, 48틱/박 → 0.5초
 
         var engine = new AudioEngine();
         engine.Play(song, bank);
@@ -278,7 +285,7 @@ public static class Program
         var song = new Song { TickBeat = 48, BeatsPerMeasure = 4, BasicTempo = 120f };
         song.TempoEvents.Add(new TempoEvent { Tick = 0, Multiplier = 2f });
         song.Voices[0].Timbres.Add(new TimbreEvent { Tick = 0, InstrumentName = "SINE" });
-        song.Voices[0].Notes.Add(new Note { StartTick = 0, Duration = 48, Pitch = 57 });
+        song.Voices[0].Notes.Add(new Note { StartTick = 0, Duration = 48, Pitch = 69 });
         return song;
     }
 

@@ -64,7 +64,8 @@ internal sealed class BankBrowserForm : Form
     /// <summary>뱅크를 바꾸거나 악기를 추가했으면 true.</summary>
     public bool Changed { get; private set; }
 
-    public BankBrowserForm(Workspace ws, Func<bool> confirmDiscardBank)
+    /// <param name="defaultFolder">설정의 뱅크 폴더 (Preferences).</param>
+    public BankBrowserForm(Workspace ws, Func<bool> confirmDiscardBank, string defaultFolder = null)
     {
         this.ws = ws;
         this.confirmDiscardBank = confirmDiscardBank;
@@ -73,6 +74,7 @@ internal sealed class BankBrowserForm : Form
                 if (!string.IsNullOrEmpty(t.InstrumentName)) songInstruments.Add(t.InstrumentName);
 
         Text = "Bank Browser";
+        AppIcon.Apply(this);
         Font = baseFont;
         BackColor = Color.White;
         StartPosition = FormStartPosition.CenterParent;
@@ -89,6 +91,7 @@ internal sealed class BankBrowserForm : Form
 
         string start = lastFolder;
         if (start == null && !string.IsNullOrEmpty(ws.Bank.FilePath)) start = Path.GetDirectoryName(ws.Bank.FilePath);
+        if (start == null && !string.IsNullOrEmpty(defaultFolder) && Directory.Exists(defaultFolder)) start = defaultFolder;
         if (start == null && !string.IsNullOrEmpty(ws.Song.FilePath)) start = Path.GetDirectoryName(ws.Song.FilePath);
         if (start == null) start = Directory.GetCurrentDirectory();
         Shown += delegate { LoadFolder(start, ws.Bank.FilePath); };
@@ -303,7 +306,7 @@ internal sealed class BankBrowserForm : Form
             ListViewItem toSelect = null;
             foreach (var f in files)
             {
-                var e = Load(f);
+                var e = LoadBank(f);
                 var it = new ListViewItem(Path.GetFileName(f)) { Tag = e };
                 if (e.Bank == null)
                 {
@@ -345,7 +348,7 @@ internal sealed class BankBrowserForm : Form
         return best;
     }
 
-    private BankEntry Load(string path)
+    private BankEntry LoadBank(string path)
     {
         BankEntry e;
         if (cache.TryGetValue(path, out e)) return e;

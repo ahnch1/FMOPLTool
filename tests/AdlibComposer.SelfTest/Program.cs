@@ -21,7 +21,7 @@ public static class Program
 
     public static int Main(string[] args)
     {
-        if (args.Length > 0 && (args[0] == "--probe" || args[0] == "--render" || args[0] == "--latency")) return Probe.Run(args);
+        if (args.Length > 0 && (args[0] == "--probe" || args[0] == "--render" || args[0] == "--latency" || args[0] == "--drum" || args[0] == "--drumshape")) return Probe.Run(args);
         if (args.Length > 0 && args[0].StartsWith("--")) return DemoRender.Run(args);
         TestBnk();
         TestIns();
@@ -31,6 +31,8 @@ public static class Program
         TestRhythm();
         TestSequencerTiming();
         TestNotation();
+        NotationExportTests.Run(Check);
+        JukeboxTests.Run(Check);
         TestRegistry();
         RealFileTests.Run(Check);
         Console.WriteLine();
@@ -243,7 +245,46 @@ public static class Program
             synth.SetInstrument(voice, ins);
             synth.NoteOn(voice, 36);
             int peak = PeakOf(synth, 5000);
-            Check("Rhythm mode " + names[k] + " produces sound", peak > 50, "peak=" + peak);
+            Check("Rhythm mode " + names[k] + " produces sound", peak > 1000, "peak=" + peak);
+        }
+
+        // 실제 STANDARD.BNK bdrum 값 (두 오퍼레이터 Frequency Multiplier 0 = x0.5)
+        {
+            var synth = new OplSynth();
+            synth.SetRhythmMode(true);
+            var bd = new AdlibInstrument { Name = "bdrum" };
+            bd.Modulator = new OplOperator { Multiple = 0, Attack = 10, Sustain = 4, Decay = 8, ReleaseRate = 12, TotalLevel = 11, Con = 1 };
+            bd.Carrier = new OplOperator { Multiple = 0, Attack = 13, Sustain = 4, Decay = 6, ReleaseRate = 15, TotalLevel = 0, Con = 1 };
+            synth.SetInstrument(6, bd);
+            synth.NoteOn(6, 36);
+            int peak = PeakOf(synth, 5000);
+            Check("Rhythm mode BD with bdrum (mult 0) audible", peak > 1000, "peak=" + peak);
+        }
+
+        // 탐탐 음높이가 노트를 따라간다 (한 옥타브 위 = 약 2배 주파수)
+        {
+            double[] hz = new double[2];
+            int[] notes = { 48, 60 };
+            for (int k = 0; k < 2; k++)
+            {
+                var synth = new OplSynth();
+                synth.SetRhythmMode(true);
+                var tom = AdlibInstrument.CreateDefault("TOM");
+                tom.Modulator.Attack = 15; tom.Modulator.Decay = 0; tom.Modulator.Sustain = 0; tom.Modulator.Eg = 1; tom.Modulator.TotalLevel = 0;
+                synth.SetInstrument(8, tom);
+                synth.NoteOn(8, notes[k]);
+                int rate = synth.NativeRate, crossings = 0;
+                short last = 0;
+                for (int i = 0; i < rate / 2; i++)
+                {
+                    short x = synth.Generate();
+                    if (i > 500 && last < 0 && x >= 0) crossings++;
+                    last = x;
+                }
+                hz[k] = crossings * (double)rate / (rate / 2 - 501);
+            }
+            double ratio = hz[1] / Math.Max(1, hz[0]);
+            Check("Rhythm mode TOM pitch follows note (octave ~ x2)", ratio > 1.8 && ratio < 2.2, hz[0].ToString("0") + "Hz -> " + hz[1].ToString("0") + "Hz");
         }
     }
 

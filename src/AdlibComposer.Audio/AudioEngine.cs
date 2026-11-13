@@ -77,12 +77,12 @@ public sealed class AudioEngine : IDisposable
 
     // ---------------------------------------------------------------- 곡 재생
 
-    public void Play(Song song, InstrumentBank bank, int startTick = 0, int loopStart = -1, int loopEnd = -1, int onlyVoice = -1)
+    public void Play(Song song, InstrumentBank bank, int startTick = 0, int loopStart = -1, int loopEnd = -1, int onlyVoice = -1, PlaybackOptions options = null)
     {
         lock (sync)
         {
             Func<string, AdlibInstrument> resolver = name => bank != null ? bank.Find(name) : null;
-            sequencer.Start(song, resolver, startTick, loopStart, loopEnd, onlyVoice);
+            sequencer.Start(song, resolver, startTick, loopStart, loopEnd, onlyVoice, options);
             generation++;
             this.startTick = Math.Max(0, startTick);
         }
@@ -92,6 +92,23 @@ public sealed class AudioEngine : IDisposable
     {
         lock (sync) { sequencer.Stop(); }
     }
+
+    // ---------------------------------------------------------------- 재생 조절 (Jukebox)
+
+    /// <summary>지금 재생의 조절값 (Play에 넘긴 것). 값을 바꾼 뒤에는 아래 Set...을 부른다.</summary>
+    public PlaybackOptions Options { get { lock (sync) { return sequencer.Options; } } }
+
+    public void SetSpeed(double speed) { lock (sync) { sequencer.Options.Speed = speed; sequencer.ApplySpeed(); } }
+    public void SetTranspose(int semitones) { lock (sync) { sequencer.Options.Transpose = semitones; } }
+    public void SetVoiceTranspose(int voice, int semitones) { lock (sync) { sequencer.Options.VoiceTranspose[voice] = semitones; } }
+    public void SetVoiceMute(int voice, bool mute) { lock (sync) { sequencer.Options.VoiceMute[voice] = mute; sequencer.ApplyMute(voice); } }
+    public void SetGain(double gain) { lock (sync) { sequencer.Options.Gain = gain; } }
+
+    /// <summary>지금 템포 배수 (곡의 템포 이벤트).</summary>
+    public double TempoMultiplier { get { lock (sync) { return sequencer.TempoMultiplier; } } }
+
+    /// <summary>보이스별 상태 (울리는 음, 볼륨, 악기). dst 길이는 11.</summary>
+    public void GetVoiceStates(VoiceState[] dst) { lock (sync) { sequencer.CopyStates(dst); } }
 
     // ---------------------------------------------------------------- 시음 (Instrument Maker / 건반 클릭)
 
@@ -121,7 +138,7 @@ public sealed class AudioEngine : IDisposable
     {
         {
             double step = (double)synth.NativeRate / OutputRate;
-            double gain = MasterVolume;
+            double gain = MasterVolume * sequencer.Options.Gain;
             for (int i = 0; i < count; i++)
             {
                 resamplePos += step;
@@ -133,10 +150,25 @@ public sealed class AudioEngine : IDisposable
                     cur = synth.Generate();
                 }
                 double v = (prev + (cur - prev) * (resamplePos)) * gain;
-                if (v > 32767) v = 32767; else if (v < -32768) v = -32768;
+                v = SoftClip(v);
                 buffer[i] = (short)v;
             }
         }
+    }
+
+    private const double Knee = 24000, Headroom = 32767 - Knee;
+
+    /// <summary>
+    /// 부드러운 제한: 24000까지는 그대로, 그 위는 32767에 점점 가까워지게 눌러 딱딱한 클리핑(찌그러짐)을 막는다.
+    /// 리듬 모드 11채널이 한꺼번에 크게 울리는 곡(예: JAM-FIVE.IMS)에서 0.05% 정도 생기던 클리핑을 없앤다.
+    /// </summary>
+    public static double SoftClip(double v)
+    {
+        double a = Math.Abs(v);
+        if (a <= Knee) return v;
+        double over = a - Knee;
+        double c = Knee + over / (1 + over / Headroom);
+        return v < 0 ? -c : c;
     }
 
     public void Dispose()

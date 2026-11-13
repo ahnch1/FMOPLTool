@@ -31,7 +31,10 @@ internal sealed class ComposerView : UserControl
     private readonly List<RadioButton> voiceButtons = new List<RadioButton>();
     private bool syncing;
     private bool building;
-    private int snapDivision = 4;
+    private int lengthIndex = 4;   // 1/16
+    private readonly List<RadioButton> lengthButtons = new List<RadioButton>();
+    private readonly Panel lengthPanel = new Panel();
+    private readonly Label lengthCaption = new Label();
 
     public event Action SongModified;
     public event Action<int> HoverNoteChanged;
@@ -43,6 +46,7 @@ internal sealed class ComposerView : UserControl
         DoubleBuffered = true;
 
         BuildTopPanel();
+        BuildLengthButtons();
         Controls.Add(roll);
         Controls.Add(vScroll);
         Controls.Add(hScroll);
@@ -74,9 +78,24 @@ internal sealed class ComposerView : UserControl
         };
 
         BindSong();
+        roll.KeyboardBase = keyboardBase;
     }
 
     public PianoRollControl Roll { get { return roll; } }
+
+    /// <summary>Note 페이지에서 음표를 클릭했을 때: 그 보이스로 바꾸고 커서를 옮겨 그 노트를 선택한다.</summary>
+    public void GoTo(int voice, int tick, int pitch)
+    {
+        if (voice < 0 || voice >= ws.Song.VoiceCount) return;
+        if (ShowAllVoices || roll.CurrentVoice != voice) SelectVoice(voice);
+        var n = ws.Song.Voices[voice].FindNote(tick, pitch);
+        roll.Selection.Clear();
+        if (n != null) roll.Selection.Add(n);
+        roll.MoveCursor(n != null ? n.StartTick : tick);
+        roll.MoveCursorNote(pitch);
+        roll.Invalidate();
+        Say((n != null ? "Note " + NoteHelper.Name(pitch) : "position") + "  (from Note page)");
+    }
 
     /// <summary>연필(입력) / I(선택, 원본 Edit → Edit) 도구.</summary>
     public RollTool Tool
@@ -194,8 +213,38 @@ internal sealed class ComposerView : UserControl
         if (tag < 0) roll.ShowAll = true;
         else { roll.ShowAll = false; roll.CurrentVoice = tag; }
         roll.Selection.Clear();
+        ApplyVoiceRange();
         roll.Invalidate();
         UpdateInstrLabel();
+    }
+
+    /// <summary>드럼 음역 기본값: 칩 노트 24 = ROL 36 (C2), adlib.c TOM_PITCH. 드럼 소리는 낮은 음에서 난다.</summary>
+    public const int DrumBaseNote = 36;
+    private int melodicKeyboardBase = Song.MiddleC;
+    private bool drumRange;
+
+    private bool IsDrumVoice(int voice) { return !ws.Song.IsMelodic && voice >= 6 && voice < Song.MaxVoices; }
+
+    /// <summary>
+    /// 리듬 모드에서 BD/SD/TO/CY/HH 보이스를 고르면 건반 키·음높이 커서를 드럼 음역(C2)으로,
+    /// 멜로딕 보이스로 돌아오면 이전 옥타브로 되돌린다.
+    /// </summary>
+    private void ApplyVoiceRange()
+    {
+        bool drum = !roll.ShowAll && IsDrumVoice(roll.CurrentVoice);
+        if (drum == drumRange) return;
+        drumRange = drum;
+        if (drum)
+        {
+            melodicKeyboardBase = keyboardBase;
+            SetKeyboardBase(DrumBaseNote);
+            roll.MoveCursorNote(DrumBaseNote);
+        }
+        else
+        {
+            SetKeyboardBase(melodicKeyboardBase);
+            roll.MoveCursorNote(Math.Max(Song.MinNote, Math.Min(Song.MaxNote, melodicKeyboardBase)));
+        }
     }
 
     // ------------------------------------------------------------ 공개 기능
@@ -217,14 +266,72 @@ internal sealed class ComposerView : UserControl
         }
     }
 
-    public int SnapDivision
+    /// <summary>
+    /// 노트 길이 = 스냅 = 키보드 스텝. 박(4분음표) 기준 길이: 온음표 4박 ... 64분음표 1/16박, 마지막은 1틱.
+    /// 박당 틱이 작은 곡(예: 4)에서는 짧은 길이가 1틱으로 모인다.
+    /// </summary>
+    public static readonly string[] LengthNames = { "1", "1/2", "1/4", "1/8", "1/16", "1/32", "1/64", "tick" };
+    public static readonly double[] LengthBeats = { 4, 2, 1, 0.5, 0.25, 0.125, 0.0625, 0 };
+
+    public int LengthIndex
     {
-        get { return snapDivision; }
+        get { return lengthIndex; }
         set
         {
-            snapDivision = Math.Max(1, value);
-            roll.SnapTicks = Math.Max(1, ws.Song.TickBeat / snapDivision);
-            roll.Invalidate();
+            lengthIndex = Math.Max(0, Math.Min(LengthNames.Length - 1, value));
+            ApplyLength();
+            Say("Length " + LengthNames[lengthIndex] + " = " + roll.SnapTicks + " tick" + (roll.SnapTicks == 1 ? "" : "s"));
+        }
+    }
+
+    public static int LengthTicks(int index, int tickBeat)
+    {
+        double beats = LengthBeats[Math.Max(0, Math.Min(LengthBeats.Length - 1, index))];
+        return Math.Max(1, (int)Math.Round(Math.Max(1, tickBeat) * beats));
+    }
+
+    private void ApplyLength()
+    {
+        roll.SnapTicks = LengthTicks(lengthIndex, ws.Song.TickBeat);
+        foreach (var b in lengthButtons)
+        {
+            bool on = (int)b.Tag == lengthIndex;
+            if (b.Checked != on) b.Checked = on;
+            b.ForeColor = on ? Color.White : Color.Black;
+            // 이 곡의 박당 틱으로 표현할 수 없는 길이(이전 길이와 같은 틱)는 흐리게
+            int idx = (int)b.Tag;
+            bool distinct = idx == 0 || LengthTicks(idx, ws.Song.TickBeat) != LengthTicks(idx - 1, ws.Song.TickBeat);
+            if (!on) b.ForeColor = distinct ? Color.Black : Color.Silver;
+        }
+        roll.Invalidate();
+    }
+
+    private void BuildLengthButtons()
+    {
+        lengthCaption.Text = "Length";
+        lengthCaption.Font = Theme.UiFont;
+        lengthCaption.TextAlign = ContentAlignment.MiddleRight;
+        lengthCaption.SetBounds(324, 33, 56, 20);
+        topPanel.Controls.Add(lengthCaption);
+        lengthPanel.SetBounds(384, 30, 340, 24);
+        topPanel.Controls.Add(lengthPanel);
+        int x = 0;
+        for (int i = 0; i < LengthNames.Length; i++)
+        {
+            var rb = new RadioButton
+            {
+                Appearance = Appearance.Button, FlatStyle = FlatStyle.Flat, Text = LengthNames[i], Tag = i,
+                TextAlign = ContentAlignment.MiddleCenter, Font = Theme.SmallFont
+            };
+            int w = LengthNames[i].Length > 3 ? 40 : 34;
+            rb.SetBounds(x, 0, w, 22);
+            x += w + 2;
+            rb.FlatAppearance.BorderColor = Color.Black;
+            rb.FlatAppearance.CheckedBackColor = Color.Black;
+            rb.TabStop = false;
+            rb.CheckedChanged += delegate { if (rb.Checked && (int)rb.Tag != lengthIndex) LengthIndex = (int)rb.Tag; else ApplyLength(); };
+            lengthButtons.Add(rb);
+            lengthPanel.Controls.Add(rb);
         }
     }
 
@@ -232,7 +339,7 @@ internal sealed class ComposerView : UserControl
     public void BindSong()
     {
         roll.Song = ws.Song;
-        roll.SnapTicks = Math.Max(1, ws.Song.TickBeat / snapDivision);
+        ApplyLength();
         roll.ClampView();
         RebuildVoiceButtons();
         RefreshLabels();
@@ -259,17 +366,214 @@ internal sealed class ComposerView : UserControl
         set { roll.Band = value; UpdateInstrLabel(); roll.Invalidate(); }
     }
 
-    /// <summary>격자 크기 = 박당 화면 폭. 0 Large, 1 Medium(1:1), 2 Small.</summary>
+    /// <summary>격자 크기 = 박당 화면 폭 + 건반 한 칸 높이. 0 Large, 1 Medium(1:1), 2 Small.</summary>
     public static readonly float[] GridPixelsPerBeat = { 80f, 40f, 20f };
+    public static readonly int[] GridRowHeight = { 12, 8, 5 };
 
     public int GridSize
     {
         get
         {
-            for (int i = 0; i < GridPixelsPerBeat.Length; i++) if (Math.Abs(roll.PixelsPerBeat - GridPixelsPerBeat[i]) < 0.5f) return i;
+            for (int i = 0; i < GridPixelsPerBeat.Length; i++)
+                if (Math.Abs(roll.PixelsPerBeat - GridPixelsPerBeat[i]) < 0.5f && roll.RowHeight == GridRowHeight[i]) return i;
             return -1;
         }
-        set { roll.PixelsPerBeat = GridPixelsPerBeat[Math.Max(0, Math.Min(2, value))]; UpdateScrollBars(); roll.Invalidate(); }
+        set
+        {
+            int i = Math.Max(0, Math.Min(2, value));
+            int center = roll.TopNote - roll.VisibleRows / 2;    // 화면 가운데 음을 유지
+            roll.PixelsPerBeat = GridPixelsPerBeat[i];
+            roll.RowHeight = GridRowHeight[i];
+            roll.TopNote = center + roll.VisibleRows / 2;
+            roll.ClampView();
+            UpdateScrollBars();
+            roll.Invalidate();
+        }
+    }
+
+    // ------------------------------------------------------------ 키보드 조작
+
+    private readonly Dictionary<Keys, int> heldKeys = new Dictionary<Keys, int>();
+    private int keyboardBase = Song.MiddleC;
+
+    /// <summary>상태 표시줄에 보여 줄 안내 (키보드 옥타브 등).</summary>
+    public event Action<string> Message;
+
+    private void Say(string text) { if (Message != null) Message(text); }
+
+    public string KeyboardRangeText
+    {
+        get { return "Keys Z/Q = " + NoteHelper.Name(keyboardBase) + " / " + NoteHelper.Name(keyboardBase + 12); }
+    }
+
+    private void SetKeyboardBase(int note)
+    {
+        keyboardBase = Math.Max(Song.MinNote, Math.Min(Song.MaxNote - ComputerKeyboard.Span, note));
+        roll.KeyboardBase = keyboardBase;
+        roll.EnsureNoteVisible(keyboardBase + 12);
+        roll.Invalidate();
+        Say(KeyboardRangeText);
+    }
+
+    private void SelectVoice(int voice)
+    {
+        int n = ws.Song.VoiceCount;
+        voice = (voice % n + n) % n;
+        foreach (var b in voiceButtons)
+            if ((int)b.Tag == voice) { b.Checked = true; break; }
+        Say("Voice " + Song.VoiceLabels(ws.Song.IsMelodic)[voice] + "  " + instrLabel.Text);
+    }
+
+    /// <summary>
+    /// Composer 키보드 조작. 처리했으면 true. 커서 = (시간, 음높이) 상자, 스텝 = 노트 길이(Length).
+    /// ← → / ↑ ↓: 커서 이동 (스텝 / 반음), Ctrl+← →: 마디 단위.
+    /// Shift+→ / Shift+←: 커서 자리에 노트 그리기·늘리기 / 줄이기 (선택된 노트가 있으면 그 노트).
+    /// Shift+↑ / Shift+↓: 그 노트의 음높이를 반음씩.
+    /// 건반 키(Z S X... / Q 2 W...): 소리 + 연필 도구면 그 음으로 노트를 넣고 커서를 앞으로 (이어서 Shift+→로 늘리기).
+    /// [ ]: 노트 길이 짧게/길게, PageUp/PageDown: 건반 키 옥타브, Enter: 쉼표, Backspace: 뒤로 지우기,
+    /// Esc: 선택 해제, End: 곡 끝, Tab/Shift+Tab: 보이스 바꾸기.
+    /// </summary>
+    public bool HandleKeyDown(Keys keyData)
+    {
+        Keys key = keyData & Keys.KeyCode;
+        Keys mods = keyData & Keys.Modifiers;
+        int snap = Math.Max(1, roll.SnapTicks);
+        var song = ws.Song;
+
+        if (mods == Keys.None)
+        {
+            int offset;
+            if (ComputerKeyboard.TryGetOffset(key, out offset))
+            {
+                if (heldKeys.ContainsKey(key)) return true;      // 키 반복 무시
+                int note = Math.Max(Song.MinNote, Math.Min(Song.MaxNote, keyboardBase + offset));
+                heldKeys[key] = note;
+                roll.CursorNote = note;
+                if (roll.Tool == RollTool.Pencil && !ws.Audio.IsPlaying)
+                {
+                    roll.InsertNoteAtCursor(note, snap);   // 넣은 노트가 선택됨 → Shift+→로 바로 늘릴 수 있다
+                    roll.MoveCursor(roll.CursorTick + snap);
+                }
+                roll.EnsureNoteVisible(note);
+                PreviewNote(note);
+                Say(NoteHelper.Name(note) + (roll.Tool == RollTool.Pencil ? "  entered" : ""));
+                return true;
+            }
+        }
+
+        var active = roll.ActiveNote;
+        switch (keyData)
+        {
+            // ---- 커서 이동 (선택 해제: 다음 Shift+→는 커서 자리에 새 노트)
+            case Keys.Left: roll.ClearSelection(); roll.MoveCursor(Math.Max(0, roll.CursorTick - snap)); return true;
+            case Keys.Right: roll.ClearSelection(); roll.MoveCursor(roll.CursorTick + snap); return true;
+            case Keys.Up: roll.ClearSelection(); roll.MoveCursorNote(roll.CursorNote + 1); Say(NoteHelper.Name(roll.CursorNote)); return true;
+            case Keys.Down: roll.ClearSelection(); roll.MoveCursorNote(roll.CursorNote - 1); Say(NoteHelper.Name(roll.CursorNote)); return true;
+            case Keys.Control | Keys.Left:
+            {
+                int m = Math.Max(1, song.MeasureTicks);
+                roll.ClearSelection();
+                roll.MoveCursor(roll.CursorTick % m == 0 ? Math.Max(0, roll.CursorTick - m) : roll.CursorTick / m * m);
+                return true;
+            }
+            case Keys.Control | Keys.Right:
+            {
+                int m = Math.Max(1, song.MeasureTicks);
+                roll.ClearSelection();
+                roll.MoveCursor((roll.CursorTick / m + 1) * m);
+                return true;
+            }
+
+            // ---- Shift: 노트 그리기 / 길이 / 음높이
+            case Keys.Shift | Keys.Right:
+                if (active == null)
+                {
+                    active = roll.InsertNoteAtCursor(roll.CursorNote, snap);
+                    if (roll.AudioFeedback) PreviewBlip(active.Pitch);
+                }
+                else roll.ResizeNote(active, active.Duration + snap);
+                roll.MoveCursor(active.EndTick);
+                Say(NoteHelper.Name(active.Pitch) + "  length " + active.Duration + " ticks");
+                return true;
+            case Keys.Shift | Keys.Left:
+                if (active == null) { roll.MoveCursor(Math.Max(0, roll.CursorTick - snap)); return true; }
+                roll.ResizeNote(active, Math.Max(snap, active.Duration - snap));
+                roll.MoveCursor(active.EndTick);
+                Say(NoteHelper.Name(active.Pitch) + "  length " + active.Duration + " ticks");
+                return true;
+            case Keys.Shift | Keys.Up:
+            case Keys.Shift | Keys.Down:
+            {
+                int d = keyData == (Keys.Shift | Keys.Up) ? 1 : -1;
+                if (active == null) { roll.MoveCursorNote(roll.CursorNote + d); Say(NoteHelper.Name(roll.CursorNote)); return true; }
+                roll.SetNotePitch(active, active.Pitch + d);
+                roll.MoveCursorNote(active.Pitch);
+                if (roll.AudioFeedback) PreviewBlip(active.Pitch);
+                Say(NoteHelper.Name(active.Pitch));
+                return true;
+            }
+
+            // ---- 길이 / 옥타브 / 기타
+            case Keys.OemOpenBrackets: LengthIndex = lengthIndex + 1; return true;    // [ : 짧게
+            case Keys.OemCloseBrackets: LengthIndex = lengthIndex - 1; return true;   // ] : 길게
+            case Keys.PageUp: SetKeyboardBase(keyboardBase + 12); return true;
+            case Keys.PageDown: SetKeyboardBase(keyboardBase - 12); return true;
+            case Keys.End: roll.ClearSelection(); roll.MoveCursor(song.LengthTicks); return true;
+            case Keys.Enter: roll.ClearSelection(); roll.MoveCursor(roll.CursorTick + snap); Say("rest"); return true;
+            case Keys.Escape: if (roll.Selection.Count > 0) { roll.ClearSelection(); return true; } return false;
+            case Keys.Back:
+            {
+                roll.ClearSelection();
+                int t = Math.Max(0, roll.CursorTick - snap);
+                roll.MoveCursor(t);
+                if (roll.DeleteNotesStartingAt(t)) Say("deleted");
+                return true;
+            }
+            case Keys.Tab: SelectVoice(ShowAllVoices ? 0 : roll.CurrentVoice + 1); return true;
+            case Keys.Shift | Keys.Tab: SelectVoice(ShowAllVoices ? 0 : roll.CurrentVoice - 1); return true;
+        }
+        return false;
+    }
+
+    private Timer blipTimer;
+
+    /// <summary>키보드로 그리거나 음높이를 바꿀 때 잠깐 소리를 낸다.</summary>
+    private void PreviewBlip(int note)
+    {
+        if (ws.Audio.IsPlaying) return;
+        PreviewNote(note);
+        if (blipTimer == null)
+        {
+            blipTimer = new Timer { Interval = 250 };
+            blipTimer.Tick += delegate { blipTimer.Stop(); if (heldKeys.Count == 0) ws.Audio.PreviewNoteOff(roll.CurrentVoice); };
+        }
+        blipTimer.Stop();
+        blipTimer.Start();
+    }
+
+    public bool HandleKeyUp(Keys key)
+    {
+        int note;
+        if (!heldKeys.TryGetValue(key, out note)) return false;
+        heldKeys.Remove(key);
+        if (heldKeys.Count == 0) ws.Audio.PreviewNoteOff(roll.CurrentVoice);
+        return true;
+    }
+
+    /// <summary>모든 눌린 건반 키를 놓는다 (포커스를 잃을 때).</summary>
+    public void ReleaseKeys()
+    {
+        if (heldKeys.Count == 0) return;
+        heldKeys.Clear();
+        ws.Audio.PreviewNoteOff(roll.CurrentVoice);
+    }
+
+    private void ScrollRows(int rows)
+    {
+        roll.TopNote += rows;
+        roll.ClampView();
+        roll.Invalidate();
+        UpdateScrollBars();
     }
 
     /// <summary>위쪽 행 더블클릭/Insert: Instrument는 악기 선택, 나머지는 현재 입력 값으로 이벤트를 넣는다.</summary>
@@ -548,6 +852,11 @@ internal sealed class ComposerView : UserControl
     }
 
     public void SetRhythmMode(bool rhythm)
+    {
+        try { SetRhythmModeCore(rhythm); } finally { ApplyVoiceRange(); }
+    }
+
+    private void SetRhythmModeCore(bool rhythm)
     {
         if (ws.Song.IsMelodic == !rhythm) return;
         ws.PushUndo();

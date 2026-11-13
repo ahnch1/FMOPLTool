@@ -16,3 +16,29 @@ internal static class Theme
     public static readonly Font UiFont = new Font("Arial", 9.5f, FontStyle.Bold);
     public static readonly Font SmallFont = new Font("Arial", 7.5f, FontStyle.Bold);
 }
+
+/// <summary>프로그램 아이콘 (실행 파일과 같은 AdlibComposer.ico, 리소스에서 한 번만 읽는다).</summary>
+internal static class AppIcon
+{
+    private static Icon icon;
+    private static bool loaded;
+
+    public static Icon Get()
+    {
+        if (loaded) return icon;
+        loaded = true;
+        try
+        {
+            using (var s = typeof(AppIcon).Assembly.GetManifestResourceStream("AdlibComposer.App.AppIcon.ico"))
+                if (s != null) icon = new Icon(s);
+        }
+        catch (System.Exception) { icon = null; }   // 아이콘이 없어도 프로그램은 동작
+        return icon;
+    }
+
+    public static void Apply(System.Windows.Forms.Form f)
+    {
+        var i = Get();
+        if (i != null) f.Icon = i;
+    }
+}

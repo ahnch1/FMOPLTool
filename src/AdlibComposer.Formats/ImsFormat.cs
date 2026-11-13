@@ -67,6 +67,8 @@ public sealed class ImsFormat : ISongFormat
         int tickBeat = Math.Max(1, (int)header[36]);
         song.BeatsPerMeasure = Math.Max(1, (int)header[37]);
         long dataSize = BitConverter.ToUInt32(header, 42);
+        // totalTick: IMPLAY는 이 틱에서 곡을 끝낸다 (FC보다 먼저 오면). 뒤에 악기 바꾸기만 있는 무음 꼬리를 잘라 낸다.
+        long totalTick = BitConverter.ToInt32(header, 38);
         song.IsMelodic = header[58] == 0;
         song.PitchBendRange = Math.Max(1, (int)header[59]);
         song.BasicTempo = BitConverter.ToUInt16(header, 60);
@@ -95,6 +97,7 @@ public sealed class ImsFormat : ISongFormat
             while (pos < data.Length && data[pos] == 0xF8) { tick += OverflowTicks; pos++; }
             if (pos >= data.Length || data[pos] == 0xFC) break;
             tick += data[pos++];
+            if (totalTick > 0 && tick > totalTick) break;   // totalTick과 같은 틱의 이벤트는 읽는다 (다시 저장해도 같게)
             if (pos >= data.Length) break;
             if ((data[pos] & 0x80) != 0) status = data[pos++];
             if (status == 0xFC) break;
@@ -159,6 +162,7 @@ public sealed class ImsFormat : ISongFormat
             else break;   // 알 수 없는 상태 바이트: 여기서 멈춘다
         }
 
+        if (totalTick > 0 && tick > totalTick) tick = totalTick;
         int end = (int)Math.Min(tick, int.MaxValue);
         for (int v = 0; v < Song.MaxVoices; v++)
         {
@@ -167,6 +171,7 @@ public sealed class ImsFormat : ISongFormat
             if (vt.Notes.Count > 0 || vt.Timbres.Count > 0) vt.DeclaredTicks = end;
         }
         song.TickBeat = tickBeat;
+        song.FileTickBeat = tickBeat;
         ReduceTicks(song);
         return song;
     }
@@ -183,7 +188,7 @@ public sealed class ImsFormat : ISongFormat
     {
         int n = 0;
         while (n < length && b[offset + n] != 0) n++;
-        return TitleEncoding().GetString(b, offset, n).Trim();
+        return KoreanText.Decode(b, offset, n).Trim();
     }
 
     private static int Gcd(int a, int b) { while (b != 0) { int t = a % b; a = b; b = t; } return a; }

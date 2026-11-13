@@ -21,7 +21,19 @@ internal sealed class PianoRollControl : Control
 {
     public const int KeyboardWidth = 56;
     public const int BandHeight = 22;
-    public const int RowHeight = 8;
+    public const int MinRowHeight = 4;
+    public const int MaxRowHeight = 16;
+    private int rowHeight = 8;
+
+    /// <summary>건반 한 칸(반음) 높이. Display → Large/Medium/Small Grid로 바뀐다.</summary>
+    public int RowHeight
+    {
+        get { return rowHeight; }
+        set { rowHeight = Math.Max(MinRowHeight, Math.Min(MaxRowHeight, value)); ClampView(); Invalidate(); }
+    }
+
+    /// <summary>컴퓨터 키보드가 덮는 건반 범위의 시작 음 (-1 = 표시 안 함).</summary>
+    public int KeyboardBase { get; set; } = -1;
     private const int ResizeGrip = 4;
 
     private enum DragMode { None, Draw, Move, Resize }
@@ -47,6 +59,8 @@ internal sealed class PianoRollControl : Control
     public int ScrollTick { get; set; }
     public int TopNote { get; set; } = 84;
     public int CursorTick { get; set; }
+    /// <summary>키보드 편집용 음높이 커서 (커서 위치의 상자로 표시).</summary>
+    public int CursorNote { get; set; } = Song.MiddleC;
     public double PlayTick { get; set; } = -1;
     public HashSet<Note> Selection { get; } = new HashSet<Note>();
 
@@ -180,6 +194,7 @@ internal sealed class PianoRollControl : Control
         int cx = TickToX(CursorTick);
         if (cx >= KeyboardWidth && cx < Width)
             using (var p = new Pen(Theme.EditCursor) { DashStyle = DashStyle.Dash }) g.DrawLine(p, cx, 0, cx, Height);
+        DrawNoteCursor(g);
         if (PlayTick >= 0)
         {
             int px = TickToX(PlayTick);
@@ -235,6 +250,19 @@ internal sealed class PianoRollControl : Control
         return "Instr.";
     }
 
+    /// <summary>키보드 편집 커서: (커서 틱, 커서 음) 위치에 스텝 길이만큼의 상자 + 왼쪽 건반 표시.</summary>
+    private void DrawNoteCursor(Graphics g)
+    {
+        int y = NoteToY(CursorNote);
+        if (y + RowHeight < BandHeight || y > Height) return;
+        int x1 = Math.Max(KeyboardWidth, TickToX(CursorTick));
+        int x2 = TickToX(CursorTick + Math.Max(1, SnapTicks));
+        if (x2 > KeyboardWidth && x1 < Width)
+            using (var p = new Pen(Theme.EditCursor, 2f)) g.DrawRectangle(p, x1, y, Math.Max(3, x2 - x1), RowHeight);
+        using (var b = new SolidBrush(Color.FromArgb(120, Theme.EditCursor)))
+            g.FillRectangle(b, 0, y + 1, KeyboardWidth - 5, Math.Max(1, RowHeight - 1));
+    }
+
     private void DrawBand(Graphics g)
     {
         g.FillRectangle(Brushes.White, 0, 0, Width, BandHeight);
@@ -276,9 +304,17 @@ internal sealed class PianoRollControl : Control
             if (black) g.FillRectangle(Brushes.Black, 0, y, KeyboardWidth * 3 / 5, RowHeight);
             if (n == pressedKey) g.FillRectangle(black ? Brushes.DimGray : Brushes.LightGray, 0, y, KeyboardWidth - 1, RowHeight);
             g.DrawLine(Pens.Black, black ? KeyboardWidth * 3 / 5 : 0, y + RowHeight, KeyboardWidth, y + RowHeight);
-            if (n % 12 == 0) g.DrawString(NoteHelper.Name(n), Theme.SmallFont, Brushes.Black, KeyboardWidth - 24, y - 1);
+            if (n % 12 == 0 && RowHeight >= 6) g.DrawString(NoteHelper.Name(n), Theme.SmallFont, Brushes.Black, KeyboardWidth - 24, y + RowHeight - 11);
         }
         g.DrawLine(Pens.Black, KeyboardWidth, BandHeight, KeyboardWidth, Height);
+        if (KeyboardBase >= 0)
+        {
+            // 컴퓨터 키보드(Z..., Q...)가 덮는 범위 표시
+            int top = Math.Max(BandHeight, NoteToY(KeyboardBase + ComputerKeyboard.Span));
+            int bottom = Math.Min(Height, NoteToY(KeyboardBase) + RowHeight);
+            if (bottom > top)
+                using (var b = new SolidBrush(Theme.Selected)) g.FillRectangle(b, KeyboardWidth - 4, top, 3, bottom - top);
+        }
     }
 
     // ------------------------------------------------------------ 편집 동작
@@ -348,6 +384,94 @@ internal sealed class PianoRollControl : Control
         RaiseEdited();
     }
 
+    /// <summary>편집 커서를 옮기고 화면에 보이게 한다 (키보드 조작).</summary>
+    public void MoveCursor(int tick)
+    {
+        SetCursor(Math.Max(0, tick));
+        EnsureTickVisible(CursorTick);
+    }
+
+    public void EnsureNoteVisible(int note)
+    {
+        int rows = VisibleRows;
+        if (note > TopNote) TopNote = note + 2;
+        else if (note < TopNote - rows + 1) TopNote = note + rows - 3;
+        ClampView();
+        Invalidate();
+        if (ViewChanged != null) ViewChanged();
+    }
+
+    /// <summary>키보드로 편집할 노트: 현재 보이스에서 하나만 선택된 노트.</summary>
+    public Note ActiveNote
+    {
+        get
+        {
+            if (Selection.Count != 1) return null;
+            foreach (var n in Selection) return Voice.Notes.Contains(n) ? n : null;
+            return null;
+        }
+    }
+
+    public void ClearSelection()
+    {
+        if (Selection.Count == 0) return;
+        Selection.Clear();
+        Invalidate();
+    }
+
+    /// <summary>음높이 커서를 옮기고 화면에 보이게 한다.</summary>
+    public void MoveCursorNote(int note)
+    {
+        CursorNote = Math.Max(Song.MinNote, Math.Min(Song.MaxNote, note));
+        EnsureNoteVisible(CursorNote);
+        Invalidate();
+        if (EditCursorChanged != null) EditCursorChanged();
+    }
+
+    /// <summary>노트 길이를 바꾼다 (뒤 노트와 겹치면 뒤 노트를 자른다).</summary>
+    public void ResizeNote(Note n, int duration)
+    {
+        duration = Math.Max(1, duration);
+        if (n.Duration == duration) return;
+        RaiseBeforeEdit();
+        n.Duration = duration;
+        Voice.InsertNote(n);
+        RaiseEdited();
+    }
+
+    public void SetNotePitch(Note n, int pitch)
+    {
+        pitch = Math.Max(Song.MinNote, Math.Min(Song.MaxNote, pitch));
+        if (n.Pitch == pitch) return;
+        RaiseBeforeEdit();
+        n.Pitch = pitch;
+        RaiseEdited();
+    }
+
+    /// <summary>스텝 입력: 커서 위치에 노트를 넣고 그 노트를 선택한다.</summary>
+    public Note InsertNoteAtCursor(int pitch, int length)
+    {
+        pitch = Math.Max(Song.MinNote, Math.Min(Song.MaxNote, pitch));
+        RaiseBeforeEdit();
+        var n = new Note { StartTick = CursorTick, Duration = Math.Max(1, length), Pitch = pitch };
+        Voice.InsertNote(n);
+        Selection.Clear();
+        Selection.Add(n);
+        RaiseEdited();
+        return n;
+    }
+
+    /// <summary>현재 보이스에서 그 틱에 시작하는 노트를 지운다 (Backspace). 지웠으면 true.</summary>
+    public bool DeleteNotesStartingAt(int tick)
+    {
+        var hit = Voice.Notes.FindAll(n => n.StartTick == tick);
+        if (hit.Count == 0) return false;
+        RaiseBeforeEdit();
+        foreach (var n in hit) { Voice.Notes.Remove(n); Selection.Remove(n); }
+        RaiseEdited();
+        return true;
+    }
+
     public void EnsureTickVisible(int tick)
     {
         if (tick < ScrollTick || tick > ScrollTick + VisibleTicks) { ScrollTick = Math.Max(0, tick - VisibleTicks / 10); Invalidate(); if (ViewChanged != null) ViewChanged(); }
@@ -403,6 +527,7 @@ internal sealed class PianoRollControl : Control
             }
             int start = SnapDown(tick);
             drawing = new Note { StartTick = start, Duration = Math.Max(1, SnapTicks), Pitch = note };
+            CursorNote = note;
             drag = DragMode.Draw;
             Capture = true;
             SetCursor(start);
@@ -422,6 +547,7 @@ internal sealed class PianoRollControl : Control
 
             origins.Clear();
             foreach (var n in Selection) origins[n] = new Origin { Start = n.StartTick, Duration = n.Duration, Pitch = n.Pitch };
+            CursorNote = hit.Pitch;
             drag = e.X >= TickToX(hit.EndTick) - ResizeGrip ? DragMode.Resize : DragMode.Move;
             dragStartTick = tick; dragStartNote = note;
             dragUndoPushed = false;
@@ -431,6 +557,7 @@ internal sealed class PianoRollControl : Control
         else
         {
             if ((ModifierKeys & Keys.Control) == 0) Selection.Clear();
+            CursorNote = note;
             SetCursor(SnapDown(tick));
         }
         Invalidate();

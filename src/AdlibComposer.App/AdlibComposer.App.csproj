@@ -5,7 +5,24 @@
     <UseWindowsForms>true</UseWindowsForms>
     <RootNamespace>AdlibComposer.App</RootNamespace>
     <AssemblyName>AdlibComposer</AssemblyName>
+    <!-- 실행 파일 아이콘 (원본: _incoming/FMOPLTool.ico, 16~256 다중 크기로 변환) -->
+    <ApplicationIcon>AdlibComposer.ico</ApplicationIcon>
   </PropertyGroup>
+  <ItemGroup>
+    <!-- 창 아이콘 (dotnet 호스트로 실행해도 같은 아이콘이 보이도록 리소스로 포함) -->
+    <EmbeddedResource Include="AdlibComposer.ico" LogicalName="AdlibComposer.App.AppIcon.ico" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- 프로그램 기본 뱅크: 실행 폴더\bnk\STANDARD.BNK (이미 있으면 새 파일일 때만 덮어씀 = 사용자가 고친 뱅크 보존) -->
+    <None Include="Defaults\bnk\STANDARD.BNK" Link="bnk\STANDARD.BNK" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+  <!-- 실행 폴더에 곡(rol, ims) / 뱅크(bnk) 폴더 만들기 (빈 폴더는 복사되지 않으므로 직접 만든다. 실행 시에도 없으면 만든다) -->
+  <Target Name="CreateDataFolders" AfterTargets="Build">
+    <MakeDir Directories="$(OutDir)rol;$(OutDir)ims;$(OutDir)bnk" />
+  </Target>
+  <Target Name="CreatePublishDataFolders" AfterTargets="Publish">
+    <MakeDir Directories="$(PublishDir)rol;$(PublishDir)ims;$(PublishDir)bnk" />
+  </Target>
   <ItemGroup>
     <ProjectReference Include="..\AdlibComposer.Core\AdlibComposer.Core.csproj" />
     <ProjectReference Include="..\AdlibComposer.Formats\AdlibComposer.Formats.csproj" />

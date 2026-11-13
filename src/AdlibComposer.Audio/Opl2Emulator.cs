@@ -343,6 +343,12 @@ public sealed class Opl2Emulator : IOplChip
             int fb = c.Fb > 0 ? (m.Prev0 + m.Prev1) >> (9 - c.Fb) : 0;
             int mo = SlotOut(m, fb, tremolo);
             m.Prev1 = m.Prev0; m.Prev0 = mo;
+            if (rhythm && ch == 6)
+            {
+                // 리듬 모드 베이스드럼: 캐리어만 출력하고 2배 (CNT=1이면 모듈레이터는 출력에 섞이지 않고 위상 변조도 없음)
+                mix += SlotOut(k, c.Cnt == 0 ? mo >> 1 : 0, tremolo) * 2;
+                continue;
+            }
             if (c.Cnt == 0)
                 mix += SlotOut(k, mo >> 1, tremolo);
             else

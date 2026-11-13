@@ -31,17 +31,48 @@ public sealed class Sequencer
     private int tailSamples;
     private bool playing;
     private bool ending;
+    private double tempoMult = 1.0;
+    private PlaybackOptions options = new PlaybackOptions();
+    private readonly VoiceState[] states = new VoiceState[OplSynth.VoiceCount];
+    private bool rhythm;
 
-    public Sequencer(OplSynth synth) { this.synth = synth; }
+    public Sequencer(OplSynth synth) { this.synth = synth; ResetStates(); }
 
     public bool IsPlaying { get { return playing; } }
     public double PositionTick { get { return tick; } }
+    public PlaybackOptions Options { get { return options; } }
+    /// <summary>지금 템포 배수 (곡의 템포 이벤트, 속도 배수 제외).</summary>
+    public double TempoMultiplier { get { return tempoMult; } }
+
+    public void CopyStates(VoiceState[] dst)
+    {
+        Array.Copy(states, dst, Math.Min(dst.Length, states.Length));
+    }
+
+    private void ResetStates()
+    {
+        for (int v = 0; v < states.Length; v++)
+            states[v] = new VoiceState { Note = -1, Volume = 1f, NoteOnCount = states[v].NoteOnCount };
+    }
+
+    /// <summary>속도 배수를 바꾼다 (재생 중에도).</summary>
+    public void ApplySpeed() { SetTempoMultiplier(tempoMult); }
+
+    /// <summary>보이스를 끄면 울리던 음도 바로 끈다.</summary>
+    public void ApplyMute(int voice)
+    {
+        if (voice < 0 || voice >= states.Length) return;
+        if (options.VoiceMute[voice]) synth.NoteOff(voice);
+    }
 
     /// <param name="resolver">ROL의 악기 이름 → 악기 (null 반환 시 기본 악기).</param>
     /// <param name="onlyVoice">0 이상이면 그 보이스의 노트만 재생 (원본 Playback → Play Voice).</param>
-    public void Start(Song song, Func<string, AdlibInstrument> resolver, int startTick, int loopStartTick, int loopEndTick, int onlyVoice = -1)
+    public void Start(Song song, Func<string, AdlibInstrument> resolver, int startTick, int loopStartTick, int loopEndTick, int onlyVoice = -1, PlaybackOptions options = null)
     {
         this.resolver = resolver;
+        this.options = options ?? new PlaybackOptions();
+        rhythm = !song.IsMelodic;
+        ResetStates();
         synth.AllNotesOff();
         synth.SetRhythmMode(!song.IsMelodic);
         for (int v = 0; v < OplSynth.VoiceCount; v++)
@@ -65,6 +96,7 @@ public sealed class Sequencer
     {
         playing = false;
         synth.AllNotesOff();
+        for (int v = 0; v < states.Length; v++) states[v].Note = -1;
     }
 
     private void BuildEvents(Song song, int onlyVoice)
@@ -99,6 +131,7 @@ public sealed class Sequencer
     private void SeekTo(int target)
     {
         synth.AllNotesOff();
+        for (int v = 0; v < states.Length; v++) states[v].Note = -1;
         double mult = 1.0;
         next = 0;
         while (next < events.Count && events[next].Tick < target)
@@ -108,7 +141,7 @@ public sealed class Sequencer
             {
                 case EvType.Tempo: mult = e.F; break;
                 case EvType.Timbre: ApplyTimbre(e); break;
-                case EvType.Volume: synth.SetVolume(e.Voice, e.F); break;
+                case EvType.Volume: synth.SetVolume(e.Voice, e.F); states[e.Voice].Volume = e.F; break;
                 case EvType.Pitch: synth.SetPitchBend(e.Voice, e.F); break;
             }
             next++;
@@ -120,13 +153,28 @@ public sealed class Sequencer
     private void SetTempoMultiplier(double mult)
     {
         if (mult < 0.01) mult = 0.01;
-        ticksPerSample = basicTicksPerSecond * mult / synth.NativeRate;
+        tempoMult = mult;
+        double speed = options.Speed < 0.05 ? 0.05 : options.Speed;
+        ticksPerSample = basicTicksPerSecond * mult * speed / synth.NativeRate;
     }
 
     private void ApplyTimbre(Ev e)
     {
         AdlibInstrument ins = resolver != null ? resolver(e.Name) : null;
         synth.SetInstrument(e.Voice, ins);
+        states[e.Voice].Instrument = e.Name;
+        states[e.Voice].InstrumentFound = ins != null;
+    }
+
+    private void NoteOn(int voice, int note)
+    {
+        states[voice].Note = note;
+        states[voice].NoteOnCount++;
+        if (options.VoiceMute[voice]) return;
+        bool drum = rhythm && voice >= 6;
+        int n = note + options.VoiceTranspose[voice] + (drum ? 0 : options.Transpose);
+        if (n < 0) n = 0; else if (n > 127) n = 127;
+        synth.NoteOn(voice, n);
     }
 
     /// <summary>칩 샘플 1개만큼 진행. 재생이 끝나면 false.</summary>
@@ -140,10 +188,10 @@ public sealed class Sequencer
             {
                 case EvType.Tempo: SetTempoMultiplier(e.F); break;
                 case EvType.Timbre: ApplyTimbre(e); break;
-                case EvType.Volume: synth.SetVolume(e.Voice, e.F); break;
+                case EvType.Volume: synth.SetVolume(e.Voice, e.F); states[e.Voice].Volume = e.F; break;
                 case EvType.Pitch: synth.SetPitchBend(e.Voice, e.F); break;
-                case EvType.NoteOff: synth.NoteOff(e.Voice); break;
-                case EvType.NoteOn: synth.NoteOn(e.Voice, e.Value); break;
+                case EvType.NoteOff: synth.NoteOff(e.Voice); states[e.Voice].Note = -1; break;
+                case EvType.NoteOn: NoteOn(e.Voice, e.Value); break;
             }
         }
         tick += ticksPerSample;
@@ -157,6 +205,7 @@ public sealed class Sequencer
         {
             ending = true;
             synth.AllNotesOff();
+            for (int v = 0; v < states.Length; v++) states[v].Note = -1;
         }
         if (ending)
         {

@@ -162,12 +162,12 @@ public sealed class OplSynth
         }
         switch (voice)
         {
-            case 6: SetChannelPitch(6, n + BendSemis(6), false); TriggerDrum(0x10); break;
+            case 6: SetChannelPitch(6, n + BendSemis(6)); TriggerDrum(0x10); break;   // 드럼 채널은 키온 비트가 없으므로 주파수를 바로 쓴다
             case 7: TriggerDrum(0x08); break;
             case 8:
                 tomNote = n;
-                SetChannelPitch(8, n + BendSemis(8), false);
-                SetChannelPitch(7, n + 7 + BendSemis(8), false);
+                SetChannelPitch(8, n + BendSemis(8));
+                SetChannelPitch(7, n + 7 + BendSemis(8));
                 TriggerDrum(0x04);
                 break;
             case 9: TriggerDrum(0x02); break;

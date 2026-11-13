@@ -122,6 +122,8 @@ public sealed class Song
     public int PitchBendRange { get; set; } = 1;
     public string Title { get; set; } = "Untitled";
     public string FilePath { get; set; }
+    /// <summary>파일에 적힌 원래 박당 틱 (IMS는 240, 읽으면서 줄인 경우). 0이면 TickBeat와 같다. ISS 가사 틱 변환에 쓴다.</summary>
+    public int FileTickBeat { get; set; }
     public List<TempoEvent> TempoEvents { get; } = new List<TempoEvent>();
     public VoiceTrack[] Voices { get; } = new VoiceTrack[MaxVoices];
 
@@ -155,7 +157,7 @@ public sealed class Song
         {
             VersionMajor = VersionMajor, VersionMinor = VersionMinor, Signature = Signature,
             TickBeat = TickBeat, BeatsPerMeasure = BeatsPerMeasure, ScaleX = ScaleX, ScaleY = ScaleY,
-            IsMelodic = IsMelodic, BasicTempo = BasicTempo, PitchBendRange = PitchBendRange, Title = Title, FilePath = FilePath
+            IsMelodic = IsMelodic, BasicTempo = BasicTempo, PitchBendRange = PitchBendRange, Title = Title, FilePath = FilePath, FileTickBeat = FileTickBeat
         };
         foreach (var t in TempoEvents) c.TempoEvents.Add(new TempoEvent { Tick = t.Tick, Multiplier = t.Multiplier });
         for (int i = 0; i < MaxVoices; i++) c.Voices[i] = Voices[i].Clone();
@@ -211,5 +213,22 @@ public sealed class TempoMap
             mult = e.Multiplier;
         }
         return seconds + (tick - last) / (basicTicksPerSecond * mult);
+    }
+
+    /// <summary>초 → 틱 (SecondsAt의 역).</summary>
+    public double TickAt(double seconds)
+    {
+        if (seconds <= 0) return 0;
+        double at = 0, mult = 1.0;
+        int last = 0;
+        foreach (var e in events)
+        {
+            double seg = (e.Tick - last) / (basicTicksPerSecond * mult);
+            if (at + seg >= seconds) break;
+            at += seg;
+            last = e.Tick;
+            mult = e.Multiplier;
+        }
+        return last + (seconds - at) * basicTicksPerSecond * mult;
     }
 }

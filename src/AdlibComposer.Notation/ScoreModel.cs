@@ -31,7 +31,11 @@ public sealed class ScoreVoice
 {
     public int VoiceIndex;
     public string Name;
+    /// <summary>화면 보이스 이름 (1~9 또는 BD SD TO CY HH).</summary>
+    public string Label;
     public string InstrumentName;
+    /// <summary>리듬 모드 드럼 보이스면 그 종류 (한 줄 타악기 보표로 그린다).</summary>
+    public DrumKind Drum;
     public List<ScoreMeasure> Measures = new List<ScoreMeasure>();
 }
 
@@ -72,7 +76,11 @@ public static class ScoreBuilder
             var track = song.Voices[v];
             if (options.SkipEmptyVoices && track.Notes.Count == 0) continue;
 
-            var sv = new ScoreVoice { VoiceIndex = v, Name = track.Name };
+            var sv = new ScoreVoice
+            {
+                VoiceIndex = v, Name = track.Name, Label = Song.VoiceLabels(song.IsMelodic)[v],
+                Drum = StaffRules.DrumFor(v, song.IsMelodic)
+            };
             var t0 = track.TimbreAt(0);
             sv.InstrumentName = t0 != null ? t0.InstrumentName : "";
 

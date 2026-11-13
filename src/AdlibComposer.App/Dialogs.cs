@@ -12,6 +12,7 @@ internal static class DialogUtil
     public static void Setup(Form f, string title, int w, int h)
     {
         f.Text = title;
+        AppIcon.Apply(f);
         f.ClientSize = new Size(w, h);
         f.StartPosition = FormStartPosition.CenterParent;
         f.FormBorderStyle = FormBorderStyle.FixedDialog;

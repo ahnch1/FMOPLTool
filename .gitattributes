@@ -61,3 +61,14 @@
 #*.PDF   diff=astextplain
 #*.rtf   diff=astextplain
 #*.RTF   diff=astextplain
+
+# AdLib 데이터 / 아이콘: 줄바꿈 변환 금지
+*.bnk binary
+*.BNK binary
+*.rol binary
+*.ROL binary
+*.ims binary
+*.IMS binary
+*.ins binary
+*.INS binary
+*.ico binary

@@ -52,8 +52,24 @@ internal sealed class InstrumentView : UserControl
     public int PreviewVoice
     {
         get { return previewVoice; }
-        set { previewVoice = value; ApplyLayout(); }
+        set { previewVoice = value; ApplyLayout(); ApplyModeRange(); }
     }
+
+    private int melodicBaseNote = Song.MiddleC;
+    private bool drumRange;
+
+    /// <summary>드럼 모드(BD~HH)는 건반을 C2부터 (드럼은 낮은 음에서 드럼 소리가 난다), 멜로딕으로 돌아오면 이전 옥타브.</summary>
+    private void ApplyModeRange()
+    {
+        bool drum = previewVoice >= 6;
+        if (drum == drumRange) return;
+        drumRange = drum;
+        if (drum) { melodicBaseNote = baseNote; baseNote = ComposerDrumBase; }
+        else baseNote = melodicBaseNote;
+        RefreshKeyLabels();
+    }
+
+    private const int ComposerDrumBase = 36;
 
     /// <summary>단일 오퍼레이터 퍼커션 모드 (SD/TO/CY/HH): Carrier 열만 보이고, 값은 파일의 모듈레이터 필드.</summary>
     public bool SingleOperator { get { return previewVoice >= 7; } }
@@ -223,7 +239,7 @@ internal sealed class InstrumentView : UserControl
         if (changed && ins != null)
         {
             int mode = ins.Percussive && ins.VoiceNum >= 6 && ins.VoiceNum <= 10 ? ins.VoiceNum : 0;
-            if (mode != previewVoice) { ws.Audio.PreviewAllOff(); previewVoice = mode; ApplyLayout(); }
+            if (mode != previewVoice) { ws.Audio.PreviewAllOff(); previewVoice = mode; ApplyLayout(); ApplyModeRange(); }
         }
         binding = true;
         try
@@ -314,18 +330,10 @@ internal sealed class InstrumentView : UserControl
 
     private void BuildKeyMap()
     {
-        Keys[] low = { Keys.Z, Keys.S, Keys.X, Keys.D, Keys.C, Keys.V, Keys.G, Keys.B, Keys.H, Keys.N, Keys.J, Keys.M, Keys.Oemcomma };
-        for (int i = 0; i < low.Length; i++) keyMap[low[i]] = i;
-        Keys[] high = { Keys.Q, Keys.D2, Keys.W, Keys.D3, Keys.E, Keys.R, Keys.D5, Keys.T, Keys.D6, Keys.Y, Keys.D7, Keys.U, Keys.I };
-        for (int i = 0; i < high.Length; i++) keyMap[high[i]] = 12 + i;
+        foreach (var kv in ComputerKeyboard.Map) keyMap[kv.Key] = kv.Value;
     }
 
-    private static string KeyLabel(Keys k)
-    {
-        if (k == Keys.Oemcomma) return ",";
-        if (k >= Keys.D0 && k <= Keys.D9) return ((int)k - (int)Keys.D0).ToString();
-        return k.ToString();
-    }
+    private static string KeyLabel(Keys k) { return ComputerKeyboard.Label(k); }
 
     private void RefreshKeyLabels()
     {

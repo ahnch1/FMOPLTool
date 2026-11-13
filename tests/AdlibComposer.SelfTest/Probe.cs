@@ -12,6 +12,49 @@ public static class Probe
 {
     public static int Run(string[] args)
     {
+        if (args[0] == "--drum")
+        {
+            InstrumentBank bank;
+            using (var fs = File.OpenRead(args[1])) bank = new BnkFormat().Read(fs);
+            foreach (var name in new[] { "bdrum", "bdrum1", "snare1", "tom1", "cymbal1", "hihat1", "piano1" })
+            {
+                var ins = bank.Find(name);
+                foreach (int note in new[] { 36, 48, 60 })
+                {
+                    var synth = new AdlibComposer.Audio.OplSynth();
+                    int voice = name.StartsWith("bdrum") ? 6 : name == "snare1" ? 7 : name == "tom1" ? 8 : name == "cymbal1" ? 9 : name == "hihat1" ? 10 : 0;
+                    synth.SetRhythmMode(voice >= 6);
+                    synth.SetInstrument(voice, ins);
+                    synth.NoteOn(voice, note);
+                    int peak = 0;
+                    for (int i = 0; i < 49716 / 4; i++) peak = Math.Max(peak, Math.Abs((int)synth.Generate()));
+                    Console.WriteLine($"{name,-8} voice {voice,2} note {note}: peak {peak}");
+                }
+            }
+            return 0;
+        }
+        if (args[0] == "--drumshape")
+        {
+            InstrumentBank bank;
+            using (var fs = File.OpenRead(args[1])) bank = new BnkFormat().Read(fs);
+            foreach (var c in new[] { ("bdrum", 6, true, 36), ("bdrum", 6, true, 60), ("bdrum", 6, false, 60), ("bdrum", 0, false, 60), ("bdrum", 0, true, 60), ("piano1", 0, false, 60) })
+            {
+                var synth = new AdlibComposer.Audio.OplSynth();
+                synth.SetRhythmMode(c.Item3);
+                synth.SetInstrument(c.Item2, bank.Find(c.Item1));
+                synth.NoteOn(c.Item2, c.Item4);
+                int rate = synth.NativeRate, n = rate * 2, crossings = 0, peak = 0, lastLoud = 0;
+                var buf = new short[n];
+                for (int i = 0; i < n; i++) { buf[i] = synth.Generate(); peak = Math.Max(peak, Math.Abs((int)buf[i])); }
+                for (int i = 1; i < n; i++)
+                {
+                    if (Math.Abs((int)buf[i]) > peak / 100) lastLoud = i;     // -40dB
+                    if (i < rate / 10 && buf[i - 1] < 0 && buf[i] >= 0) crossings++;
+                }
+                Console.WriteLine($"{c.Item1,-7} voice {c.Item2} rhythm={c.Item3,-5} note {c.Item4}: peak {peak,5}  audible {lastLoud * 1000 / rate,5} ms  ~{crossings * 10} Hz");
+            }
+            return 0;
+        }
         if (args[0] == "--latency")
         {
             Song song; InstrumentBank bank;

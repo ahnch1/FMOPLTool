@@ -82,15 +82,32 @@ public static class DemoRender
         return all;
     }
 
-    public static void WriteWav(string path, short[] samples, int rate)
+    /// <summary>SOP 곡을 스테레오(왼쪽/오른쪽 번갈아)로 렌더링한다.</summary>
+    public static short[] RenderSop(SopSong song, double seconds, int startTick = 0)
+    {
+        var engine = new AudioEngine();
+        engine.PlaySop(song, startTick);
+        int frames = (int)(seconds * AudioEngine.OutputRate);
+        var all = new short[frames * 2];
+        var chunk = new short[2048];
+        for (int off = 0; off < frames; off += 1024)
+        {
+            int n = Math.Min(1024, frames - off);
+            engine.RenderStereo(chunk, n);
+            Array.Copy(chunk, 0, all, off * 2, n * 2);
+        }
+        return all;
+    }
+
+    public static void WriteWav(string path, short[] samples, int rate, int channels = 1)
     {
         using (var w = new BinaryWriter(File.Create(path)))
         {
             int bytes = samples.Length * 2;
             w.Write(Encoding.ASCII.GetBytes("RIFF")); w.Write(36 + bytes);
             w.Write(Encoding.ASCII.GetBytes("WAVE"));
-            w.Write(Encoding.ASCII.GetBytes("fmt ")); w.Write(16); w.Write((short)1); w.Write((short)1);
-            w.Write(rate); w.Write(rate * 2); w.Write((short)2); w.Write((short)16);
+            w.Write(Encoding.ASCII.GetBytes("fmt ")); w.Write(16); w.Write((short)1); w.Write((short)channels);
+            w.Write(rate); w.Write(rate * 2 * channels); w.Write((short)(2 * channels)); w.Write((short)16);
             w.Write(Encoding.ASCII.GetBytes("data")); w.Write(bytes);
             foreach (short s in samples) w.Write(s);
         }
@@ -99,6 +116,24 @@ public static class DemoRender
     public static int Run(string[] args)
     {
         string wav = null, rol = null, bnk = null;
+        if (args[0] == "--sop")
+        {
+            // --sop 곡.SOP 출력.wav [초]
+            var sop = SopFormat.Load(args[1]);
+            double sec = args.Length > 3 ? double.Parse(args[3], System.Globalization.CultureInfo.InvariantCulture) : Math.Min(60, sop.SecondsAt(sop.LengthTicks) + 1);
+            var pcm = RenderSop(sop, sec);
+            WriteWav(args[2], pcm, AudioEngine.OutputRate, 2);
+            int peak = 0; double sl = 0, sr = 0;
+            for (int i = 0; i < pcm.Length; i += 2)
+            {
+                peak = Math.Max(peak, Math.Max(Math.Abs((int)pcm[i]), Math.Abs((int)pcm[i + 1])));
+                sl += (double)pcm[i] * pcm[i]; sr += (double)pcm[i + 1] * pcm[i + 1];
+            }
+            int n = Math.Max(1, pcm.Length / 2);
+            Console.WriteLine("rendered " + args[2] + "  " + sec.ToString("0.0") + "s  peak=" + peak + "  rmsL=" + Math.Sqrt(sl / n).ToString("0") + "  rmsR=" + Math.Sqrt(sr / n).ToString("0")
+                + "  length=" + sop.SecondsAt(sop.LengthTicks).ToString("0.0") + "s");
+            return 0;
+        }
         for (int i = 0; i < args.Length - 1; i++)
         {
             if (args[i] == "--wav") wav = args[i + 1];

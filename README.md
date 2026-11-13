@@ -3,11 +3,11 @@
 AdLib Visual Composer(작곡)와 Instrument Maker(악기 편집)를 **한 프로그램**으로 재현하는 C# 솔루션.
 BNK 악기를 보이스(채널)에 할당하고, 건반 악보에 노트를 배치하고, OPL2 에뮬레이션으로 재생한다.
 
-- 파일: ROL·IMS(곡) / BNK(악기 뱅크) / INS(악기 1개) 읽기·쓰기
+- 파일: ROL·IMS(곡) / BNK(악기 뱅크) / INS(악기 1개) 읽기·쓰기, SOP(OPL3 곡) 읽기·재생 (Jukebox)
 - 화면: 원본 스크린샷(640x400 흑백 DOS 화면) 레이아웃을 따른 WinForms GUI
-- 확장: SOP 같은 곡 포맷, 악보(스코어) 변환, OPL 칩 교체를 위한 인터페이스 제공
+- 확장: 곡 포맷, 악보(스코어) 변환, OPL 칩 교체를 위한 인터페이스 제공
 
-버전: `Directory.Build.props`의 `<Version>` (현재 1.1.0). 주·부 번호(1.1, 1.2 ...)는 직접 정하고, 작업마다 마지막 번호를 올린다.
+버전: `Directory.Build.props`의 `<Version>` (현재 1.1.1). 주·부 번호(1.1, 1.2 ...)는 직접 정하고, 작업마다 마지막 번호를 올린다.
 
 ## 빌드 / 실행
 
@@ -34,6 +34,7 @@ FMOPLTool.cfg        ← 설정 (처음 실행할 때 기본값으로 생성, Fi
 bnk\STANDARD.BNK     ← 프로그램 기본 뱅크 (시작할 때 불러옴, 새 곡 기본 악기 piano1/bdrum/... 가 들어 있음)
 rol\                 ← ROL 곡 폴더
 ims\                 ← IMS 곡 폴더
+sop\                 ← SOP 곡 폴더 (Jukebox)
 ```
 
 `FMOPLTool.cfg` (텍스트, 경로는 실행 폴더 기준 상대 경로 또는 절대 경로):
@@ -41,6 +42,7 @@ ims\                 ← IMS 곡 폴더
 ```
 RolFolder=rol
 ImsFolder=ims
+SopFolder=sop
 BankFolder=bnk
 DefaultBank=bnk\STANDARD.BNK
 LoadDefaultBank=true
@@ -73,7 +75,7 @@ LoadDefaultBank=true
 - 아직 없음: 빔(꼬리를 묶는 가로줄), 화음(한 보이스는 한 음뿐이라 필요 없음), 오른쪽 끝 맞춤
 
 **Jukebox** (곡 재생기, 옛 IMPLAY / OCPLAY 화면을 참고한 현대식 데크)
-- 왼쪽 위: 폴더 트리 (ROL 폴더 · IMS 폴더 · 내 PC 드라이브), 왼쪽 아래: 고른 폴더의 ROL / IMS 목록 (가사 = 같은 이름 .ISS, 뱅크 = 같은 이름 .BNK 표시). 두 번 클릭 / Enter로 재생
+- 왼쪽 위: 폴더 트리 (ROL 폴더 · IMS 폴더 · SOP 폴더 · 내 PC 드라이브), 왼쪽 아래: 고른 폴더의 ROL / IMS / SOP 목록 (가사 = 같은 이름 .ISS, 뱅크 = 같은 이름 .BNK 표시). 두 번 클릭 / Enter로 재생
 - 정보: 곡 제목(IMS 제목, 조합형 → 유니코드), 곡 파일 (불러온 악기 / 곡이 쓰는 악기), 뱅크 파일 (악기 수), 가사 파일, 지금 / 전체 시간, ♩ 템포 · 속도 · 키
 - 뱅크: 곡 옆에 같은 이름의 BNK가 있으면 그것을 먼저, 없으면 설정의 기본 뱅크(STANDARD.BNK). Composer의 작업 뱅크는 바꾸지 않는다
 - 가사: 같은 이름의 ISS. 조합형(원래 형식)과 완성형(CP949로 바꾼 파일)을 자동 판별. IMPLAY 규칙대로 기록 순서로 글자를 칠하고(카라오케), 다음 줄을 아래에 미리 보여 준다
@@ -149,18 +151,18 @@ LoadDefaultBank=true
 | 프로젝트 | 역할 |
 |---|---|
 | `AdlibComposer.Core` | 모델: `Song`(틱 기반 ROL 구조), `VoiceTrack`, `Note`, `AdlibInstrument`, `InstrumentBank`, `TempoMap` |
-| `AdlibComposer.Formats` | `RolFormat`, `ImsFormat`, `BnkFormat`, `InsFormat`, `IssLyrics`(ISS 가사), `KoreanText`(조합형/완성형 → 유니코드), `FormatRegistry`, `Planned/` (SOP 자리표시) |
-| `AdlibComposer.Audio` | `Opl2Emulator`(내장 OPL2), `OplSynth`(보이스→레지스터, 리듬 모드), `Sequencer`, `AudioEngine`, `PlaybackOptions`(속도 · 키 · 채널 조절), `WaveOutPlayer`, `OplMapping` |
+| `AdlibComposer.Formats` | `RolFormat`, `ImsFormat`, `BnkFormat`, `InsFormat`, `IssLyrics`(ISS 가사), `KoreanText`(조합형/완성형 → 유니코드), `FormatRegistry`, `SopFormat` → `SopSong`(OPL3 곡, Song과 별도 모델) |
+| `AdlibComposer.Audio` | `Opl2Emulator`(내장 OPL2), `Opl3Emulator`(18채널 · 4-op · 웨이브폼 8종 · 스테레오), `OplSynth`(보이스→레지스터, 리듬 모드), `Sequencer`, `SopPlayer`(SOP → OPL3), `AudioEngine`(스테레오 출력), `PlaybackOptions`(속도 · 키 · 채널 조절), `WaveOutPlayer`, `OplMapping` |
 | `AdlibComposer.Notation` | `Score` 모델, `ScoreBuilder`(Song→마디/음표, 붙임줄), `NoteSpelling`(음표 나누기·셋잇단·음 이름), `MusicXmlExporter`, `MidiExporter`, 텍스트 내보내기 |
 | `AdlibComposer.App` | WinForms GUI: `MainForm`, `Shell/`(사이드바 · 로그 · 셸 테마), `ComposerView`, `InstrumentView`, `JukeboxView`, `NoteView`, `PianoRollControl`, `RetroSlider` 등 |
 | `tests/AdlibComposer.SelfTest` | 의존성 없는 자체 테스트 + 데모 WAV 렌더러 |
 
 ## 확장 방법
 
-**곡 포맷 추가 (SOP 등)**
-1. `ISongFormat`을 구현한 클래스를 만든다 (실제 예: `Formats/ImsFormat.cs`, 뼈대: `Formats/Planned/PlannedSongFormats.cs`).
+**곡 포맷 추가**
+1. `ISongFormat`을 구현한 클래스를 만든다 (실제 예: `Formats/ImsFormat.cs`).
 2. 파일 내용을 `Song`(보이스별 `Note`, 악기/볼륨/피치/템포 이벤트)으로 변환한다.
-3. `FormatRegistry.CreateDefault()`에 `r.Songs.Add(new SopFormat());` 한 줄 추가.
+3. `FormatRegistry.CreateDefault()`에 `r.Songs.Add(new MyFormat());` 한 줄 추가.
 → 열기/저장 대화상자, 편집, 재생, 악보 변환이 그대로 동작한다.
 
 **악보 변환**
@@ -210,4 +212,11 @@ LoadDefaultBank=true
 - BNK 재저장 시 데이터 영역이 이름순으로 다시 배치되고, 범위를 벗어난 미사용 항목은 빠진다 (악기 값은 동일).
 - IMS 저장은 박당 240틱(가능할 때)으로 쓰고, 볼륨은 노트 vel + `An` 이벤트로 나눠 쓴다. 원본과 바이트까지 같지는 않다 (같은 곡).
 - IMS 제목(조합형 한글)은 읽지만 화면 제목은 파일명을 쓴다.
-- SOP 곡 포맷, MusicXML/MIDI 내보내기는 아직 없다 (확장 지점만 준비됨).
+- SOP는 Jukebox에서만 연다 (Composer / Note는 `Song` 모델이 11보이스 · 2-op라 4-op · 20트랙을 담을 수 없음). 저장은 없다.
+- SOP 칩 제어는 Ad262Sop 라이브러리(`_incoming/AD262SOP/AD262SOP.C`, 박진홍)를 옮겼다 (`SopPlayer` 주석 참고):
+  트랙 0~8 = 첫 뱅크 채널, 11~19 = 둘째 뱅크 채널, 리듬 모드면 6~10 = BD SD TOM CY HH. 채널 모드 1 트랙(0·1·2·11·12·13)은 처음부터 4-op(+3 채널과 짝).
+  음높이는 드라이버의 반음당 32단계 F-Number 표 (노트 60 = 가운데 도, 피치 100당 1반음), 볼륨 표 (63 − TL) × vol / 128, 팬 0 = 오른쪽(C0 0xA0) · 1 = 가운데 · 2 = 왼쪽(0x50).
+  드럼은 BD만 자기 음높이, TOM 음이 바뀌면 SD 채널 = TOM + 7. 이벤트 1(특수)은 무시.
+- 드라이버와 다르게 한 것 (재생 루프는 소스에 없음): 같은 트랙에서 겹친 노트는 키오프 후 다시 울림 (드라이버만으로는 BD가 다시 울리지 않음),
+  리듬 모드가 아닐 때 트랙 9 · 10의 악기/팬은 무시 (드라이버는 채널 0 · 7 · 8을 덮어씀), 마스터 볼륨 = 트랙 볼륨 × 마스터 / 127.
+- SOP 가사(같은 이름 ISS)는 IMS와 같은 240/박 기준 (SV6-GOSV.ISS 마지막 기록이 곡 끝과 맞음).

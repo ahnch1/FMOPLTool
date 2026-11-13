@@ -1,10 +1,12 @@
 using System;
 using AdlibComposer.Core;
+using AdlibComposer.Formats;
 
 namespace AdlibComposer.Audio;
 
 /// <summary>
-/// 오디오 엔진: OplSynth + Sequencer + 출력 장치. UI 스레드와 오디오 스레드가 같은 락을 쓴다.
+/// 오디오 엔진: OplSynth + Sequencer (ROL/IMS, OPL2) 또는 SopPlayer (SOP, OPL3) + 출력 장치(스테레오).
+/// UI 스레드와 오디오 스레드가 같은 락을 쓴다.
 /// Render()만 단독으로 호출하면 장치 없이 오프라인 렌더링도 가능 (테스트용).
 /// </summary>
 public sealed class AudioEngine : IDisposable
@@ -14,9 +16,14 @@ public sealed class AudioEngine : IDisposable
     private readonly object sync = new object();
     private readonly OplSynth synth;
     private readonly Sequencer sequencer;
+    /// <summary>SOP는 최대 20트랙이 함께 울려 OPL2 곡보다 크다: 칩 출력을 줄여 SoftClip에 덜 걸리게 한다.</summary>
+    private readonly Opl3Emulator opl3 = new Opl3Emulator { MasterGain = 0.6 };
+    private readonly SopPlayer sop;
+    /// <summary>true면 SOP(OPL3) 쪽을 소리 낸다. 시음이나 ROL/IMS 재생을 시작하면 false.</summary>
+    private bool sopMode;
     private WaveOutPlayer player;
     private double resamplePos;
-    private double prev, cur;
+    private double prevL, curL, prevR, curR;
 
     // 재생 커서 동기화: 렌더한 블록마다 (출력 샘플 위치, 시작/끝 틱)을 기록해 두고,
     // 장치가 실제로 재생 중인 샘플 위치로 틱을 찾는다 (출력 버퍼만큼 앞서 가는 렌더 위치 대신).
@@ -34,12 +41,16 @@ public sealed class AudioEngine : IDisposable
     {
         this.synth = synth;
         sequencer = new Sequencer(synth);
+        sop = new SopPlayer(opl3);
     }
 
     public OplMapping Mapping { get { return synth.Mapping; } }
     public double MasterVolume { get; set; } = 1.5;
     public bool IsDeviceOpen { get { return player != null && player.IsOpen; } }
-    public bool IsPlaying { get { lock (sync) { return sequencer.IsPlaying; } } }
+    public bool IsPlaying { get { lock (sync) { return SourcePlaying; } } }
+
+    private bool SourcePlaying { get { return sopMode ? sop.IsPlaying : sequencer.IsPlaying; } }
+    private double SourceTick { get { return sopMode ? sop.PositionTick : sequencer.PositionTick; } }
 
     /// <summary>지금 스피커에서 들리는 위치(틱). 장치가 없으면 시퀀서 위치.</summary>
     public double PositionTick
@@ -49,14 +60,14 @@ public sealed class AudioEngine : IDisposable
             long played = player != null ? player.PlayedSamples : -1;
             lock (sync)
             {
-                if (played < 0) return sequencer.PositionTick;
+                if (played < 0) return SourceTick;
                 long at = deviceBase + played;
                 for (int k = 1; k <= marks.Length; k++)
                 {
                     var m = marks[(markNext - k + marks.Length) % marks.Length];
                     if (m.Count == 0) break;
                     if (at < m.Start) continue;
-                    if (at >= m.Start + m.Count) return sequencer.PositionTick;   // 기록보다 앞: 거의 없음
+                    if (at >= m.Start + m.Count) return SourceTick;                // 기록보다 앞: 거의 없음
                     if (m.Gen != generation || !m.Playing) return startTick;       // 아직 이전 버퍼(무음)가 나오는 중
                     if (m.T1 < m.T0) return m.T0;                                  // 루프 되감기 블록
                     return m.T0 + (m.T1 - m.T0) * (at - m.Start) / m.Count;
@@ -66,12 +77,12 @@ public sealed class AudioEngine : IDisposable
         }
     }
 
-    /// <summary>출력 장치를 연다 (Windows 전용). 실패하면 예외.</summary>
+    /// <summary>출력 장치를 연다 (Windows 전용, 스테레오). 실패하면 예외.</summary>
     public void OpenDevice()
     {
         if (player != null) return;
         lock (sync) deviceBase = renderedSamples;
-        player = new WaveOutPlayer(OutputRate, 512, Render);   // 6 x 512 샘플 ≈ 70ms
+        player = new WaveOutPlayer(OutputRate, 512, 2, RenderStereo);   // 6 x 512 프레임 ≈ 70ms
         player.Start();
     }
 
@@ -81,6 +92,7 @@ public sealed class AudioEngine : IDisposable
     {
         lock (sync)
         {
+            if (sopMode) { sop.Stop(); sopMode = false; }
             Func<string, AdlibInstrument> resolver = name => bank != null ? bank.Find(name) : null;
             sequencer.Start(song, resolver, startTick, loopStart, loopEnd, onlyVoice, options);
             generation++;
@@ -88,71 +100,114 @@ public sealed class AudioEngine : IDisposable
         }
     }
 
+    /// <summary>SOP 곡 재생 (OPL3). 조절값은 ROL/IMS와 같은 PlaybackOptions (보이스 = 트랙 0~19).</summary>
+    public void PlaySop(SopSong song, int startTick = 0, PlaybackOptions options = null)
+    {
+        lock (sync)
+        {
+            if (sequencer.IsPlaying) sequencer.Stop();
+            sopMode = true;
+            sop.Start(song, Math.Max(0, startTick), options);
+            generation++;
+            this.startTick = Math.Max(0, startTick);
+        }
+    }
+
     public void Stop()
     {
-        lock (sync) { sequencer.Stop(); }
+        lock (sync) { sequencer.Stop(); sop.Stop(); }
     }
 
     // ---------------------------------------------------------------- 재생 조절 (Jukebox)
 
     /// <summary>지금 재생의 조절값 (Play에 넘긴 것). 값을 바꾼 뒤에는 아래 Set...을 부른다.</summary>
-    public PlaybackOptions Options { get { lock (sync) { return sequencer.Options; } } }
+    public PlaybackOptions Options { get { lock (sync) { return CurrentOptions; } } }
 
-    public void SetSpeed(double speed) { lock (sync) { sequencer.Options.Speed = speed; sequencer.ApplySpeed(); } }
-    public void SetTranspose(int semitones) { lock (sync) { sequencer.Options.Transpose = semitones; } }
-    public void SetVoiceTranspose(int voice, int semitones) { lock (sync) { sequencer.Options.VoiceTranspose[voice] = semitones; } }
-    public void SetVoiceMute(int voice, bool mute) { lock (sync) { sequencer.Options.VoiceMute[voice] = mute; sequencer.ApplyMute(voice); } }
-    public void SetGain(double gain) { lock (sync) { sequencer.Options.Gain = gain; } }
+    private PlaybackOptions CurrentOptions { get { return sopMode ? sop.Options : sequencer.Options; } }
 
-    /// <summary>지금 템포 배수 (곡의 템포 이벤트).</summary>
-    public double TempoMultiplier { get { lock (sync) { return sequencer.TempoMultiplier; } } }
+    public void SetSpeed(double speed) { lock (sync) { CurrentOptions.Speed = speed; if (sopMode) sop.ApplySpeed(); else sequencer.ApplySpeed(); } }
+    public void SetTranspose(int semitones) { lock (sync) { CurrentOptions.Transpose = semitones; } }
+    public void SetVoiceTranspose(int voice, int semitones) { lock (sync) { CurrentOptions.VoiceTranspose[voice] = semitones; } }
+    public void SetVoiceMute(int voice, bool mute) { lock (sync) { CurrentOptions.VoiceMute[voice] = mute; if (sopMode) sop.ApplyMute(voice); else sequencer.ApplyMute(voice); } }
+    public void SetGain(double gain) { lock (sync) { CurrentOptions.Gain = gain; } }
 
-    /// <summary>보이스별 상태 (울리는 음, 볼륨, 악기). dst 길이는 11.</summary>
-    public void GetVoiceStates(VoiceState[] dst) { lock (sync) { sequencer.CopyStates(dst); } }
+    /// <summary>지금 템포 배수 (곡의 템포 이벤트). SOP는 지금 템포 / 기본 템포.</summary>
+    public double TempoMultiplier
+    {
+        get
+        {
+            lock (sync)
+            {
+                if (sopMode) return sop.Song != null && sop.Song.BasicTempo > 0 ? (double)sop.Tempo / sop.Song.BasicTempo : 1.0;
+                return sequencer.TempoMultiplier;
+            }
+        }
+    }
+
+    /// <summary>보이스별 상태 (울리는 음, 볼륨, 악기). ROL/IMS는 11개, SOP는 트랙 20개.</summary>
+    public void GetVoiceStates(VoiceState[] dst) { lock (sync) { if (sopMode) sop.CopyStates(dst); else sequencer.CopyStates(dst); } }
 
     // ---------------------------------------------------------------- 시음 (Instrument Maker / 건반 클릭)
 
-    public void PreviewSetMode(bool rhythm) { lock (sync) { synth.SetRhythmMode(rhythm); } }
-    public void PreviewSetInstrument(int voice, AdlibInstrument ins) { lock (sync) { synth.SetInstrument(voice, ins); } }
-    public void PreviewNoteOn(int voice, int note) { lock (sync) { if (!sequencer.IsPlaying) synth.NoteOn(voice, note); } }
-    public void PreviewNoteOff(int voice) { lock (sync) { if (!sequencer.IsPlaying) synth.NoteOff(voice); } }
-    public void PreviewAllOff() { lock (sync) { if (!sequencer.IsPlaying) synth.AllNotesOff(); } }
+    public void PreviewSetMode(bool rhythm) { lock (sync) { LeaveSop(); synth.SetRhythmMode(rhythm); } }
+    public void PreviewSetInstrument(int voice, AdlibInstrument ins) { lock (sync) { LeaveSop(); synth.SetInstrument(voice, ins); } }
+    public void PreviewNoteOn(int voice, int note) { lock (sync) { LeaveSop(); if (!SourcePlaying) synth.NoteOn(voice, note); } }
+    public void PreviewNoteOff(int voice) { lock (sync) { if (!SourcePlaying) synth.NoteOff(voice); } }
+    public void PreviewAllOff() { lock (sync) { if (!SourcePlaying) synth.AllNotesOff(); } }
+
+    /// <summary>SOP 재생이 끝났으면 OPL2 쪽(시음)으로 돌아간다.</summary>
+    private void LeaveSop() { if (sopMode && !sop.IsPlaying) sopMode = false; }
 
     // ---------------------------------------------------------------- 렌더
 
-    /// <summary>44.1kHz 모노 16bit 샘플을 count개 만든다.</summary>
-    public void Render(short[] buffer, int count)
+    /// <summary>44.1kHz 모노 16bit 샘플을 count개 만든다 (SOP처럼 스테레오인 곡은 좌우 평균).</summary>
+    public void Render(short[] buffer, int count) { RenderFrames(buffer, count, false); }
+
+    /// <summary>44.1kHz 스테레오 16bit 프레임을 frames개 만든다 (buffer = 왼쪽, 오른쪽 번갈아, 길이 2 × frames).</summary>
+    public void RenderStereo(short[] buffer, int frames) { RenderFrames(buffer, frames, true); }
+
+    private void RenderFrames(short[] buffer, int count, bool stereo)
     {
         lock (sync)
         {
-            var mark = new Mark { Start = renderedSamples, Count = count, T0 = sequencer.PositionTick, Playing = sequencer.IsPlaying, Gen = generation };
-            RenderLocked(buffer, count);
-            mark.T1 = sequencer.PositionTick;
+            var mark = new Mark { Start = renderedSamples, Count = count, T0 = SourceTick, Playing = SourcePlaying, Gen = generation };
+            RenderLocked(buffer, count, stereo);
+            mark.T1 = SourceTick;
             renderedSamples += count;
             marks[markNext] = mark;
             markNext = (markNext + 1) % marks.Length;
         }
     }
 
-    private void RenderLocked(short[] buffer, int count)
+    private void RenderLocked(short[] buffer, int count, bool stereo)
     {
+        bool useSop = sopMode;
+        double step = (double)(useSop ? opl3.NativeRate : synth.NativeRate) / OutputRate;
+        double gain = MasterVolume * CurrentOptions.Gain;
+        for (int i = 0; i < count; i++)
         {
-            double step = (double)synth.NativeRate / OutputRate;
-            double gain = MasterVolume * sequencer.Options.Gain;
-            for (int i = 0; i < count; i++)
+            resamplePos += step;
+            while (resamplePos >= 1.0)
             {
-                resamplePos += step;
-                while (resamplePos >= 1.0)
+                resamplePos -= 1.0;
+                prevL = curL; prevR = curR;
+                if (useSop)
                 {
-                    resamplePos -= 1.0;
-                    prev = cur;
-                    sequencer.Step();
-                    cur = synth.Generate();
+                    int l, r;
+                    sop.Step();
+                    opl3.GenerateStereo(out l, out r);
+                    curL = l; curR = r;
                 }
-                double v = (prev + (cur - prev) * (resamplePos)) * gain;
-                v = SoftClip(v);
-                buffer[i] = (short)v;
+                else
+                {
+                    sequencer.Step();
+                    curL = curR = synth.Generate();
+                }
             }
+            double vl = SoftClip((prevL + (curL - prevL) * resamplePos) * gain);
+            double vr = SoftClip((prevR + (curR - prevR) * resamplePos) * gain);
+            if (stereo) { buffer[2 * i] = (short)vl; buffer[2 * i + 1] = (short)vr; }
+            else buffer[i] = (short)((vl + vr) / 2);
         }
     }
 

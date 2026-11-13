@@ -11,6 +11,7 @@ namespace AdlibComposer.App;
 /// <code>
 /// RolFolder=rol
 /// ImsFolder=ims
+/// SopFolder=sop
 /// BankFolder=bnk
 /// DefaultBank=bnk\STANDARD.BNK
 /// LoadDefaultBank=true
@@ -21,6 +22,7 @@ internal sealed class AppSettings
     public const string FileName = "FMOPLTool.cfg";
     public const string DefaultSongFolder = "rol";
     public const string DefaultImsFolder = "ims";
+    public const string DefaultSopFolder = "sop";
     public const string DefaultBankFolder = "bnk";
     public static readonly string DefaultBankFile = Path.Combine("bnk", "STANDARD.BNK");
 
@@ -32,6 +34,8 @@ internal sealed class AppSettings
     public string SongFolder { get; set; } = DefaultSongFolder;
     /// <summary>IMS 곡 폴더 (ROL과 따로). 저장 값(상대/절대).</summary>
     public string ImsFolder { get; set; } = DefaultImsFolder;
+    /// <summary>SOP 곡 폴더 (OPL3, Jukebox 전용). 저장 값(상대/절대).</summary>
+    public string SopFolder { get; set; } = DefaultSopFolder;
     /// <summary>악기 뱅크(BNK) 폴더. 저장 값(상대/절대).</summary>
     public string BankFolder { get; set; } = DefaultBankFolder;
     /// <summary>프로그램 기본 뱅크 (시작할 때 불러오고, 새 곡 기본 악기를 찾는 뱅크).</summary>
@@ -61,6 +65,7 @@ internal sealed class AppSettings
 
     public string SongFolderPath { get { return Resolve(SongFolder); } }
     public string ImsFolderPath { get { return Resolve(ImsFolder); } }
+    public string SopFolderPath { get { return Resolve(SopFolder); } }
 
     /// <summary>곡 파일 형식(확장자)에 맞는 폴더: .ims → IMS 폴더, 나머지(.rol) → ROL 폴더.</summary>
     public string FolderForSong(string pathOrExtension)
@@ -94,6 +99,7 @@ internal sealed class AppSettings
                         case "songfolder":                       // 예전 이름
                         case "rolfolder": s.SongFolder = value; break;
                         case "imsfolder": s.ImsFolder = value; break;
+                        case "sopfolder": s.SopFolder = value; break;
                         case "bankfolder": s.BankFolder = value; break;
                         case "defaultbank": s.DefaultBank = value; break;
                         case "loaddefaultbank": s.LoadDefaultBank = !(value == "0" || value.Equals("false", StringComparison.OrdinalIgnoreCase)); break;
@@ -112,9 +118,10 @@ internal sealed class AppSettings
         var sb = new StringBuilder();
         sb.AppendLine("; FMOPLTool / AdLib Composer settings");
         sb.AppendLine("; Paths are relative to this file's folder (the program folder) or absolute.");
-        sb.AppendLine("; RolFolder = ROL songs, ImsFolder = IMS songs, BankFolder = BNK banks, DefaultBank = bank loaded at startup");
+        sb.AppendLine("; RolFolder = ROL songs, ImsFolder = IMS songs, SopFolder = SOP songs (Jukebox), BankFolder = BNK banks, DefaultBank = bank loaded at startup");
         sb.AppendLine("RolFolder=" + SongFolder);
         sb.AppendLine("ImsFolder=" + ImsFolder);
+        sb.AppendLine("SopFolder=" + SopFolder);
         sb.AppendLine("BankFolder=" + BankFolder);
         sb.AppendLine("DefaultBank=" + DefaultBank);
         sb.AppendLine("LoadDefaultBank=" + (LoadDefaultBank ? "true" : "false"));
@@ -124,7 +131,7 @@ internal sealed class AppSettings
     /// <summary>곡/뱅크 폴더가 없으면 만든다 (실패해도 프로그램은 계속).</summary>
     public void EnsureFolders()
     {
-        foreach (var dir in new[] { SongFolderPath, ImsFolderPath, BankFolderPath })
+        foreach (var dir in new[] { SongFolderPath, ImsFolderPath, SopFolderPath, BankFolderPath })
         {
             try { Directory.CreateDirectory(dir); }
             catch (Exception) { }

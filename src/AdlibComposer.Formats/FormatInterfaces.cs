@@ -51,7 +51,7 @@ public sealed class FormatRegistry
         r.Songs.Add(new ImsFormat());
         r.Banks.Add(new BnkFormat());
         r.Instruments.Add(new InsFormat());
-        // 포맷 확장 지점: r.Songs.Add(new SopFormat());
+        // SOP(OPL3)는 Song 모델(11보이스 · 2-op)에 담을 수 없어 SopFormat.Load → SopSong으로 따로 읽는다.
         return r;
     }
 

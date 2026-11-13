@@ -15,6 +15,7 @@ internal sealed class PreferencesForm : Form
     private readonly AppSettings settings;
     private readonly TextBox songBox = new TextBox();
     private readonly TextBox imsBox = new TextBox();
+    private readonly TextBox sopBox = new TextBox();
     private readonly TextBox bankFolderBox = new TextBox();
     private readonly TextBox bankBox = new TextBox();
     private readonly CheckBox loadBankCheck = new CheckBox();
@@ -55,6 +56,7 @@ internal sealed class PreferencesForm : Form
         root.Controls.Add(Section("Folders"));
         root.Controls.Add(PathRow("ROL songs", songBox, settings.SongFolderPath, delegate { BrowseFolder(songBox, "ROL song folder"); }));
         root.Controls.Add(PathRow("IMS songs", imsBox, settings.ImsFolderPath, delegate { BrowseFolder(imsBox, "IMS song folder"); }));
+        root.Controls.Add(PathRow("SOP songs (Jukebox)", sopBox, settings.SopFolderPath, delegate { BrowseFolder(sopBox, "SOP song folder"); }));
         root.Controls.Add(PathRow("Instrument banks (BNK)", bankFolderBox, settings.BankFolderPath, delegate { BrowseFolder(bankFolderBox, "Instrument bank folder"); }));
 
         root.Controls.Add(Section("Default instrument bank"));
@@ -176,6 +178,7 @@ internal sealed class PreferencesForm : Form
         var d = new AppSettings();
         songBox.Text = d.SongFolderPath;
         imsBox.Text = d.ImsFolderPath;
+        sopBox.Text = d.SopFolderPath;
         bankFolderBox.Text = d.BankFolderPath;
         bankBox.Text = d.DefaultBankPath;
         loadBankCheck.Checked = true;
@@ -187,6 +190,7 @@ internal sealed class PreferencesForm : Form
         {
             settings.SongFolder = AppSettings.ToStored(SafeResolve(songBox.Text));
             settings.ImsFolder = AppSettings.ToStored(SafeResolve(imsBox.Text));
+            settings.SopFolder = AppSettings.ToStored(SafeResolve(sopBox.Text));
             settings.BankFolder = AppSettings.ToStored(SafeResolve(bankFolderBox.Text));
             settings.DefaultBank = bankBox.Text.Trim().Length == 0 ? "" : AppSettings.ToStored(SafeResolve(bankBox.Text));
             settings.LoadDefaultBank = loadBankCheck.Checked;

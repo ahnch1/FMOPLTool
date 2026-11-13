@@ -33,6 +33,7 @@ public static class Program
         TestNotation();
         NotationExportTests.Run(Check);
         JukeboxTests.Run(Check);
+        SopTests.Run(Check);
         TestRegistry();
         RealFileTests.Run(Check);
         Console.WriteLine();

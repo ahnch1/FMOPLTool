@@ -5,7 +5,7 @@ using System.Threading;
 namespace AdlibComposer.Audio;
 
 /// <summary>
-/// winmm waveOut 기반 출력 (외부 NuGet 패키지 없이 동작). 16bit 모노.
+/// winmm waveOut 기반 출력 (외부 NuGet 패키지 없이 동작). 16bit 모노 또는 스테레오.
 /// 짧은 버퍼 여러 개를 이벤트 콜백으로 채워 지연을 줄이고, <see cref="PlayedSamples"/>로 실제로 소리 난 위치를 알려준다.
 /// </summary>
 public sealed class WaveOutPlayer : IDisposable
@@ -62,6 +62,7 @@ public sealed class WaveOutPlayer : IDisposable
 
     private readonly int sampleRate;
     private readonly int samplesPerBuffer;
+    private readonly int channels;
     private readonly FillBuffer fill;
     private readonly IntPtr[] headers = new IntPtr[BufferCount];
     private readonly IntPtr[] data = new IntPtr[BufferCount];
@@ -74,12 +75,17 @@ public sealed class WaveOutPlayer : IDisposable
     private uint lastPos;
     private long posHigh;
 
-    public WaveOutPlayer(int sampleRate, int samplesPerBuffer, FillBuffer fill)
+    public WaveOutPlayer(int sampleRate, int samplesPerBuffer, FillBuffer fill) : this(sampleRate, samplesPerBuffer, 1, fill) { }
+
+    /// <param name="samplesPerBuffer">버퍼 하나의 프레임 수.</param>
+    /// <param name="channels">1 = 모노, 2 = 스테레오 (fill에는 왼쪽/오른쪽 번갈아 2 × 프레임 수 샘플).</param>
+    public WaveOutPlayer(int sampleRate, int samplesPerBuffer, int channels, FillBuffer fill)
     {
         this.sampleRate = sampleRate;
         this.samplesPerBuffer = samplesPerBuffer;
+        this.channels = channels == 2 ? 2 : 1;
         this.fill = fill;
-        scratch = new short[samplesPerBuffer];
+        scratch = new short[samplesPerBuffer * this.channels];
     }
 
     public bool IsOpen { get { return device != IntPtr.Zero; } }
@@ -89,8 +95,8 @@ public sealed class WaveOutPlayer : IDisposable
         if (running) return;
         var fmt = new WAVEFORMATEX
         {
-            wFormatTag = 1, nChannels = 1, nSamplesPerSec = (uint)sampleRate,
-            wBitsPerSample = 16, nBlockAlign = 2, nAvgBytesPerSec = (uint)(sampleRate * 2), cbSize = 0
+            wFormatTag = 1, nChannels = (ushort)channels, nSamplesPerSec = (uint)sampleRate,
+            wBitsPerSample = 16, nBlockAlign = (ushort)(2 * channels), nAvgBytesPerSec = (uint)(sampleRate * 2 * channels), cbSize = 0
         };
         int rc = waveOutOpen(out device, WAVE_MAPPER, ref fmt, bufferDone.SafeWaitHandle.DangerousGetHandle(), IntPtr.Zero, CALLBACK_EVENT);
         if (rc != 0) { device = IntPtr.Zero; throw new InvalidOperationException("오디오 장치를 열 수 없습니다 (waveOutOpen=" + rc + ")"); }
@@ -98,9 +104,9 @@ public sealed class WaveOutPlayer : IDisposable
         int hdrSize = Marshal.SizeOf(typeof(WAVEHDR));
         for (int i = 0; i < BufferCount; i++)
         {
-            data[i] = Marshal.AllocHGlobal(samplesPerBuffer * 2);
+            data[i] = Marshal.AllocHGlobal(scratch.Length * 2);
             headers[i] = Marshal.AllocHGlobal(hdrSize);
-            var h = new WAVEHDR { lpData = data[i], dwBufferLength = (uint)(samplesPerBuffer * 2) };
+            var h = new WAVEHDR { lpData = data[i], dwBufferLength = (uint)(scratch.Length * 2) };
             Marshal.StructureToPtr(h, headers[i], false);
             waveOutPrepareHeader(device, headers[i], (uint)hdrSize);
             FillAndWrite(i);
@@ -115,7 +121,7 @@ public sealed class WaveOutPlayer : IDisposable
     private void FillAndWrite(int i)
     {
         fill(scratch, samplesPerBuffer);
-        Marshal.Copy(scratch, 0, data[i], samplesPerBuffer);
+        Marshal.Copy(scratch, 0, data[i], scratch.Length);
         waveOutWrite(device, headers[i], (uint)Marshal.SizeOf(typeof(WAVEHDR)));
     }
 
@@ -143,7 +149,7 @@ public sealed class WaveOutPlayer : IDisposable
             if (device == IntPtr.Zero) return -1;
             var t = new MMTIME { wType = TIME_SAMPLES };
             if (waveOutGetPosition(device, ref t, (uint)Marshal.SizeOf(typeof(MMTIME))) != 0) return -1;
-            uint pos = t.wType == TIME_BYTES ? t.value / 2 : t.value;
+            uint pos = t.wType == TIME_BYTES ? t.value / (uint)(2 * channels) : t.value;
             lock (bufferDone)
             {
                 if (pos < lastPos && lastPos - pos > 0x80000000u) posHigh += 0x100000000L;   // 32bit 랩어라운드

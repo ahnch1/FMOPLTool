@@ -13,7 +13,8 @@ using AdlibComposer.Formats;
 namespace AdlibComposer.App.Views;
 
 /// <summary>
-/// Jukebox 페이지: 왼쪽 위 폴더 트리, 왼쪽 아래 곡 파일(ROL / IMS) 목록, 오른쪽 플레이어 데크.
+/// Jukebox 페이지: 왼쪽 위 폴더 트리, 왼쪽 아래 곡 파일(ROL / IMS / SOP) 목록, 오른쪽 플레이어 데크.
+/// SOP(OPL3, 최대 20트랙 · 4-op · 스테레오)는 곡 안의 악기로 AudioEngine.PlaySop이 재생한다 (뱅크 필요 없음).
 /// 데크: 곡 정보(곡 파일 · 불러온 악기 수/전체, 뱅크 · 악기 수, 가사 파일), 가사(같은 이름 ISS, 조합형 → 유니코드),
 /// 진행 막대(끌어서 이동), 재생 · 정지 · ±5초 · 이전/다음 곡, 속도 · 키(남성/여성) · 볼륨, 채널 믹서(악기 유무 · 연주 표시 · 음량 · 켜기/끄기 · 음높이).
 /// 같은 이름의 BNK가 곡 옆에 있으면 그 뱅크를 먼저 쓰고, 없으면 설정의 기본 뱅크(STANDARD.BNK)를 쓴다.
@@ -22,7 +23,7 @@ namespace AdlibComposer.App.Views;
 [System.ComponentModel.DesignerCategory("Code")]   // 코드로 만든 화면: 디자이너 대신 코드로 연다
 internal sealed class JukeboxView : UserControl, IShellPage
 {
-    private static readonly string[] SongExtensions = { ".rol", ".ims" };
+    private static readonly string[] SongExtensions = { ".rol", ".ims", ".sop" };
 
     private readonly Workspace ws;
     private readonly Func<AppSettings> settings;
@@ -51,6 +52,8 @@ internal sealed class JukeboxView : UserControl, IShellPage
     private readonly PlaybackOptions options = new PlaybackOptions();
     private int volumePercent = 100;
     private Song song;
+    /// <summary>SOP 곡이면 이것 (song은 null).</summary>
+    private SopSong sopSong;
     private InstrumentBank bank;
     private IssLyrics iss;
     private TempoMap tempoMap;
@@ -147,7 +150,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
         folderLabel.AutoEllipsis = true;
         folderLabel.Padding = new Padding(8, 3, 4, 0);
         inner.Panel2.Controls.Add(folderLabel);
-        inner.Panel2.Controls.Add(SectionHeader("곡 파일 (ROL · IMS)"));
+        inner.Panel2.Controls.Add(SectionHeader("곡 파일 (ROL · IMS · SOP)"));
     }
 
     private static Control SectionHeader(string text)
@@ -167,6 +170,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
         var s = settings();
         AddRoot("ROL 폴더", s.SongFolderPath);
         AddRoot("IMS 폴더", s.ImsFolderPath);
+        AddRoot("SOP 폴더", s.SopFolderPath);
         var pc = new TreeNode("내 PC");
         try
         {
@@ -389,6 +393,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
     {
         if (path == null) return;
         try { path = Path.GetFullPath(path); } catch (Exception) { }
+        if (SopFormat.IsSop(path)) { PlaySopFile(path, fromList); return; }
         Song s;
         try
         {
@@ -407,6 +412,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
 
         StopEngine();
         song = s;
+        sopSong = null;
         currentPath = path;
         if (fromList) playlist = CurrentListPaths();
         bool sameName;
@@ -451,6 +457,79 @@ internal sealed class JukeboxView : UserControl, IShellPage
             + (iss != null ? ", 가사 " + iss.Lines.Count + "줄" : ""), missing.Length > 0 ? "뱅크에 없는 악기: " + missing : null);
 
         StartAt(0);
+    }
+
+    /// <summary>SOP 곡: 악기가 곡 안에 들어 있어 뱅크를 찾지 않는다. 가사는 ROL/IMS처럼 같은 이름의 ISS.</summary>
+    private void PlaySopFile(string path, bool fromList)
+    {
+        SopSong s;
+        try { s = SopFormat.Load(path); }
+        catch (Exception ex)
+        {
+            AppLog.Error("Jukebox", "곡을 열 수 없습니다: " + Path.GetFileName(path), ex);
+            return;
+        }
+        string title = System.Text.RegularExpressions.Regex.Replace(s.Title ?? "", @"\s{2,}", " ").Trim();
+        if (title.Length == 0) title = Path.GetFileNameWithoutExtension(path);
+
+        StopEngine();
+        song = null;
+        sopSong = s;
+        currentPath = path;
+        if (fromList) playlist = CurrentListPaths();
+        bank = null;
+        iss = FindLyrics(path);
+        tempoMap = null;
+        totalSeconds = s.SecondsAt(s.LengthTicks);
+        pausedTick = 0;
+        for (int v = 0; v < PlaybackOptions.Voices; v++) { options.VoiceMute[v] = false; options.VoiceTranspose[v] = 0; levels[v] = 0; voiceUsed[v] = false; }
+
+        var used = new HashSet<int>();
+        int fourOp = 0;
+        for (int t = 0; t < s.TrackCount; t++)
+        {
+            voiceUsed[t] = s.Tracks[t].NoteCount > 0;
+            foreach (var e in s.Tracks[t].Events)
+                if (e.Type == SopEventType.Instrument && e.Value < s.Instruments.Count && !s.Instruments[e.Value].IsEmpty && used.Add(e.Value) && s.Instruments[e.Value].Is4Op) fourOp++;
+        }
+        int active = voiceUsed.Count(u => u);
+
+        display.Title = title;
+        display.SongFile = Path.GetFileName(path);
+        display.Loaded = used.Count;
+        display.Total = used.Count;
+        display.BankFile = "곡 안 악기 " + s.Instruments.Count(i => !i.IsEmpty) + "개" + (fourOp > 0 ? " (4-op " + fourOp + ")" : "");
+        display.BankCount = used.Count;
+        display.BankSameName = false;
+        display.LyricFile = iss != null ? Path.GetFileNameWithoutExtension(path) + ".ISS" + (iss.Encoding == KoreanText.Kind.Wansung ? " · 완성형" : " · 조합형") : null;
+        display.TotalSeconds = totalSeconds;
+        display.Mode = "SOP · OPL3 " + active + "/" + s.TrackCount + "트랙" + (s.Percussive ? " · 리듬" : "") + " · " + s.BeatsPerMeasure + "/4 · 박당 " + s.TickBeat + "틱";
+        lyrics.Lyrics = iss;
+        lyrics.State = null;
+        lenLabel.Text = DeckTheme.Clock(totalSeconds);
+        seek.Enabled = true;
+        RebuildMixerRows();
+        MarkPlaying();
+
+        AppLog.Info("Jukebox", "재생: " + Path.GetFileName(path) + " — SOP " + active + "트랙, 악기 " + used.Count + "개" + (fourOp > 0 ? " (4-op " + fourOp + ")" : "")
+            + (iss != null ? ", 가사 " + iss.Lines.Count + "줄" : ""));
+        StartAt(0);
+    }
+
+    private bool HasSong { get { return song != null || sopSong != null; } }
+    private int LengthTicks { get { return sopSong != null ? sopSong.LengthTicks : song != null ? song.LengthTicks : 0; } }
+    private int TrackCount { get { return sopSong != null ? sopSong.TrackCount : song != null ? song.VoiceCount : PlaybackOptions.Voices; } }
+
+    private double SecondsAt(double tick)
+    {
+        if (sopSong != null) return sopSong.SecondsAt(tick);
+        return tempoMap != null ? tempoMap.SecondsAt((int)tick) : 0;
+    }
+
+    private double TickAt(double seconds)
+    {
+        if (sopSong != null) return sopSong.TickAt(seconds);
+        return tempoMap != null ? tempoMap.TickAt(seconds) : 0;
     }
 
     /// <summary>같은 이름의 BNK가 곡 옆에 있으면 그것, 아니면 기본 뱅크, 그것도 없으면 지금 작업 뱅크.</summary>
@@ -525,8 +604,9 @@ internal sealed class JukeboxView : UserControl, IShellPage
 
     private void StartAt(double tick)
     {
-        if (song == null || !openAudio()) return;
-        ws.Audio.Play(song, bank, (int)Math.Max(0, tick), -1, -1, -1, options);
+        if (!HasSong || !openAudio()) return;
+        if (sopSong != null) ws.Audio.PlaySop(sopSong, (int)Math.Max(0, tick), options);
+        else ws.Audio.Play(song, bank, (int)Math.Max(0, tick), -1, -1, -1, options);
         state = PlayState.Playing;
         timer.Start();
         SyncPlayButton();
@@ -561,7 +641,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
 
     private void StopPlay()
     {
-        if (song == null) return;
+        if (!HasSong) return;
         StopEngine();
         state = PlayState.Stopped;
         pausedTick = 0;
@@ -573,8 +653,8 @@ internal sealed class JukeboxView : UserControl, IShellPage
 
     private void SeekToTick(double tick)
     {
-        if (song == null) return;
-        tick = Math.Max(0, Math.Min(song.LengthTicks, tick));
+        if (!HasSong) return;
+        tick = Math.Max(0, Math.Min(LengthTicks, tick));
         if (state == PlayState.Playing) StartAt(tick);
         else { pausedTick = tick; if (state == PlayState.Empty) state = PlayState.Stopped; }
         Tick();
@@ -582,16 +662,16 @@ internal sealed class JukeboxView : UserControl, IShellPage
 
     private void SeekToFraction(double f)
     {
-        if (tempoMap == null) return;
-        SeekToTick(tempoMap.TickAt(f * totalSeconds));
+        if (!HasSong) return;
+        SeekToTick(TickAt(f * totalSeconds));
     }
 
     /// <summary>곡 시간(원래 속도)으로 ±초. 화면의 시간도 원래 속도 기준.</summary>
     private void SeekSeconds(double delta)
     {
-        if (tempoMap == null) return;
-        double now = tempoMap.SecondsAt((int)CurrentTick);
-        SeekToTick(tempoMap.TickAt(Math.Max(0, now + delta)));
+        if (!HasSong) return;
+        double now = SecondsAt(CurrentTick);
+        SeekToTick(TickAt(Math.Max(0, now + delta)));
     }
 
     private void PlayNeighbor(int dir)
@@ -636,7 +716,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
     /// <summary>이 채널만 켠다. 이미 혼자 켜져 있으면 모두 켠다.</summary>
     private void Solo(int voice)
     {
-        int count = song != null ? song.VoiceCount : PlaybackOptions.Voices;
+        int count = TrackCount;
         bool alreadySolo = !options.VoiceMute[voice];
         for (int v = 0; v < count; v++) if (v != voice && !options.VoiceMute[v]) alreadySolo = false;
         for (int v = 0; v < count; v++) SetMute(v, alreadySolo ? false : v != voice);
@@ -679,7 +759,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
 
     private void Tick()
     {
-        if (song == null) return;
+        if (!HasSong) return;
         if (state == PlayState.Playing && !ws.Audio.IsPlaying)
         {
             // 곡이 끝났다
@@ -694,9 +774,11 @@ internal sealed class JukeboxView : UserControl, IShellPage
             }
         }
         double tick = CurrentTick;
-        double sec = tempoMap.SecondsAt((int)Math.Min(tick, song.LengthTicks));
+        double sec = SecondsAt(Math.Min(tick, LengthTicks));
         display.Seconds = sec;
-        display.Bpm = song.BasicTempo * (state == PlayState.Playing ? ws.Audio.TempoMultiplier : 1.0) * options.Speed;
+        double basic = sopSong != null ? sopSong.BasicTempo : song.BasicTempo;
+        double mult = state == PlayState.Playing ? ws.Audio.TempoMultiplier : sopSong != null ? sopSong.TempoAt(tick) / (double)sopSong.BasicTempo : 1.0;
+        display.Bpm = basic * mult * options.Speed;
         display.Invalidate();
         if (!seek.IsDragging)
         {
@@ -705,7 +787,8 @@ internal sealed class JukeboxView : UserControl, IShellPage
         }
         if (iss != null)
         {
-            var st = iss.StateAt(tick, song.TickBeat, song.FileTickBeat);
+            // SOP의 ISS도 240/박 기준 (SV6-GOSV.ISS 마지막 기록 = 곡 끝과 같음)
+            var st = sopSong != null ? iss.StateAt(tick, sopSong.TickBeat, 0) : iss.StateAt(tick, song.TickBeat, song.FileTickBeat);
             if (lyrics.State == null || st.Line != lyrics.State.Line || st.NextLine != lyrics.State.NextLine || !SameLit(st.Lit, lyrics.State.Lit))
             {
                 lyrics.State = st;
@@ -726,6 +809,12 @@ internal sealed class JukeboxView : UserControl, IShellPage
     private void RebuildMixerRows()
     {
         mixer.Rows.Clear();
+        if (sopSong != null)
+        {
+            for (int t = 0; t < sopSong.TrackCount; t++) mixer.Rows.Add(new ChannelRow { Label = sopSong.TrackLabel(t) });
+            RefreshMixer();
+            return;
+        }
         bool melodic = song == null || song.IsMelodic;
         var labels = Song.VoiceLabels(melodic);
         for (int v = 0; v < labels.Length; v++) mixer.Rows.Add(new ChannelRow { Label = labels[v] });
@@ -743,8 +832,13 @@ internal sealed class JukeboxView : UserControl, IShellPage
             var vs = voiceStates[v];
             row.Muted = options.VoiceMute[v];
             row.Pitch = options.VoiceTranspose[v];
-            row.Used = song != null && voiceUsed[v];
-            if (song != null)
+            row.Used = HasSong && voiceUsed[v];
+            if (sopSong != null)
+            {
+                row.Instrument = playing && vs.Instrument != null ? vs.Instrument : FirstSopInstrument(v);
+                row.Found = true;   // 악기는 곡 안에 있다
+            }
+            else if (song != null)
             {
                 string name = playing && vs.Instrument != null ? vs.Instrument : FirstTimbre(v);
                 row.Instrument = name;
@@ -758,6 +852,15 @@ internal sealed class JukeboxView : UserControl, IShellPage
             row.Level = levels[v];
         }
         mixer.Invalidate();
+    }
+
+    private string FirstSopInstrument(int t)
+    {
+        if (sopSong == null || t >= sopSong.TrackCount) return null;
+        foreach (var e in sopSong.Tracks[t].Events)
+            if (e.Type == SopEventType.Instrument && e.Value < sopSong.Instruments.Count && !sopSong.Instruments[e.Value].IsEmpty)
+                return sopSong.Instruments[e.Value].Name;
+        return null;
     }
 
     private string FirstTimbre(int v)

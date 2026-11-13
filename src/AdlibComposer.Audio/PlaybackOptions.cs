@@ -8,7 +8,7 @@ namespace AdlibComposer.Audio;
 /// </summary>
 public sealed class PlaybackOptions
 {
-    public const int Voices = 11;
+    public const int Voices = 20;   // ROL·IMS 11보이스, SOP 20트랙
 
     /// <summary>재생 속도 배수 (1.0 = 원래 속도).</summary>
     public double Speed = 1.0;

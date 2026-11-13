@@ -144,7 +144,7 @@ public static class SopTests
         }
     }
 
-    private static string FindDir(string rel)
+    internal static string FindDir(string rel)
     {
         string d = AppContext.BaseDirectory;
         for (int i = 0; i < 8 && d != null; i++)
@@ -189,7 +189,7 @@ public static class SopTests
     }
 
     /// <summary>테스트용 SOP: 트랙 20개(0 = 4-op 모드, 3 = 짝, 나머지 2-op), 악기 3개, 트랙 0(팬 0 = 오른쪽) · 6(팬 2 = 왼쪽)에 노트.</summary>
-    private static byte[] BuildSop()
+    internal static byte[] BuildSop()
     {
         var ms = new MemoryStream();
         var w = new BinaryWriter(ms);

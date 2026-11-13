@@ -43,6 +43,18 @@ public static class KoreanText
         catch (Exception) { return null; }
     }
 
+    /// <summary>문자열 → 완성형(CP949) 바이트. 바꿀 수 없는 글자는 '?'. 코드페이지가 없으면 ASCII.</summary>
+    public static byte[] Encode(string s)
+    {
+        s = s ?? "";
+        if (wansungCodec != null)
+        {
+            try { return Encoding.GetEncoding(949, new EncoderReplacementFallback("?"), DecoderFallback.ReplacementFallback).GetBytes(s); }
+            catch (Exception) { }
+        }
+        return Encoding.ASCII.GetBytes(s);
+    }
+
     /// <summary>바이트 → 문자열 (조합형/완성형 자동 판별).</summary>
     public static string Decode(byte[] b, int offset, int count)
     {

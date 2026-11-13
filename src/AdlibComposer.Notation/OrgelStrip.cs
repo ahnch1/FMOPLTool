@@ -188,7 +188,7 @@ public static class OrgelBuilder
         return best;
     }
 
-    private static bool IsDrum(Song song, int v) { return !song.IsMelodic && v >= 6; }
+    private static bool IsDrum(Song song, int v) { return song.IsDrumVoice(v); }
 
     private static int Quantize(int tick, int q)
     {

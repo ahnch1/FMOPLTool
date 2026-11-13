@@ -6,6 +6,7 @@ using System.Windows.Forms;
 using AdlibComposer.App.Controls;
 using AdlibComposer.App.Shell;
 using AdlibComposer.App.Views;
+using AdlibComposer.Audio;
 using AdlibComposer.Core;
 using AdlibComposer.Formats;
 using AdlibComposer.Notation;
@@ -50,7 +51,7 @@ internal sealed class MainForm : Form
     private ToolStripMenuItem additiveItem, instMidiItem;
     private ToolStripMenuItem loopItem, showAllItem;
     private ToolStripMenuItem revertItem, editModeItem, basicTempoItem, ticksBeatItem, beatsMeasureItem;
-    private ToolStripMenuItem percOnItem, percOffItem, feedbackItem, midiItem;
+    private ToolStripMenuItem percOnItem, percOffItem, percSopItem, feedbackItem, midiItem;
     private readonly List<ToolStripMenuItem> snapItems = new List<ToolStripMenuItem>();
     private readonly List<ToolStripMenuItem> bandItems = new List<ToolStripMenuItem>();
     private readonly List<ToolStripMenuItem> gridItems = new List<ToolStripMenuItem>();
@@ -198,7 +199,7 @@ internal sealed class MainForm : Form
         toolbar.Items.AddRange(new ToolStripItem[]
         {
             ToolButton("새 곡", Glyphs.NewFile, "새 곡 (Ctrl+N)", delegate { NewSong(); ShowPage(AppPage.Composer); }),
-            ToolButton("열기", Glyphs.Open, "곡 열기 — ROL / IMS (Ctrl+O)", delegate { OpenSong(); }),
+            ToolButton("열기", Glyphs.Open, "곡 열기 — ROL / IMS / SOP (Ctrl+O)", delegate { OpenSong(); }),
             ToolButton("저장", Glyphs.Save, "곡 저장 (Ctrl+S)", delegate { SaveSong(false); }),
             new ToolStripSeparator(),
             ToolButton("뱅크 브라우저", Glyphs.Library, "BNK 목록 · 악기 목록 · 불러오기 (Ctrl+B)", delegate { OpenBankBrowser(); }),
@@ -291,7 +292,8 @@ internal sealed class MainForm : Form
         var s = ws.Song;
         int notes = 0;
         foreach (var v in s.Voices) notes += v.Notes.Count;
-        AppLog.Info("곡", what + ": " + (s.FilePath ?? s.Title) + " — " + (s.IsMelodic ? "멜로딕 9" : "리듬 11") + " 보이스, 노트 " + notes + "개, " + s.BasicTempo + " BPM, 박당 " + s.TickBeat + "틱");
+        string mode = s.IsSop ? (s.IsMelodic ? "SOP 멜로딕 20" : "SOP 리듬 20") : s.IsMelodic ? "멜로딕 9" : "리듬 11";
+        AppLog.Info("곡", what + ": " + (s.FilePath ?? s.Title) + " — " + mode + " 보이스, 노트 " + notes + "개, " + s.BasicTempo + " BPM, 박당 " + s.TickBeat + "틱");
     }
 
     /// <summary>File → Preferences: 폴더 / 기본 뱅크 설정 (FMOPLTool.cfg).</summary>
@@ -316,7 +318,7 @@ internal sealed class MainForm : Form
     /// <summary>곡 대화상자 왼쪽 목록에 ROL / IMS 폴더 바로가기를 넣는다.</summary>
     private void AddSongPlaces(FileDialog dlg)
     {
-        foreach (var dir in new[] { settings.SongFolderPath, settings.ImsFolderPath })
+        foreach (var dir in new[] { settings.SongFolderPath, settings.ImsFolderPath, settings.SopFolderPath })
             if (Directory.Exists(dir)) dlg.CustomPlaces.Add(dir);
     }
 
@@ -421,8 +423,8 @@ internal sealed class MainForm : Form
 
         // ---------------------------------------------------------------- F8 Display
         displayMenu = new ToolStripMenuItem("Display (F8)");
-        var bands = new[] { BandTrack.Tempo, BandTrack.Instrument, BandTrack.Volume, BandTrack.Pitch };
-        string[] bandNames = { "Tempo...", "Instrument", "Volume...", "Pitch..." };
+        var bands = new[] { BandTrack.Tempo, BandTrack.Instrument, BandTrack.Volume, BandTrack.Pitch, BandTrack.Pan };
+        string[] bandNames = { "Tempo...", "Instrument", "Volume...", "Pitch...", "Pan (SOP)..." };
         for (int i = 0; i < bands.Length; i++)
         {
             var band = bands[i];
@@ -472,6 +474,8 @@ internal sealed class MainForm : Form
         // ---------------------------------------------------------------- F9 Options
         percOnItem = Item("With Percussion", delegate { ComposerOnly(delegate { composer.SetRhythmMode(true); }); SyncMenus(); });
         percOffItem = Item("Without Percussion", delegate { ComposerOnly(delegate { composer.SetRhythmMode(false); }); SyncMenus(); });
+        // 이 프로그램의 추가 기능: SOP(OPL3) 작곡 — 보이스 20개 (1~6, BD SD TO CY HH, 12~20), 팬, 4-op 악기, .sop로 저장
+        percSopItem = Item("With Percussion (SOP)", delegate { ComposerOnly(delegate { composer.SetMode(true, true); }); SyncMenus(); });
         feedbackItem = Item("Audio Feedback", delegate { composer.Roll.AudioFeedback = feedbackItem.Checked; });
         feedbackItem.CheckOnClick = true;
         feedbackItem.Checked = composer.Roll.AudioFeedback;
@@ -483,6 +487,7 @@ internal sealed class MainForm : Form
         {
             percOnItem,
             percOffItem,
+            percSopItem,
             new ToolStripSeparator(),
             feedbackItem,
             new ToolStripSeparator(),
@@ -565,6 +570,16 @@ internal sealed class MainForm : Form
                 d = AskNumber("Pitch", "Pitch to insert (1.0 = accurate)", composer.PitchValue, 0.0, 2.0);
                 if (d.HasValue) composer.PitchValue = d.Value;
                 break;
+            case BandTrack.Pan:
+            {
+                string v = Prompt.Show(this, "Pan", "Pan to insert: L (left), C (center), R (right) — SOP only", PanEvent.Label(composer.PanValue));
+                if (v == null) break;
+                v = v.Trim().ToUpperInvariant();
+                if (v.StartsWith("L")) composer.PanValue = PanEvent.Left;
+                else if (v.StartsWith("R")) composer.PanValue = PanEvent.Right;
+                else if (v.StartsWith("C")) composer.PanValue = PanEvent.Center;
+                break;
+            }
         }
         SyncMenus();
     }
@@ -611,6 +626,7 @@ internal sealed class MainForm : Form
         if (string.IsNullOrEmpty(path) || !File.Exists(path)) return;
         if (ws.SongDirty && MessageBox.Show(this, "저장하지 않은 변경 내용을 버리고 파일에서 다시 읽을까요?", "Revert",
                 MessageBoxButtons.OKCancel, MessageBoxIcon.Question) != DialogResult.OK) return;
+        if (SopFormat.IsSop(path) && !ConfirmDiscardBank()) return;   // SOP는 곡 안 악기로 작업 뱅크도 다시 읽는다
         try { StopPlayback(); ws.OpenSong(path); LogSong("되돌리기"); }
         catch (Exception ex) { Fail("곡을 다시 읽을 수 없습니다.", ex); }
     }
@@ -635,15 +651,19 @@ internal sealed class MainForm : Form
     private void SyncMenus()
     {
         var song = ws.Song;
-        percOnItem.Checked = !song.IsMelodic;
-        percOffItem.Checked = song.IsMelodic;
+        percOnItem.Checked = !song.IsSop && !song.IsMelodic;
+        percOffItem.Checked = !song.IsSop && song.IsMelodic;
+        percSopItem.Checked = song.IsSop;
+        percSopItem.Text = song.IsSop && song.IsMelodic ? "SOP (without percussion)" : "With Percussion (SOP)";
         foreach (var it in snapItems) it.Checked = (int)it.Tag == composer.LengthIndex;
         foreach (var it in gridItems) it.Checked = (int)it.Tag == composer.GridSize;
         foreach (var it in bandItems) it.Checked = (BandTrack)it.Tag == composer.Band;
         bandItems[0].ShortcutKeyDisplayString = composer.TempoValue.ToString("0.00", Inv);
         bandItems[2].ShortcutKeyDisplayString = composer.VolumeValue.ToString("0.00", Inv);
         bandItems[3].ShortcutKeyDisplayString = composer.PitchValue.ToString("0.00", Inv);
-        int cv = Math.Min(composer.Roll.CurrentVoice, Song.MaxVoices - 1);
+        bandItems[4].ShortcutKeyDisplayString = PanEvent.Label(composer.PanValue);
+        bandItems[4].Enabled = song.IsSop;
+        int cv = Math.Min(composer.Roll.CurrentVoice, Song.TotalVoices - 1);
         bandItems[1].ShortcutKeyDisplayString = "default " + Workspace.DefaultInstrumentFor(cv, song.IsMelodic);
         basicTempoItem.ShortcutKeyDisplayString = song.BasicTempo.ToString("0.0", Inv);
         ticksBeatItem.ShortcutKeyDisplayString = song.TickBeat.ToString();
@@ -667,7 +687,7 @@ internal sealed class MainForm : Form
         var s = ws.Song;
         string songName = (s.FilePath != null ? Path.GetFileName(s.FilePath) : s.Title) + (ws.SongDirty ? " *" : "");
         string bankName = (string.IsNullOrEmpty(ws.Bank.FilePath) ? "(new bank)" : Path.GetFileName(ws.Bank.FilePath)) + (ws.BankDirty ? " *" : "");
-        statusSong.Text = songName + "  " + s.BasicTempo + " BPM  " + (s.IsMelodic ? "9 voices" : "rhythm 11");
+        statusSong.Text = songName + "  " + s.BasicTempo + " BPM  " + (s.IsSop ? (s.IsMelodic ? "SOP 20" : "SOP rhythm 20") : s.IsMelodic ? "9 voices" : "rhythm 11");
         statusBank.Text = "Bank: " + bankName + " (" + ws.Bank.UsedCount + ")";
         if (composerMode)
         {
@@ -740,11 +760,29 @@ internal sealed class MainForm : Form
         ws.Audio.Stop();
         int ls = -1, le = -1;
         if (loopItem.Checked) { ls = 0; le = Math.Max(1, ws.Song.LengthTicks); }
+        if (ws.Song.IsSop)
+        {
+            // SOP 모드: 곡 + 뱅크 → SOP로 바꿔 OPL3로 재생 (Jukebox와 같은 재생기). 보이스 하나만 = 나머지 끄기
+            SopSong sop;
+            try { sop = ws.BuildSop(); }
+            catch (Exception ex) { Fail("SOP로 재생할 수 없습니다.", ex); return; }
+            var opts = new PlaybackOptions();
+            if (onlyVoice >= 0) for (int v = 0; v < PlaybackOptions.Voices; v++) opts.VoiceMute[v] = v != onlyVoice;
+            sopLoop = loopItem.Checked;
+            sopOnlyVoice = onlyVoice;
+            ws.Audio.PlaySop(sop, tick, opts);
+            return;
+        }
         ws.Audio.Play(ws.Song, ws.Bank, tick, ls, le, onlyVoice);
     }
 
+    /// <summary>SOP 재생기에는 되풀이가 없어 끝나면 처음부터 다시 튼다 (Loop Playback).</summary>
+    private bool sopLoop;
+    private int sopOnlyVoice = -1;
+
     private void StopPlayback()
     {
+        sopLoop = false;
         ws.Audio.Stop();
         composer.UpdatePlayback(-1, false);
         wasPlaying = false;
@@ -754,6 +792,7 @@ internal sealed class MainForm : Form
     {
         if (!composerMode) return;
         bool playing = ws.Audio.IsPlaying;
+        if (!playing && wasPlaying && sopLoop && ws.Song.IsSop) { PlayFrom(0, sopOnlyVoice); playing = ws.Audio.IsPlaying; }
         if (playing || wasPlaying) composer.UpdatePlayback(ws.Audio.PositionTick, playing);
         wasPlaying = playing;
     }
@@ -870,15 +909,19 @@ internal sealed class MainForm : Form
         if (!ConfirmDiscardSong()) return;
         var readable = new List<ISongFormat>();
         foreach (var f in ws.Formats.Songs) if (f.CanRead) readable.Add(f);
-        using (var dlg = new OpenFileDialog { Filter = FormatRegistry.BuildFilter(readable), Title = "Open song", InitialDirectory = StartDir(ws.Song.FilePath, settings.FolderForSong(ws.Song.FilePath)) })
+        var openFormats = new List<IFileFormat>(readable) { SopFormat.FileInfo };
+        using (var dlg = new OpenFileDialog { Filter = FormatRegistry.BuildFilter(openFormats), Title = "Open song", InitialDirectory = StartDir(ws.Song.FilePath, settings.FolderForSong(ws.Song.FilePath)) })
         {
             AddSongPlaces(dlg);
             if (dlg.ShowDialog(this) != DialogResult.OK) return;
+            bool sop = SopFormat.IsSop(dlg.FileName);
+            if (sop && !ConfirmDiscardBank()) return;   // SOP는 곡 안 악기로 작업 뱅크를 바꾼다
             try
             {
                 StopPlayback();
                 ws.OpenSong(dlg.FileName);
                 LogSong("열기");
+                if (sop) LogBank("SOP 곡 안 악기");
                 if (ws.Bank.UsedCount <= 1) OfferBankFor(dlg.FileName);
                 var missing = ws.MissingInstruments();
                 if (missing.Count > 0) AppLog.Warn("곡", "뱅크에 없는 악기 " + missing.Count + "개 (기본 악기로 재생): " + string.Join(", ", missing.ToArray()));
@@ -921,10 +964,12 @@ internal sealed class MainForm : Form
         string path = ws.Song.FilePath;
         if (saveAs || string.IsNullOrEmpty(path))
         {
-            var writable = new List<ISongFormat>();
+            var writable = new List<IFileFormat>();
             foreach (var f in ws.Formats.Songs) if (f.CanWrite) writable.Add(f);
-            // 지금 곡의 형식(ROL/IMS)을 기본 선택하고, 그 형식의 폴더에서 시작한다
+            writable.Add(SopFormat.FileInfo);
+            // 지금 곡의 형식(ROL/IMS/SOP)을 기본 선택하고, 그 형식의 폴더에서 시작한다. SOP 모드 곡은 SOP만
             string ext = string.IsNullOrEmpty(path) ? ".rol" : Path.GetExtension(path).ToLowerInvariant();
+            if (ws.Song.IsSop) { ext = ".sop"; writable.RemoveAll(f => f != SopFormat.FileInfo); }
             int filterIndex = Math.Max(0, writable.FindIndex(f => Array.IndexOf(f.Extensions, ext) >= 0)) + 1;
             using (var dlg = new SaveFileDialog
             {

@@ -87,13 +87,14 @@ internal sealed class Workspace : IDisposable
 
     public static string DefaultInstrumentFor(int voice, bool melodic)
     {
+        if (voice >= DefaultInstruments.Length) return "piano1";   // SOP 보이스 12~20
         return melodic && voice < Song.MelodicVoices ? "piano1" : DefaultInstruments[voice];
     }
 
     private static Song CreateNewSong()
     {
         var s = new Song();
-        for (int v = 0; v < Song.MaxVoices; v++)
+        for (int v = 0; v < Song.TotalVoices; v++)
             s.Voices[v].Timbres.Add(new TimbreEvent { Tick = 0, InstrumentName = DefaultInstrumentFor(v, s.IsMelodic) });
         return s;
     }
@@ -106,8 +107,30 @@ internal sealed class Workspace : IDisposable
         RaiseSongReplaced();
     }
 
+    /// <summary>
+    /// 곡 열기. SOP는 곡 안 악기로 새 작업 뱅크를 만든다 (이름이 같은 BNK 악기와 소리가 다를 수 있어 섞지 않는다).
+    /// </summary>
     public void OpenSong(string path)
     {
+        if (SopFormat.IsSop(path))
+        {
+            List<AdlibInstrument> instruments;
+            var sop = SopFormat.Load(path);
+            var s = SopConvert.ToSong(sop, out instruments);
+            s.FilePath = path;
+            s.Title = Path.GetFileNameWithoutExtension(path);
+            var bank = new InstrumentBank();
+            foreach (var ins in instruments) bank.Add(ins);
+            Bank = bank;
+            BankDirty = false;
+            CurrentInstrument = FirstUsed();
+            if (BankReplaced != null) BankReplaced(this, EventArgs.Empty);
+            Song = s;
+            undo.Clear(); redo.Clear();
+            SongDirty = false;
+            RaiseSongReplaced();
+            return;
+        }
         var fmt = Formats.FindSong(path);
         if (fmt == null || !fmt.CanRead) throw new InvalidDataException("읽을 수 없는 곡 형식입니다: " + Path.GetExtension(path));
         Song song;
@@ -120,8 +143,38 @@ internal sealed class Workspace : IDisposable
         RaiseSongReplaced();
     }
 
+    /// <summary>지금 곡 + 뱅크 → SOP (재생 · 저장).</summary>
+    public SopSong BuildSop() { return SopConvert.FromSong(Song, Bank.Find); }
+
     public void SaveSong(string path)
     {
+        if (SopFormat.IsSop(path))
+        {
+            // ROL/IMS 모드 곡을 SOP로 저장하면 SOP 모드로 바꾼다 (새로 보이는 보이스 12~20에 악기가 없으면 기본 악기)
+            var before = Song.Clone();
+            if (!Song.IsSop)
+            {
+                for (int v = Song.MaxVoices; v < Song.TotalVoices; v++)
+                    if (Song.Voices[v].Timbres.Count == 0)
+                        Song.Voices[v].Timbres.Add(new TimbreEvent { Tick = 0, InstrumentName = DefaultInstrumentFor(v, Song.IsMelodic) });
+                Song.IsSop = true;
+            }
+            Song.FilePath = path;
+            try
+            {
+                var sop = BuildSop();
+                var buf = new MemoryStream();
+                SopFormat.Write(sop, buf);
+                File.WriteAllBytes(path, buf.ToArray());
+            }
+            catch { Song = before; throw; }
+            Song.Title = Path.GetFileNameWithoutExtension(path);
+            SongDirty = false;
+            RaiseSongReplaced();
+            return;
+        }
+        if (Song.IsSop)
+            throw new InvalidDataException("SOP 모드 곡은 .sop로만 저장할 수 있습니다.\nROL / IMS로 저장하려면 Options → With / Without Percussion으로 바꾸세요 (보이스 12~20 · 팬 · 4-op는 빠집니다).");
         var fmt = Formats.FindSong(path);
         if (fmt == null || !fmt.CanWrite) throw new InvalidDataException("저장할 수 없는 곡 형식입니다: " + Path.GetExtension(path));
         var ms = new MemoryStream();
@@ -137,7 +190,7 @@ internal sealed class Workspace : IDisposable
     public List<string> MissingInstruments()
     {
         var missing = new List<string>();
-        for (int v = 0; v < Song.MaxVoices; v++)
+        for (int v = 0; v < Math.Max(Song.MaxVoices, Song.VoiceCount); v++)
             foreach (var t in Song.Voices[v].Timbres)
                 if (Bank.Find(t.InstrumentName) == null && !missing.Contains(t.InstrumentName))
                     missing.Add(t.InstrumentName);

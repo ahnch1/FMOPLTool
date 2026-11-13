@@ -207,14 +207,14 @@ internal sealed class OrgelView : UserControl, IShellPage
     {
         voicesButton.DropDownItems.Clear();
         var song = ws.Song;
-        string[] labels = Song.VoiceLabels(song.IsMelodic);
+        string[] labels = song.Labels;
         voicesButton.DropDownItems.Add(new ToolStripMenuItem("모두 넣기", null, delegate { hiddenVoices.Clear(); RebuildVoiceMenu(); Rebuild(); }));
         voicesButton.DropDownItems.Add(new ToolStripSeparator());
         for (int v = 0; v < song.VoiceCount; v++)
         {
             if (song.Voices[v].Notes.Count == 0) continue;
             int voice = v;
-            bool drum = !song.IsMelodic && v >= 6;
+            bool drum = song.IsDrumVoice(v);
             var t = song.Voices[v].TimbreAt(0);
             string text = (drum ? "드럼 " : "Voice ") + labels[v] + (t != null ? "  (" + t.InstrumentName + ")" : "") + "  " + song.Voices[v].Notes.Count + "음";
             var it = new ToolStripMenuItem(text) { Checked = !hiddenVoices.Contains(v) && (!drum || includeDrums), CheckOnClick = true, Enabled = !drum || includeDrums };
@@ -273,7 +273,7 @@ internal sealed class OrgelView : UserControl, IShellPage
             for (int v = 0; v < ws.Song.VoiceCount; v++)
             {
                 if (ws.Song.Voices[v].Notes.Count == 0) continue;
-                bool drum = !ws.Song.IsMelodic && v >= 6;
+                bool drum = ws.Song.IsDrumVoice(v);
                 if (drum && !includeDrums) continue;
                 total++;
                 if (!hiddenVoices.Contains(v)) shown++;

@@ -131,7 +131,7 @@ internal sealed class NoteView : UserControl, IShellPage
     {
         voicesButton.DropDownItems.Clear();
         var song = ws.Song;
-        string[] labels = Song.VoiceLabels(song.IsMelodic);
+        string[] labels = song.Labels;
         var all = new ToolStripMenuItem("모두 보이기", null, delegate { hiddenVoices.Clear(); RebuildVoiceMenu(); Rebuild(); });
         voicesButton.DropDownItems.Add(all);
         voicesButton.DropDownItems.Add(new ToolStripSeparator());

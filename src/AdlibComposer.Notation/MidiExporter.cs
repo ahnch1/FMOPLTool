@@ -80,7 +80,7 @@ public sealed class MidiExporter
     {
         var evs = new List<Ev>();
         var t0 = vt.TimbreAt(0);
-        string label = drum != DrumKind.None ? StaffRules.DrumName(drum) : "Voice " + Song.VoiceLabels(song.IsMelodic)[v];
+        string label = drum != DrumKind.None ? StaffRules.DrumName(drum) : "Voice " + song.Labels[v];
         evs.Add(Meta(0, 0x03, Encoding.UTF8.GetBytes(t0 != null ? label + " (" + t0.InstrumentName + ")" : label)));
         if (drum == DrumKind.None)
         {

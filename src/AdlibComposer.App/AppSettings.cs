@@ -77,6 +77,7 @@ internal sealed class AppSettings
     {
         string ext = string.IsNullOrEmpty(pathOrExtension) ? "" : Path.GetExtension(pathOrExtension);
         if (ext.Length == 0 && pathOrExtension != null && pathOrExtension.StartsWith(".")) ext = pathOrExtension;
+        if (string.Equals(ext, ".sop", StringComparison.OrdinalIgnoreCase)) return SopFolderPath;
         return string.Equals(ext, ".ims", StringComparison.OrdinalIgnoreCase) ? ImsFolderPath : SongFolderPath;
     }
     public string BankFolderPath { get { return Resolve(BankFolder); } }

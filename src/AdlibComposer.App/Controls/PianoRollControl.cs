@@ -10,7 +10,8 @@ namespace AdlibComposer.App.Controls;
 internal enum RollTool { Pencil, Select }
 
 /// <summary>악보 위쪽 행에 보여 줄 트랙 (원본 Display 메뉴: Tempo / Instrument / Volume / Pitch).</summary>
-internal enum BandTrack { Tempo, Instrument, Volume, Pitch }
+/// <summary>위쪽 행에 보일 트랙. Pan은 SOP 모드에서만.</summary>
+internal enum BandTrack { Tempo, Instrument, Volume, Pitch, Pan }
 
 /// <summary>
 /// Visual Composer의 건반 악보 화면. 왼쪽 세로 건반, 위쪽 Instr. 행, 격자(마디=실선, 박=점선),
@@ -134,7 +135,7 @@ internal sealed class PianoRollControl : Control
         if (ScrollTick < 0) ScrollTick = 0;
     }
 
-    private VoiceTrack Voice { get { return song.Voices[Math.Max(0, Math.Min(Song.MaxVoices - 1, CurrentVoice))]; } }
+    private VoiceTrack Voice { get { return song.Voices[Math.Max(0, Math.Min(Song.TotalVoices - 1, CurrentVoice))]; } }
 
     // ------------------------------------------------------------ 그리기
 
@@ -246,7 +247,7 @@ internal sealed class PianoRollControl : Control
 
     public static string BandCaption(BandTrack b)
     {
-        switch (b) { case BandTrack.Tempo: return "Tempo"; case BandTrack.Volume: return "Volume"; case BandTrack.Pitch: return "Pitch"; }
+        switch (b) { case BandTrack.Tempo: return "Tempo"; case BandTrack.Volume: return "Volume"; case BandTrack.Pitch: return "Pitch"; case BandTrack.Pan: return "Pan"; }
         return "Instr.";
     }
 
@@ -279,6 +280,7 @@ internal sealed class PianoRollControl : Control
             case BandTrack.Tempo: foreach (var t in song.TempoEvents) items.Add(new KeyValuePair<int, string>(t.Tick, t.Multiplier.ToString("0.00", inv))); break;
             case BandTrack.Volume: foreach (var t in Voice.Volumes) items.Add(new KeyValuePair<int, string>(t.Tick, t.Volume.ToString("0.00", inv))); break;
             case BandTrack.Pitch: foreach (var t in Voice.Pitches) items.Add(new KeyValuePair<int, string>(t.Tick, t.Pitch.ToString("0.00", inv))); break;
+            case BandTrack.Pan: foreach (var t in Voice.Pans) items.Add(new KeyValuePair<int, string>(t.Tick, PanEvent.Label(t.Pan))); break;
         }
         foreach (var it in items)
         {

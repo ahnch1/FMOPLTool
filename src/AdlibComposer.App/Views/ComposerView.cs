@@ -4,6 +4,7 @@ using System.Drawing;
 using System.Windows.Forms;
 using AdlibComposer.App.Controls;
 using AdlibComposer.Core;
+using AdlibComposer.Formats;
 
 namespace AdlibComposer.App.Views;
 
@@ -66,7 +67,7 @@ internal sealed class ComposerView : UserControl
         roll.BandDeleteRequested += DeleteBandEventNear;
         roll.HoverNote += delegate (int n) { noteLabel.Text = n >= 0 ? NoteHelper.Name(n) : ""; if (HoverNoteChanged != null) HoverNoteChanged(n); };
         roll.PreviewOn += PreviewNote;
-        roll.PreviewOff += delegate { ws.Audio.PreviewNoteOff(roll.CurrentVoice); };
+        roll.PreviewOff += delegate { ws.Audio.PreviewNoteOff(PreviewVoice); };
 
         hScroll.ValueChanged += delegate { if (syncing) return; roll.ScrollTick = hScroll.Value; roll.Invalidate(); };
         vScroll.ValueChanged += delegate
@@ -172,7 +173,8 @@ internal sealed class ComposerView : UserControl
         foreach (var b in voiceButtons) { voicePanel.Controls.Remove(b); b.Dispose(); }
         voiceButtons.Clear();
 
-        string[] labels = Song.VoiceLabels(ws.Song.IsMelodic);
+        string[] labels = ws.Song.Labels;
+        bool compact = labels.Length > Song.MaxVoices;   // SOP 20보이스: 좁은 버튼
         int x = 2;
         for (int i = 0; i <= labels.Length; i++)
         {
@@ -182,7 +184,7 @@ internal sealed class ComposerView : UserControl
                 Appearance = Appearance.Button, FlatStyle = FlatStyle.Flat, Text = all ? "All" : labels[i],
                 Tag = all ? -1 : i, TextAlign = ContentAlignment.MiddleCenter, Font = Theme.UiFont
             };
-            int w = all ? 38 : (labels[i].Length > 1 ? 34 : 28);
+            int w = all ? 38 : compact ? (labels[i].Length > 1 ? 28 : 24) : (labels[i].Length > 1 ? 34 : 28);
             rb.SetBounds(x, 4, w, 24);
             x += w + 2;
             rb.FlatAppearance.BorderColor = Color.Black;
@@ -191,6 +193,7 @@ internal sealed class ComposerView : UserControl
             voiceButtons.Add(rb);
             voicePanel.Controls.Add(rb);
         }
+        voicePanel.Width = Math.Max(480, x + 2);
         if (roll.CurrentVoice >= ws.Song.VoiceCount) roll.CurrentVoice = 0;
         foreach (var b in voiceButtons)
             if (ShowAllVoices ? (int)b.Tag == -1 : (int)b.Tag == roll.CurrentVoice) { b.Checked = true; b.ForeColor = Color.White; }
@@ -223,7 +226,7 @@ internal sealed class ComposerView : UserControl
     private int melodicKeyboardBase = Song.MiddleC;
     private bool drumRange;
 
-    private bool IsDrumVoice(int voice) { return !ws.Song.IsMelodic && voice >= 6 && voice < Song.MaxVoices; }
+    private bool IsDrumVoice(int voice) { return ws.Song.IsDrumVoice(voice); }
 
     /// <summary>
     /// 리듬 모드에서 BD/SD/TO/CY/HH 보이스를 고르면 건반 키·음높이 커서를 드럼 음역(C2)으로,
@@ -359,6 +362,8 @@ internal sealed class ComposerView : UserControl
     public double TempoValue { get; set; } = 1.0;
     public double VolumeValue { get; set; } = 0.75;
     public double PitchValue { get; set; } = 1.0;
+    /// <summary>위쪽 행 Pan에 넣을 값 (SOP: 0 = R, 1 = C, 2 = L).</summary>
+    public int PanValue { get; set; } = PanEvent.Center;
 
     public BandTrack Band
     {
@@ -421,7 +426,9 @@ internal sealed class ComposerView : UserControl
         voice = (voice % n + n) % n;
         foreach (var b in voiceButtons)
             if ((int)b.Tag == voice) { b.Checked = true; break; }
-        Say("Voice " + Song.VoiceLabels(ws.Song.IsMelodic)[voice] + "  " + instrLabel.Text);
+        string warn = SopConvert.IsSilencedPartner(ws.Song, ws.Resolve, voice)
+            ? "  (silent: voice " + ws.Song.Labels[voice - 3] + " uses a 4-op instrument)" : "";
+        Say("Voice " + ws.Song.Labels[voice] + "  " + instrLabel.Text + warn);
     }
 
     /// <summary>
@@ -545,7 +552,7 @@ internal sealed class ComposerView : UserControl
         if (blipTimer == null)
         {
             blipTimer = new Timer { Interval = 250 };
-            blipTimer.Tick += delegate { blipTimer.Stop(); if (heldKeys.Count == 0) ws.Audio.PreviewNoteOff(roll.CurrentVoice); };
+            blipTimer.Tick += delegate { blipTimer.Stop(); if (heldKeys.Count == 0) ws.Audio.PreviewNoteOff(PreviewVoice); };
         }
         blipTimer.Stop();
         blipTimer.Start();
@@ -556,7 +563,7 @@ internal sealed class ComposerView : UserControl
         int note;
         if (!heldKeys.TryGetValue(key, out note)) return false;
         heldKeys.Remove(key);
-        if (heldKeys.Count == 0) ws.Audio.PreviewNoteOff(roll.CurrentVoice);
+        if (heldKeys.Count == 0) ws.Audio.PreviewNoteOff(PreviewVoice);
         return true;
     }
 
@@ -565,7 +572,7 @@ internal sealed class ComposerView : UserControl
     {
         if (heldKeys.Count == 0) return;
         heldKeys.Clear();
-        ws.Audio.PreviewNoteOff(roll.CurrentVoice);
+        ws.Audio.PreviewNoteOff(PreviewVoice);
     }
 
     private void ScrollRows(int rows)
@@ -600,6 +607,11 @@ internal sealed class ComposerView : UserControl
                 voice.Pitches.Add(new PitchEvent { Tick = tick, Pitch = (float)PitchValue });
                 voice.Pitches.Sort((a, b) => a.Tick.CompareTo(b.Tick));
                 break;
+            case BandTrack.Pan:
+                voice.Pans.RemoveAll(e => e.Tick == tick);
+                voice.Pans.Add(new PanEvent { Tick = tick, Pan = PanValue });
+                voice.Pans.Sort((a, b) => a.Tick.CompareTo(b.Tick));
+                break;
         }
         AfterEventEdit();
     }
@@ -616,6 +628,7 @@ internal sealed class ComposerView : UserControl
             case BandTrack.Tempo: any = ws.Song.TempoEvents.Exists(e => near(e.Tick)); break;
             case BandTrack.Volume: any = voice.Volumes.Exists(e => near(e.Tick)); break;
             case BandTrack.Pitch: any = voice.Pitches.Exists(e => near(e.Tick)); break;
+            case BandTrack.Pan: any = voice.Pans.Exists(e => near(e.Tick)); break;
             default: any = voice.Timbres.Exists(e => near(e.Tick)); break;
         }
         if (!any) return;
@@ -625,6 +638,7 @@ internal sealed class ComposerView : UserControl
             case BandTrack.Tempo: ws.Song.TempoEvents.RemoveAll(e => near(e.Tick)); break;
             case BandTrack.Volume: voice.Volumes.RemoveAll(e => near(e.Tick)); break;
             case BandTrack.Pitch: voice.Pitches.RemoveAll(e => near(e.Tick)); break;
+            case BandTrack.Pan: voice.Pans.RemoveAll(e => near(e.Tick)); break;
             default: voice.Timbres.RemoveAll(e => near(e.Tick)); break;
         }
         AfterEventEdit();
@@ -664,11 +678,26 @@ internal sealed class ComposerView : UserControl
         return t != null ? ws.Resolve(t.InstrumentName) : null;
     }
 
+    /// <summary>
+    /// 시음 보이스 (OPL2 시음 신디사이저는 11보이스): SOP 보이스 12~20은 보이스 1로, SOP 멜로디 모드의 10·11도 보이스 1로 시음한다.
+    /// 4-op 악기는 오퍼레이터 1·2만 들린다.
+    /// </summary>
+    private int PreviewVoice
+    {
+        get
+        {
+            int v = roll.CurrentVoice;
+            if (v >= Song.MaxVoices) return 0;
+            if (ws.Song.IsMelodic && v >= Song.MelodicVoices) return 0;
+            return v;
+        }
+    }
+
     private void PreviewNote(int note)
     {
-        int voice = roll.CurrentVoice;
+        int voice = PreviewVoice;
         ws.Audio.PreviewSetMode(!ws.Song.IsMelodic);
-        ws.Audio.PreviewSetInstrument(voice, InstrumentAt(voice, roll.CursorTick));
+        ws.Audio.PreviewSetInstrument(voice, InstrumentAt(roll.CurrentVoice, roll.CursorTick));
         ws.Audio.PreviewNoteOn(voice, note);
     }
 
@@ -676,7 +705,7 @@ internal sealed class ComposerView : UserControl
     {
         var inv = System.Globalization.CultureInfo.InvariantCulture;
         int tick = roll.CursorTick;
-        var voice = ws.Song.Voices[Math.Min(roll.CurrentVoice, Song.MaxVoices - 1)];
+        var voice = ws.Song.Voices[Math.Min(roll.CurrentVoice, Song.TotalVoices - 1)];
         instrCaption.Text = PianoRollControl.BandCaption(roll.Band);
         switch (roll.Band)
         {
@@ -699,6 +728,13 @@ internal sealed class ComposerView : UserControl
                 double v = 1.0;
                 foreach (var e in voice.Pitches) if (e.Tick <= tick) v = e.Pitch;
                 instrLabel.Text = v.ToString("0.00", inv);
+                break;
+            }
+            case BandTrack.Pan:
+            {
+                int p = PanEvent.Center;
+                foreach (var e in voice.Pans) if (e.Tick <= tick) p = e.Pan;
+                instrLabel.Text = PanEvent.Label(p) + (ws.Song.IsSop ? "" : "  (SOP only)");
                 break;
             }
             default:
@@ -851,16 +887,40 @@ internal sealed class ComposerView : UserControl
         }
     }
 
-    public void SetRhythmMode(bool rhythm)
+    public void SetRhythmMode(bool rhythm) { SetMode(rhythm, false); }
+
+    /// <summary>
+    /// Options → With / Without Percussion (ROL/IMS, OPL2) · With Percussion (SOP, OPL3 20보이스).
+    /// SOP에서 나올 때 보이스 12~20에 노트가 있으면 묻는다 (지우지 않고 숨긴다. 다시 SOP 모드로 오면 보인다).
+    /// </summary>
+    public void SetMode(bool rhythm, bool sop)
     {
-        try { SetRhythmModeCore(rhythm); } finally { ApplyVoiceRange(); }
+        try { SetModeCore(rhythm, sop); } finally { ApplyVoiceRange(); }
     }
 
-    private void SetRhythmModeCore(bool rhythm)
+    private void SetModeCore(bool rhythm, bool sop)
     {
-        if (ws.Song.IsMelodic == !rhythm) return;
+        var song = ws.Song;
+        if (song.IsMelodic == !rhythm && song.IsSop == sop) return;
+        if (song.IsSop && !sop)
+        {
+            int hidden = 0;
+            for (int v = Song.MaxVoices; v < Song.TotalVoices; v++) hidden += song.Voices[v].Notes.Count;
+            if (hidden > 0 && MessageBox.Show(FindForm(),
+                    "보이스 12~20에 노트가 " + hidden + "개 있습니다.\nROL / IMS 모드에서는 보이지 않고 저장되지 않습니다 (팬 · 4-op도 빠집니다). 바꿀까요?",
+                    "Leave SOP mode", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+        }
         ws.PushUndo();
-        ws.Song.IsMelodic = !rhythm;
+        if (sop && !song.IsSop)
+        {
+            // 새로 보이는 보이스 12~20: 악기가 없으면 기본 악기
+            for (int v = Song.MaxVoices; v < Song.TotalVoices; v++)
+                if (song.Voices[v].Timbres.Count == 0) song.Voices[v].Timbres.Add(new TimbreEvent { Tick = 0, InstrumentName = Workspace.DefaultInstrumentFor(v, !rhythm) });
+        }
+        song.IsSop = sop;
+        if (!sop && roll.Band == BandTrack.Pan) roll.Band = BandTrack.Instrument;
+        if (song.IsMelodic == !rhythm) { FinishModeChange(); return; }
+        song.IsMelodic = !rhythm;
         // 보이스 7~11이 노트 없이 이전 모드의 기본 악기만 갖고 있으면 새 모드의 기본 악기로 바꾼다 (예: piano1 -> bdrum)
         for (int v = 6; v < Song.MaxVoices; v++)
         {
@@ -869,6 +929,11 @@ internal sealed class ComposerView : UserControl
                 && string.Equals(vt.Timbres[0].InstrumentName, Workspace.DefaultInstrumentFor(v, rhythm), StringComparison.OrdinalIgnoreCase))
                 vt.Timbres[0].InstrumentName = Workspace.DefaultInstrumentFor(v, !rhythm);
         }
+        FinishModeChange();
+    }
+
+    private void FinishModeChange()
+    {
         ws.SongDirty = true;
         BindSong();
         if (SongModified != null) SongModified();

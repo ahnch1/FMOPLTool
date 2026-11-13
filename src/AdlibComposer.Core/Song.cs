@@ -17,6 +17,13 @@ public sealed class TempoEvent { public int Tick; public float Multiplier = 1f; 
 public sealed class TimbreEvent { public int Tick; public string InstrumentName = ""; public int Unknown; }
 public sealed class VolumeEvent { public int Tick; public float Volume = 1f; }
 public sealed class PitchEvent { public int Tick; public float Pitch = 1f; }
+/// <summary>SOP 팬 이벤트. 값은 SOP 그대로: 0 = 오른쪽, 1 = 가운데, 2 = 왼쪽.</summary>
+public sealed class PanEvent
+{
+    public const int Right = 0, Center = 1, Left = 2;
+    public int Tick; public int Pan = Center;
+    public static string Label(int pan) { return pan == Left ? "L" : pan == Right ? "R" : "C"; }
+}
 
 /// <summary>ROL의 보이스 1개 = 노트 + 악기교체 + 볼륨 + 피치 트랙 4종.</summary>
 public sealed class VoiceTrack
@@ -26,6 +33,8 @@ public sealed class VoiceTrack
     public List<TimbreEvent> Timbres { get; } = new List<TimbreEvent>();
     public List<VolumeEvent> Volumes { get; } = new List<VolumeEvent>();
     public List<PitchEvent> Pitches { get; } = new List<PitchEvent>();
+    /// <summary>팬 (SOP 모드에서만 재생 · 저장, ROL/IMS에는 없다).</summary>
+    public List<PanEvent> Pans { get; } = new List<PanEvent>();
     /// <summary>파일에 기록돼 있던 트랙 총 틱 (마지막 쉼표 보존용).</summary>
     public int DeclaredTicks { get; set; }
 
@@ -94,14 +103,21 @@ public sealed class VoiceTrack
         foreach (var t in Timbres) c.Timbres.Add(new TimbreEvent { Tick = t.Tick, InstrumentName = t.InstrumentName, Unknown = t.Unknown });
         foreach (var v in Volumes) c.Volumes.Add(new VolumeEvent { Tick = v.Tick, Volume = v.Volume });
         foreach (var p in Pitches) c.Pitches.Add(new PitchEvent { Tick = p.Tick, Pitch = p.Pitch });
+        foreach (var p in Pans) c.Pans.Add(new PanEvent { Tick = p.Tick, Pan = p.Pan });
         return c;
     }
 }
 
-/// <summary>곡 전체 (ROL 1개에 해당). 내부 모델은 ROL 구조(틱 기반, 보이스별 4트랙)를 따른다.</summary>
+/// <summary>
+/// 곡 전체 (ROL 1개에 해당). 내부 모델은 ROL 구조(틱 기반, 보이스별 4트랙)를 따른다.
+/// SOP 모드(<see cref="IsSop"/>)면 보이스 20개 = SOP 트랙 0~19 (리듬 모드: 1~6, BD SD TO CY HH, 12~20), OPL3로 재생 · SOP로 저장한다.
+/// </summary>
 public sealed class Song
 {
+    /// <summary>ROL/IMS 보이스 수 (리듬 모드 11).</summary>
     public const int MaxVoices = 11;
+    /// <summary>보이스 배열 크기 = SOP 트랙 수.</summary>
+    public const int TotalVoices = 20;
     public const int MelodicVoices = 9;
     public const int MinNote = 12;
     public const int MaxNote = 107;
@@ -117,6 +133,8 @@ public sealed class Song
     public int ScaleX { get; set; } = 1;
     /// <summary>true = 멜로딕 9채널, false = 리듬 모드 11채널 (파일의 isMelodic).</summary>
     public bool IsMelodic { get; set; } = true;
+    /// <summary>true = SOP(OPL3) 곡: 보이스 20개, 팬, 4-op 악기. ROL/IMS로는 저장할 수 없다.</summary>
+    public bool IsSop { get; set; }
     public float BasicTempo { get; set; } = 120f;
     /// <summary>피치 이벤트 0.0/2.0이 몇 반음인지 (IMS 헤더 pitchBRange, ROL은 기본 1).</summary>
     public int PitchBendRange { get; set; } = 1;
@@ -125,14 +143,23 @@ public sealed class Song
     /// <summary>파일에 적힌 원래 박당 틱 (IMS는 240, 읽으면서 줄인 경우). 0이면 TickBeat와 같다. ISS 가사 틱 변환에 쓴다.</summary>
     public int FileTickBeat { get; set; }
     public List<TempoEvent> TempoEvents { get; } = new List<TempoEvent>();
-    public VoiceTrack[] Voices { get; } = new VoiceTrack[MaxVoices];
+    /// <summary>SOP 마스터 볼륨 이벤트 (0~1, 제어 트랙). SOP에서 읽은 값을 보존 · 재생한다 (편집 화면은 없음).</summary>
+    public List<VolumeEvent> MasterVolumes { get; } = new List<VolumeEvent>();
+    /// <summary>보이스 20개 (ROL/IMS 모드는 앞의 9 / 11개만 쓴다).</summary>
+    public VoiceTrack[] Voices { get; } = new VoiceTrack[TotalVoices];
 
     public Song()
     {
-        for (int i = 0; i < MaxVoices; i++) Voices[i] = new VoiceTrack("Voix " + i.ToString("00"));
+        for (int i = 0; i < TotalVoices; i++) Voices[i] = new VoiceTrack("Voix " + i.ToString("00"));
     }
 
-    public int VoiceCount { get { return IsMelodic ? MelodicVoices : MaxVoices; } }
+    public int VoiceCount { get { return IsSop ? TotalVoices : IsMelodic ? MelodicVoices : MaxVoices; } }
+
+    /// <summary>리듬 모드의 드럼 보이스(BD SD TO CY HH = 6~10)인지. ROL 리듬 모드와 SOP 리듬 모드가 같은 번호다.</summary>
+    public bool IsDrumVoice(int voice) { return !IsMelodic && voice >= 6 && voice <= 10; }
+
+    /// <summary>지금 모드의 보이스 이름 (VoiceCount개).</summary>
+    public string[] Labels { get { return VoiceLabels(IsMelodic, IsSop); } }
     public int MeasureTicks { get { return TickBeat * BeatsPerMeasure; } }
 
     public int LengthTicks
@@ -145,8 +172,15 @@ public sealed class Song
         }
     }
 
-    public static string[] VoiceLabels(bool melodic)
+    public static string[] VoiceLabels(bool melodic, bool sop = false)
     {
+        if (sop)
+        {
+            var l = new string[TotalVoices];
+            for (int i = 0; i < l.Length; i++) l[i] = (i + 1).ToString();
+            if (!melodic) { l[6] = "BD"; l[7] = "SD"; l[8] = "TO"; l[9] = "CY"; l[10] = "HH"; }
+            return l;
+        }
         if (melodic) return new[] { "1", "2", "3", "4", "5", "6", "7", "8", "9" };
         return new[] { "1", "2", "3", "4", "5", "6", "BD", "SD", "TO", "CY", "HH" };
     }
@@ -157,10 +191,11 @@ public sealed class Song
         {
             VersionMajor = VersionMajor, VersionMinor = VersionMinor, Signature = Signature,
             TickBeat = TickBeat, BeatsPerMeasure = BeatsPerMeasure, ScaleX = ScaleX, ScaleY = ScaleY,
-            IsMelodic = IsMelodic, BasicTempo = BasicTempo, PitchBendRange = PitchBendRange, Title = Title, FilePath = FilePath, FileTickBeat = FileTickBeat
+            IsMelodic = IsMelodic, IsSop = IsSop, BasicTempo = BasicTempo, PitchBendRange = PitchBendRange, Title = Title, FilePath = FilePath, FileTickBeat = FileTickBeat
         };
         foreach (var t in TempoEvents) c.TempoEvents.Add(new TempoEvent { Tick = t.Tick, Multiplier = t.Multiplier });
-        for (int i = 0; i < MaxVoices; i++) c.Voices[i] = Voices[i].Clone();
+        foreach (var m in MasterVolumes) c.MasterVolumes.Add(new VolumeEvent { Tick = m.Tick, Volume = m.Volume });
+        for (int i = 0; i < TotalVoices; i++) c.Voices[i] = Voices[i].Clone();
         return c;
     }
 }

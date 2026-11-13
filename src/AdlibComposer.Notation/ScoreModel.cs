@@ -78,7 +78,7 @@ public static class ScoreBuilder
 
             var sv = new ScoreVoice
             {
-                VoiceIndex = v, Name = track.Name, Label = Song.VoiceLabels(song.IsMelodic)[v],
+                VoiceIndex = v, Name = track.Name, Label = song.Labels[v],
                 Drum = StaffRules.DrumFor(v, song.IsMelodic)
             };
             var t0 = track.TimbreAt(0);

@@ -3,11 +3,11 @@
 AdLib Visual Composer(작곡)와 Instrument Maker(악기 편집)를 **한 프로그램**으로 재현하는 C# 솔루션.
 BNK 악기를 보이스(채널)에 할당하고, 건반 악보에 노트를 배치하고, OPL2 에뮬레이션으로 재생한다.
 
-- 파일: ROL·IMS(곡) / BNK(악기 뱅크) / INS(악기 1개) 읽기·쓰기, SOP(OPL3 곡) 읽기·재생 (Jukebox), STM · S3M(Scream Tracker 2/3) 만들기·읽기·쓰기·재생
+- 파일: ROL·IMS(곡) / BNK(악기 뱅크) / INS(악기 1개) 읽기·쓰기, SOP(OPL3 곡) 읽기·쓰기·재생 (Composer SOP 모드 작곡, Jukebox), STM · S3M(Scream Tracker 2/3) 만들기·읽기·쓰기·재생
 - 화면: 원본 스크린샷(640x400 흑백 DOS 화면) 레이아웃을 따른 WinForms GUI
 - 확장: 곡 포맷, 악보(스코어) 변환, OPL 칩 교체를 위한 인터페이스 제공
 
-버전: `Directory.Build.props`의 `<Version>` (현재 1.3.1). 주·부 번호(1.1, 1.2 ...)는 직접 정하고, 작업마다 마지막 번호를 올린다.
+버전: `Directory.Build.props`의 `<Version>` (현재 1.3.2). 주·부 번호(1.1, 1.2 ...)는 직접 정하고, 작업마다 마지막 번호를 올린다.
 
 ## 빌드 / 실행
 
@@ -34,7 +34,7 @@ FMOPLTool.cfg        ← 설정 (처음 실행할 때 기본값으로 생성, Fi
 bnk\STANDARD.BNK     ← 프로그램 기본 뱅크 (시작할 때 불러옴, 새 곡 기본 악기 piano1/bdrum/... 가 들어 있음)
 rol\                 ← ROL 곡 폴더
 ims\                 ← IMS 곡 폴더
-sop\                 ← SOP 곡 폴더 (Jukebox)
+sop\                 ← SOP 곡 폴더 (Composer SOP 모드 · Jukebox)
 trk\                 ← S3M / STM 곡 폴더 (Tracker · Jukebox)
 ```
 
@@ -116,7 +116,7 @@ LoadDefaultBank=true
 | F6 Edit | Edit(선택 도구 I), Copy, Cut, Paste, Clear / Semitone Up·Down (Ctrl+↑↓), Octave Up·Down (Ctrl+Shift+↑↓) |
 | F7 Playback | Play (Space), Play Voice (Shift+Space, 현재 보이스만), Interrupt (Esc) / Basic Tempo |
 | F8 Display | Tempo 1.0, Instrument, Volume 0.75, Pitch 1.0 (위쪽 행에 보일 트랙 + 넣을 값) / Large·Medium·Small Grid / Ticks per Beat, Beats per Measure |
-| F9 Options | With / Without Percussion / Audio Feedback / MIDI Input (미구현) |
+| F9 Options | With / Without Percussion / Audio Feedback / MIDI Input (미구현) / **With Percussion (SOP)** (이 프로그램의 추가 기능) |
 
 - 위쪽 행: 더블클릭(또는 Insert)으로 Display에서 고른 트랙에 이벤트 넣기 (Instrument는 악기 선택), 오른쪽 클릭으로 지우기
 - 새 곡 기본 악기: 1~6 `piano1`, BD `bdrum`, SD `snare1`, TO `tom1`, CY `cymbal1`, HH `hihat1` (STANDARD.BNK에 `hihat`이 없어 `hihat1`)
@@ -154,6 +154,18 @@ LoadDefaultBank=true
 | Space / Home / Esc | 커서부터 재생·정지 / 처음부터 / 정지 |
 | Ctrl+Z, Y, A, C, V, Delete | 실행취소, 다시실행, 전체선택, 복사, 붙여넣기, 삭제 |
 
+**Composer SOP 모드** (`Options → With Percussion (SOP)`, OPL3 작곡)
+- 보이스 20개 = SOP 트랙 0~19: `1~6`, `BD SD TO CY HH`, `12~20` (12~20은 OPL3 둘째 뱅크 채널). 드럼 규칙은 ROL 리듬 모드와 같다
+- 재생: 곡 + 작업 뱅크를 SOP로 바꿔 Jukebox와 같은 `SopPlayer`(OPL3, 스테레오)로 재생. Play Voice = 나머지 보이스 끄기, Loop Playback 지원
+- 팬: `Display → Pan (SOP)...`로 위쪽 행에 L / C / R 이벤트 (SOP 팬 0 = R, 1 = C, 2 = L)
+- 볼륨 0~1 ↔ SOP 0~127, 피치 0~2 ↔ SOP 0~200 (100당 1반음), 템포 배수 ↔ SOP 절대 BPM (기본 템포 · 박당 틱은 255까지)
+- 4-op: SOP에서 읽은 4-op 악기(오퍼레이터 3·4는 `AdlibInstrument.Sop4OpPair`)를 보이스 1·2·3·12·13·14에 쓰면 4-op로 울리고, 그 짝 보이스 4·5·6·15·16·17은 소리가 나지 않는다 (OPL3 채널 짝, 보이스를 고르면 상태 표시줄에 안내). 다른 보이스에서는 오퍼레이터 1·2만
+- 열기: `.sop`를 열면 곡 안 악기로 새 작업 뱅크를 만든다 (같은 이름의 BNK 악기와 소리가 달라 섞지 않음). 길이 0 노트(다음 노트까지)는 다음 노트까지 늘리고, 겹친 노트는 앞 노트를 자른다
+- 저장: SOP 모드 곡은 `.sop`로만 (곡이 쓰는 악기만 곡 안에 넣는다, 악기가 없는 보이스는 기본 악기). ROL/IMS 모드 곡을 `.sop`로 저장하면 SOP 모드로 바뀐다
+- 모드 바꾸기: SOP → With / Without Percussion이면 보이스 12~20(노트가 있으면 묻는다) · 팬 · 4-op는 ROL/IMS에 들어가지 않는다 (지우지 않고 숨김)
+- 시음(건반 · 키보드)은 OPL2 시음 신디사이저: 보이스 12~20은 보이스 1 자리로, 4-op 악기는 오퍼레이터 1·2만 들린다. OPL3 파형 4~7은 Instrument Maker에서 3까지만 보인다 (값은 보존)
+- SOP 마스터 볼륨 이벤트는 읽은 값을 보존 · 재생만 한다 (편집 화면 없음). 원래 SOP 제목 · 설명은 저장할 때 파일 이름으로 바뀐다
+
 **Instrument Maker**
 - 왼쪽 Carrier / 오른쪽 Modulator, `F1` / `F2`로 열 전환
 - 슬라이더(◁ ▷ 클릭, 드래그, 방향키, 휠) + 체크박스, 변경 즉시 소리에 반영
@@ -172,8 +184,8 @@ LoadDefaultBank=true
 
 | 프로젝트 | 역할 |
 |---|---|
-| `AdlibComposer.Core` | 모델: `Song`(틱 기반 ROL 구조), `VoiceTrack`, `Note`, `AdlibInstrument`, `InstrumentBank`, `TempoMap` |
-| `AdlibComposer.Formats` | `RolFormat`, `ImsFormat`, `BnkFormat`, `InsFormat`, `IssLyrics`(ISS 가사), `KoreanText`(조합형/완성형 → 유니코드), `FormatRegistry`, `SopFormat` → `SopSong`(OPL3 곡, Song과 별도 모델), `TrackerModule` + `StmFormat` / `S3mFormat`(Scream Tracker 2/3 읽기·쓰기) |
+| `AdlibComposer.Core` | 모델: `Song`(틱 기반 ROL 구조, SOP 모드 = 보이스 20 · 팬), `VoiceTrack`, `Note`, `AdlibInstrument`, `InstrumentBank`, `TempoMap` |
+| `AdlibComposer.Formats` | `RolFormat`, `ImsFormat`, `BnkFormat`, `InsFormat`, `IssLyrics`(ISS 가사), `KoreanText`(조합형/완성형 → 유니코드), `FormatRegistry`, `SopFormat` → `SopSong`(OPL3 곡 읽기 · 쓰기), `SopConvert`(SopSong ↔ Song SOP 모드 · 악기 레지스터), `TrackerModule` + `StmFormat` / `S3mFormat`(Scream Tracker 2/3 읽기·쓰기) |
 | `AdlibComposer.Audio` | `Opl2Emulator`(내장 OPL2), `Opl3Emulator`(18채널 · 4-op · 웨이브폼 8종 · 스테레오), `OplSynth`(보이스→레지스터, 리듬 모드), `Sequencer`, `SopPlayer`(SOP → OPL3), `MusicBoxPlayer`(오르골 시험 연주), `TrackerPlayer`(STM/S3M 샘플 믹서 + AdLib), `AudioEngine`(스테레오 출력), `PlaybackOptions`(속도 · 키 · 채널 조절), `WaveOutPlayer`, `OplMapping` |
 | `AdlibComposer.Notation` | `Score` 모델, `ScoreBuilder`(Song→마디/음표, 붙임줄), `NoteSpelling`(음표 나누기·셋잇단·음 이름), `MusicXmlExporter`, `MidiExporter`, 텍스트 내보내기, `OrgelComb` / `OrgelBuilder`(곡 → 30음 오르골 띠 구멍) |
 | `AdlibComposer.App` | WinForms GUI: `MainForm`, `Shell/`(사이드바 · 로그 · 셸 테마), `ComposerView`, `InstrumentView`, `JukeboxView`, `NoteView`, `PianoRollControl`, `RetroSlider` 등 |
@@ -234,7 +246,8 @@ LoadDefaultBank=true
 - BNK 재저장 시 데이터 영역이 이름순으로 다시 배치되고, 범위를 벗어난 미사용 항목은 빠진다 (악기 값은 동일).
 - IMS 저장은 박당 240틱(가능할 때)으로 쓰고, 볼륨은 노트 vel + `An` 이벤트로 나눠 쓴다. 원본과 바이트까지 같지는 않다 (같은 곡).
 - IMS 제목(조합형 한글)은 읽지만 화면 제목은 파일명을 쓴다.
-- SOP는 Jukebox에서만 연다 (Composer / Note는 `Song` 모델이 11보이스 · 2-op라 4-op · 20트랙을 담을 수 없음). 저장은 없다.
+- SOP를 Composer에서 열면 SOP 모드(보이스 20)로 편집 · 저장한다. 원래 파일과 바이트까지 같지는 않다 (같은 틱 이벤트 순서, 모드 1 트랙의 짝 트랙 채널 모드, 제목 · 설명, 길이 0 노트 → 실제 길이).
+- SOP 멜로디 모드(퍼커션 아님) 파일은 열 수 있지만 메뉴로 만들 수는 없다. 이때 보이스 10 · 11은 드라이버 규칙대로 소리가 나지 않는다.
 - SOP 칩 제어는 Ad262Sop 라이브러리(`_incoming/AD262SOP/AD262SOP.C`, 박진홍)를 옮겼다 (`SopPlayer` 주석 참고):
   트랙 0~8 = 첫 뱅크 채널, 11~19 = 둘째 뱅크 채널, 리듬 모드면 6~10 = BD SD TOM CY HH. 채널 모드 1 트랙(0·1·2·11·12·13)은 처음부터 4-op(+3 채널과 짝).
   음높이는 드라이버의 반음당 32단계 F-Number 표 (노트 60 = 가운데 도, 피치 100당 1반음), 볼륨 표 (63 − TL) × vol / 128, 팬 0 = 오른쪽(C0 0xA0) · 1 = 가운데 · 2 = 왼쪽(0x50).

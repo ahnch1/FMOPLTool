@@ -173,6 +173,16 @@ public static class SopFormat
 {
     public static readonly string[] Extensions = { ".sop" };
 
+    /// <summary>파일 대화상자 필터용 설명.</summary>
+    public static readonly IFileFormat FileInfo = new SopFileInfo();
+
+    private sealed class SopFileInfo : IFileFormat
+    {
+        public string Id { get { return "sop"; } }
+        public string DisplayName { get { return "SOP song (OPL3)"; } }
+        public string[] Extensions { get { return SopFormat.Extensions; } }
+    }
+
     public static bool IsSop(string path)
     {
         return string.Equals(Path.GetExtension(path), ".sop", StringComparison.OrdinalIgnoreCase);
@@ -244,6 +254,100 @@ public static class SopFormat
             if (t < nTracks) s.Tracks[t] = tr; else s.Control = tr;
         }
         return s;
+    }
+
+    // ------------------------------------------------------------ 쓰기
+
+    public static void Save(SopSong s, string path)
+    {
+        var ms = new MemoryStream();
+        Write(s, ms);
+        File.WriteAllBytes(path, ms.ToArray());
+    }
+
+    /// <summary>SOP 쓰기 (Read와 같은 구조). 앞 이벤트와 65535틱보다 멀면 사이에 특수 이벤트(1, 값 0)를 끼워 넣는다.</summary>
+    public static void Write(SopSong s, Stream stream)
+    {
+        if (s.TrackCount == 0 || s.TrackCount > SopSong.MaxTracks) throw new InvalidDataException("SOP 트랙 수는 1~20이어야 합니다: " + s.TrackCount);
+        if (s.Instruments.Count > 255) throw new InvalidDataException("SOP 악기는 255개까지입니다: " + s.Instruments.Count);
+        var w = new BinaryWriter(stream);
+        w.Write(System.Text.Encoding.ASCII.GetBytes("sopepos"));
+        w.Write((byte)s.VersionMajor); w.Write((byte)s.VersionMinor); w.Write((byte)0);
+        w.Write(Text(s.FileName, 13));
+        w.Write(Text(s.Title, 31));
+        w.Write((byte)(s.Percussive ? 1 : 0)); w.Write((byte)0);
+        w.Write(Byte(s.TickBeat, 1)); w.Write((byte)0);
+        w.Write(Byte(s.BeatsPerMeasure, 1)); w.Write(Byte(s.BasicTempo, 1));
+        w.Write(Text(s.Comment, 13));
+        w.Write((byte)s.TrackCount); w.Write((byte)s.Instruments.Count); w.Write((byte)0);
+        foreach (var t in s.Tracks) w.Write((byte)t.ChannelMode);
+        foreach (var ins in s.Instruments)
+        {
+            w.Write((byte)ins.Type);
+            w.Write(Text(ins.ShortName, 8));
+            w.Write(Text(ins.LongName, 19));
+            int len = ins.Type == SopInstrument.Type4Op ? 22 : ins.Type == SopInstrument.TypeWave || ins.Type == SopInstrument.TypeNone ? 0 : 11;
+            var d = new byte[len];
+            Array.Copy(ins.Data, d, Math.Min(len, ins.Data.Length));
+            w.Write(d);
+        }
+        for (int t = 0; t <= s.TrackCount; t++) WriteTrack(w, t < s.TrackCount ? s.Tracks[t] : s.Control);
+        w.Flush();
+    }
+
+    private static void WriteTrack(BinaryWriter w, SopTrack tr)
+    {
+        var ev = new List<SopEvent>(tr.Events);
+        // 같은 틱 안에서는 원래 순서를 지킨다 (안정 정렬)
+        var idx = new List<int>();
+        for (int i = 0; i < ev.Count; i++) idx.Add(i);
+        idx.Sort((a, b) => { int c = ev[a].Tick.CompareTo(ev[b].Tick); return c != 0 ? c : a.CompareTo(b); });
+        var ms = new MemoryStream();
+        var e = new BinaryWriter(ms);
+        int count = 0, last = 0;
+        foreach (int i in idx)
+        {
+            var x = ev[i];
+            int delta = Math.Max(0, x.Tick - last);
+            while (delta > 0xFFFF)
+            {
+                e.Write((ushort)0xFFFF); e.Write((byte)SopEventType.Special); e.Write((byte)0);
+                count++;
+                delta -= 0xFFFF;
+            }
+            e.Write((ushort)delta);
+            e.Write((byte)x.Type);
+            if (x.Type == SopEventType.Note)
+            {
+                e.Write(Byte(x.Value, 0));
+                e.Write((ushort)Math.Max(0, Math.Min(0xFFFF, x.Duration)));
+            }
+            else e.Write(Byte(x.Value, 0));
+            count++;
+            last = Math.Max(last, x.Tick);
+        }
+        if (count > 0xFFFF) throw new InvalidDataException("SOP 트랙 이벤트가 너무 많습니다: " + count);
+        w.Write((ushort)count);
+        w.Write((uint)ms.Length);
+        w.Write(ms.ToArray());
+    }
+
+    private static byte Byte(int v, int min) { return (byte)Math.Max(min, Math.Min(255, v)); }
+
+    /// <summary>고정 길이 NUL 채움 문자열 (마지막 바이트는 항상 0, 2바이트 글자는 자르지 않는다).</summary>
+    private static byte[] Text(string s, int length)
+    {
+        var buf = new byte[length];
+        byte[] src = KoreanText.Encode(s ?? "");
+        int n = 0;
+        while (n < src.Length)
+        {
+            int w = src[n] >= 0x80 ? 2 : 1;
+            if (n + w > length - 1) break;
+            n += w;
+        }
+        Array.Copy(src, buf, Math.Min(n, src.Length));
+        return buf;
     }
 
     private static void ParseEvents(byte[] d, int start, int size, SopTrack tr)

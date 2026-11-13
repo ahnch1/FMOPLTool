@@ -34,6 +34,7 @@ public static class Program
         NotationExportTests.Run(Check);
         JukeboxTests.Run(Check);
         SopTests.Run(Check);
+        SopComposeTests.Run(Check);
         OrgelTests.Run(Check);
         TrackerTests.Run(Check);
         TestRegistry();

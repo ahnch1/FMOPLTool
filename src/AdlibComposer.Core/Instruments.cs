@@ -133,6 +133,15 @@ public sealed class AdlibInstrument
     /// <summary>INS 파일의 알 수 없는 앞 2바이트 / 뒤 22바이트 (읽은 값 보존).</summary>
     public int InsUnknown { get; set; }
     public byte[] InsTail { get; set; }
+    /// <summary>
+    /// SOP 4-op 악기의 오퍼레이터 3·4 (SOP 데이터 [11..21] 그대로 11바이트: 20/40/60/80/E0, C0, 20/40/60/80/E0). 2-op 악기는 null.
+    /// 오퍼레이터 1·2는 Modulator/Carrier에 들어 있다. BNK/INS에는 저장되지 않는다.
+    /// </summary>
+    public byte[] Sop4OpPair { get; set; }
+    /// <summary>SOP 악기의 긴 이름 (19바이트, 보존용).</summary>
+    public string LongName { get; set; }
+
+    public bool Is4Op { get { return Sop4OpPair != null && Sop4OpPair.Length >= 11; } }
 
     /// <summary>connector 필드가 0이면 OPL additive(두 오퍼레이터 합산).</summary>
     public bool Additive { get { return Modulator.Con == 0; } }
@@ -153,6 +162,7 @@ public sealed class AdlibInstrument
         c.Modulator = Modulator.Clone();
         c.Carrier = Carrier.Clone();
         c.InsTail = InsTail == null ? null : (byte[])InsTail.Clone();
+        c.Sop4OpPair = Sop4OpPair == null ? null : (byte[])Sop4OpPair.Clone();
         return c;
     }
 

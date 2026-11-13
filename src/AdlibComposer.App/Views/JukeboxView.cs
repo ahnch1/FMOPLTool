@@ -23,7 +23,7 @@ namespace AdlibComposer.App.Views;
 [System.ComponentModel.DesignerCategory("Code")]   // 코드로 만든 화면: 디자이너 대신 코드로 연다
 internal sealed class JukeboxView : UserControl, IShellPage
 {
-    private static readonly string[] SongExtensions = { ".rol", ".ims", ".sop", ".s3m", ".stm", ".mod", ".nst" };
+    private static readonly string[] SongExtensions = { ".rol", ".ims", ".sop", ".s3m", ".stm", ".mod", ".nst", ".mid", ".midi", ".wrk" };
 
     private readonly Workspace ws;
     private readonly Func<AppSettings> settings;
@@ -57,6 +57,10 @@ internal sealed class JukeboxView : UserControl, IShellPage
     private SopSong sopSong;
     /// <summary>Scream Tracker 곡(STM/S3M)이면 이것. 위치 = ms.</summary>
     private TrackerModule trackerSong;
+    /// <summary>MIDI 곡(.mid / .wrk)이면 이것. 위치 = MIDI 틱.</summary>
+    private MidiSong midiSong;
+    private GmBank gmBank;
+    private string gmBankKey;
     private InstrumentBank bank;
     private IssLyrics iss;
     private TempoMap tempoMap;
@@ -140,11 +144,12 @@ internal sealed class JukeboxView : UserControl, IShellPage
         list.HeaderStyle = ColumnHeaderStyle.Nonclickable;
         list.Font = ShellTheme.Ui;
         list.Columns.Add("파일", 150);
+        list.Columns.Add("제목", 170);
         list.Columns.Add("형식", 44);
         list.Columns.Add("가사", 40, HorizontalAlignment.Center);
         list.Columns.Add("뱅크", 40, HorizontalAlignment.Center);
         list.ItemActivate += delegate { if (list.SelectedItems.Count > 0) PlayFile(list.SelectedItems[0].Tag as string, true); };
-        tips.SetToolTip(list, "두 번 클릭 또는 Enter: 재생 · 가사 = 같은 이름 .ISS · 뱅크 = 같은 이름 .BNK");
+        tips.SetToolTip(list, "두 번 클릭 또는 Enter: 재생 · 제목 = 곡 안의 제목 (IMS · SOP · S3M · STM · MOD · MIDI · WRK) · 가사 = 같은 이름 .ISS · 뱅크 = 같은 이름 .BNK");
         inner.Panel2.Controls.Add(list);
         folderLabel.Dock = DockStyle.Top;
         folderLabel.Height = 22;
@@ -153,7 +158,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
         folderLabel.AutoEllipsis = true;
         folderLabel.Padding = new Padding(8, 3, 4, 0);
         inner.Panel2.Controls.Add(folderLabel);
-        inner.Panel2.Controls.Add(SectionHeader("곡 파일 (ROL · IMS · SOP · S3M · STM · MOD)"));
+        inner.Panel2.Controls.Add(SectionHeader("곡 파일 (ROL · IMS · SOP · S3M · STM · MOD · MID · WRK)"));
     }
 
     private static Control SectionHeader(string text)
@@ -175,6 +180,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
         AddRoot("IMS 폴더", s.ImsFolderPath);
         AddRoot("SOP 폴더", s.SopFolderPath);
         AddRoot("S3M · STM · MOD 폴더", s.TrackerFolderPath);
+        AddRoot("MIDI · WRK 폴더", s.MidiFolderPath);
         var pc = new TreeNode("내 PC");
         try
         {
@@ -248,6 +254,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
                     if (Array.IndexOf(SongExtensions, ext) < 0) continue;
                     string stem = Path.GetFileNameWithoutExtension(f).ToUpperInvariant();
                     var it = new ListViewItem(Path.GetFileName(f)) { Tag = f, ToolTipText = f };
+                    it.SubItems.Add(CachedTitle(f) ?? "");
                     it.SubItems.Add(ext.TrimStart('.').ToUpperInvariant());
                     it.SubItems.Add(names.Contains(stem + ".ISS") ? "●" : "");
                     it.SubItems.Add(names.Contains(stem + ".BNK") ? "●" : "");
@@ -259,6 +266,82 @@ internal sealed class JukeboxView : UserControl, IShellPage
         }
         list.EndUpdate();
         folderLabel.Text = (dir ?? "") + "   (" + list.Items.Count + "곡)";
+        LoadTitles();
+    }
+
+    // ---------------------------------------------------------------- 목록의 곡 제목 (뒤에서 읽기)
+
+    private readonly Dictionary<string, (DateTime Time, string Title)> titleCache = new Dictionary<string, (DateTime, string)>(StringComparer.OrdinalIgnoreCase);
+    private int titleGeneration;
+
+    /// <summary>캐시에 있고 파일이 그대로면 제목, 아니면 null (아직 안 읽음).</summary>
+    private string CachedTitle(string path)
+    {
+        try
+        {
+            lock (titleCache)
+                if (titleCache.TryGetValue(path, out var c) && c.Time == File.GetLastWriteTimeUtc(path)) return c.Title;
+        }
+        catch (Exception) { }
+        return null;
+    }
+
+    /// <summary>목록 파일의 곡 안 제목을 다른 스레드에서 읽어 '제목' 칸을 채운다. 폴더가 바뀌면 그만둔다.</summary>
+    private void LoadTitles()
+    {
+        int gen = ++titleGeneration;
+        var todo = new List<string>();
+        foreach (ListViewItem it in list.Items)
+            if (CachedTitle((string)it.Tag) == null) todo.Add((string)it.Tag);
+        if (todo.Count == 0) return;
+        System.Threading.Tasks.Task.Run(() =>
+        {
+            var batch = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            for (int i = 0; i < todo.Count && gen == titleGeneration; i++)
+            {
+                string t = ReadSongTitle(todo[i]);
+                try { lock (titleCache) titleCache[todo[i]] = (File.GetLastWriteTimeUtc(todo[i]), t); } catch (Exception) { }
+                batch[todo[i]] = t;
+                if (batch.Count >= 25 || i == todo.Count - 1)
+                {
+                    var done = batch;
+                    batch = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                    try { BeginInvoke((Action)(() => ApplyTitles(done, gen))); } catch (Exception) { return; }
+                }
+            }
+        });
+    }
+
+    private void ApplyTitles(Dictionary<string, string> titles, int gen)
+    {
+        if (gen != titleGeneration) return;
+        list.BeginUpdate();
+        foreach (ListViewItem it in list.Items)
+            if (titles.TryGetValue((string)it.Tag, out var t)) it.SubItems[1].Text = t;
+        list.EndUpdate();
+    }
+
+    /// <summary>곡 파일 안의 제목 (ROL은 제목 칸이 없어 빈 값). 파일 이름과 같거나 'untitled'면 빈 값.</summary>
+    private string ReadSongTitle(string path)
+    {
+        string t = "";
+        try
+        {
+            string ext = Path.GetExtension(path).ToLowerInvariant();
+            if (MidiFiles.IsMidi(path)) t = MidiFiles.Load(path).Title;
+            else if (SopFormat.IsSop(path)) t = SopFormat.Load(path).Title;
+            else if (TrackerFiles.IsTracker(path)) t = TrackerFiles.Load(path).Title;
+            else if (ext == ".ims")
+            {
+                var fmt = ws.Formats.FindSong(path);
+                if (fmt != null && fmt.CanRead) using (var fs = File.OpenRead(path)) t = fmt.Read(fs).Title;
+            }
+        }
+        catch (Exception) { return ""; }
+        t = System.Text.RegularExpressions.Regex.Replace(t ?? "", @"\s+", " ").Trim();
+        if (t.Equals(Path.GetFileNameWithoutExtension(path), StringComparison.OrdinalIgnoreCase)
+            || t.Equals("untitled", StringComparison.OrdinalIgnoreCase)) return "";
+        return t;
     }
 
     private List<string> CurrentListPaths()
@@ -415,6 +498,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
         try { path = Path.GetFullPath(path); } catch (Exception) { }
         if (SopFormat.IsSop(path)) { PlaySopFile(path, fromList); return; }
         if (TrackerFiles.IsTracker(path)) { PlayTrackerFile(path, fromList); return; }
+        if (MidiFiles.IsMidi(path)) { PlayMidiFile(path, fromList); return; }
         Song s;
         try
         {
@@ -435,6 +519,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
         song = s;
         sopSong = null;
         trackerSong = null;
+        midiSong = null;
         currentPath = path;
         if (fromList) playlist = CurrentListPaths();
         bool sameName;
@@ -498,6 +583,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
         song = null;
         sopSong = s;
         trackerSong = null;
+        midiSong = null;
         currentPath = path;
         if (fromList) playlist = CurrentListPaths();
         bank = null;
@@ -553,7 +639,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
             return;
         }
         StopEngine();
-        song = null; sopSong = null;
+        song = null; sopSong = null; midiSong = null;
         trackerSong = m;
         currentPath = path;
         if (fromList) playlist = CurrentListPaths();
@@ -596,14 +682,111 @@ internal sealed class JukeboxView : UserControl, IShellPage
         StartAt(0);
     }
 
-    private bool HasSong { get { return song != null || sopSong != null || trackerSong != null; } }
-    private int LengthTicks { get { return trackerSong != null ? (int)(totalSeconds * 1000) : sopSong != null ? sopSong.LengthTicks : song != null ? song.LengthTicks : 0; } }
-    private int TrackCount { get { return trackerSong != null ? Math.Min(PlaybackOptions.Voices, trackerSong.UsedChannelCount) : sopSong != null ? sopSong.TrackCount : song != null ? song.VoiceCount : PlaybackOptions.Voices; } }
+    /// <summary>
+    /// MIDI 곡 (.mid / .wrk): 악기는 GM 번호. FM이면 GM 뱅크(설정의 MIDI 뱅크 → 뱅크 폴더의 GENMIDI.OP2 → 기본 뱅크 이름 맞춤),
+    /// Windows 신디사이저면 장치로 보낸다. 채널 믹서 = MIDI 채널 16개 (10 = 드럼).
+    /// </summary>
+    private void PlayMidiFile(string path, bool fromList)
+    {
+        MidiSong m;
+        try { m = MidiFiles.Load(path); }
+        catch (Exception ex)
+        {
+            AppLog.Error("Jukebox", "곡을 열 수 없습니다: " + Path.GetFileName(path), ex);
+            return;
+        }
+        StopEngine();
+        song = null; sopSong = null; trackerSong = null;
+        midiSong = m;
+        currentPath = path;
+        if (fromList) playlist = CurrentListPaths();
+        bank = null;
+        iss = null;
+        tempoMap = null;
+        totalSeconds = m.LengthSeconds;
+        pausedTick = 0;
+        for (int v = 0; v < PlaybackOptions.Voices; v++) { options.VoiceMute[v] = false; options.VoiceTranspose[v] = 0; levels[v] = 0; voiceUsed[v] = v < MidiSong.Channels && m.ChannelUsed[v]; }
+        bool windows = settings().MidiWindowsSynth;
+        bool mt32 = settings().MidiMt32;
+        string mt32Rom = null;
+        if (mt32)
+        {
+            mt32Rom = ws.Audio.OpenMt32(settings().Mt32RomFolderPath, out string err);
+            if (mt32Rom == null) AppLog.Warn("Jukebox", "MT-32 에뮬레이터를 쓸 수 없어 GM으로 냅니다 (MT-32 음색 → GM 번호)", err);
+        }
+        if (!windows && mt32Rom == null) gmBank = LoadGmBank();
+        int channels = m.ChannelUsed.Count(u => u);
+        var programs = new HashSet<int>(m.Events.Where(e => e.Kind == 0xC0 && e.Channel != GeneralMidi.DrumChannel).Select(e => (int)e.Data1));
+
+        display.Title = m.Title;
+        display.SongFile = Path.GetFileName(path);
+        display.Loaded = programs.Count;
+        display.Total = programs.Count;
+        display.BankFile = mt32Rom != null ? "MT-32 에뮬레이터 · " + mt32Rom
+            : (windows ? "Windows MIDI 신디사이저" : "GM FM · " + (gmBank != null ? gmBank.Source : "(뱅크 없음)")) + (mt32 ? " (MT-32 → GM)" : "");
+        display.BankCount = programs.Count;
+        display.BankSameName = false;
+        display.LyricFile = null;
+        display.TotalSeconds = totalSeconds;
+        display.Mode = m.FormatName + " · " + channels + "채널 · 박당 " + m.Division + "틱" + (mt32Rom != null ? " · MT-32" : windows ? "" : " · OPL3 18음");
+        lyrics.Lyrics = null;
+        lyrics.State = null;
+        lenLabel.Text = DeckTheme.Clock(totalSeconds);
+        seek.Enabled = true;
+        RebuildMixerRows();
+        MarkPlaying();
+        AppLog.Info("Jukebox", "재생: " + Path.GetFileName(path) + " — " + m.FormatName + " " + channels + "채널, 프로그램 " + programs.Count + "개, " + DeckTheme.Clock(totalSeconds)
+            + ", " + (mt32Rom != null ? "MT-32 에뮬레이터 (" + mt32Rom + ")" : windows ? "Windows 신디사이저" : "FM 뱅크 " + (gmBank != null ? gmBank.Source : "없음")) + (mt32 && mt32Rom == null ? ", MT-32 → GM" : ""),
+            m.Comment.Length > 0 ? m.Comment : null);
+        StartAt(0);
+    }
+
+    /// <summary>GM FM 뱅크: 설정의 MIDI 뱅크(OP2 / BNK) → 뱅크 폴더 · resource 폴더의 GENMIDI.OP2 → 기본 뱅크(이름 맞춤). 같은 것이면 다시 읽지 않는다.</summary>
+    private GmBank LoadGmBank()
+    {
+        var s = settings();
+        string path = s.MidiBankPath;
+        if (path == null || !File.Exists(path))
+        {
+            path = null;
+            foreach (var dir in new[] { s.BankFolderPath, AppSettings.ResourcePath })
+            {
+                try
+                {
+                    if (path == null && Directory.Exists(dir))
+                        path = Directory.GetFiles(dir).FirstOrDefault(f => string.Equals(Path.GetFileName(f), "GENMIDI.OP2", StringComparison.OrdinalIgnoreCase));
+                }
+                catch (Exception) { }
+            }
+        }
+        string key = path ?? ("BNK:" + s.DefaultBankPath);
+        if (gmBank != null && key == gmBankKey) return gmBank;
+        GmBank b = null;
+        try
+        {
+            if (path != null && path.EndsWith(".op2", StringComparison.OrdinalIgnoreCase)) b = GmBank.LoadOp2(path);
+            else if (path != null) b = GmBank.FromBank(ReadBank(path));
+        }
+        catch (Exception ex) { AppLog.Warn("Jukebox", "MIDI 뱅크를 읽을 수 없습니다: " + Path.GetFileName(path), ex.Message); }
+        if (b == null)
+        {
+            string def = s.DefaultBankPath;
+            b = GmBank.FromBank(def != null && File.Exists(def) ? ReadBank(def) : ws.Bank);
+        }
+        gmBank = b;
+        gmBankKey = key;
+        return b;
+    }
+
+    private bool HasSong { get { return song != null || sopSong != null || trackerSong != null || midiSong != null; } }
+    private int LengthTicks { get { return midiSong != null ? midiSong.LengthTicks : trackerSong != null ? (int)(totalSeconds * 1000) : sopSong != null ? sopSong.LengthTicks : song != null ? song.LengthTicks : 0; } }
+    private int TrackCount { get { return midiSong != null ? MidiSong.Channels : trackerSong != null ? Math.Min(PlaybackOptions.Voices, trackerSong.UsedChannelCount) : sopSong != null ? sopSong.TrackCount : song != null ? song.VoiceCount : PlaybackOptions.Voices; } }
 
     private double SecondsAt(double tick)
     {
         if (trackerSong != null) return tick / 1000.0;
         if (sopSong != null) return sopSong.SecondsAt(tick);
+        if (midiSong != null) return midiSong.TickToSeconds(tick);
         return tempoMap != null ? tempoMap.SecondsAt((int)tick) : 0;
     }
 
@@ -611,6 +794,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
     {
         if (trackerSong != null) return seconds * 1000.0;
         if (sopSong != null) return sopSong.TickAt(seconds);
+        if (midiSong != null) return midiSong.SecondsToTick(seconds);
         return tempoMap != null ? tempoMap.TickAt(seconds) : 0;
     }
 
@@ -689,6 +873,13 @@ internal sealed class JukeboxView : UserControl, IShellPage
         if (!HasSong || !openAudio()) return;
         if (trackerSong != null) ws.Audio.PlayTracker(trackerSong, 0, 0, -1, false, options, Math.Max(0, tick));
         else if (sopSong != null) ws.Audio.PlaySop(sopSong, (int)Math.Max(0, tick), options);
+        else if (midiSong != null)
+        {
+            ws.Audio.MidiBank = gmBank;
+            ws.Audio.MidiSynth = settings().MidiWindowsSynth ? MidiSynth.Windows : MidiSynth.Fm;
+            ws.Audio.MidiModule = settings().MidiMt32 ? MidiModule.Mt32 : MidiModule.Gm;
+            ws.Audio.PlayMidi(midiSong, Math.Max(0, tick), options);
+        }
         else ws.Audio.Play(song, bank, (int)Math.Max(0, tick), -1, -1, -1, options);
         state = PlayState.Playing;
         timer.Start();
@@ -859,9 +1050,9 @@ internal sealed class JukeboxView : UserControl, IShellPage
         double tick = CurrentTick;
         double sec = SecondsAt(Math.Min(tick, LengthTicks));
         display.Seconds = sec;
-        double basic = trackerSong != null ? (trackerSong.Kind == TrackerKind.S3m ? trackerSong.Tempo : 125.0 * 6 / Math.Max(1, trackerSong.Tempo >> 4))
+        double basic = midiSong != null ? midiSong.InitialBpm : trackerSong != null ? (trackerSong.Kind == TrackerKind.S3m ? trackerSong.Tempo : 125.0 * 6 / Math.Max(1, trackerSong.Tempo >> 4))
             : sopSong != null ? sopSong.BasicTempo : song.BasicTempo;
-        double mult = state == PlayState.Playing ? ws.Audio.TempoMultiplier : sopSong != null ? sopSong.TempoAt(tick) / (double)sopSong.BasicTempo : 1.0;
+        double mult = state == PlayState.Playing ? ws.Audio.TempoMultiplier : midiSong != null ? 1.0 : sopSong != null ? sopSong.TempoAt(tick) / (double)sopSong.BasicTempo : 1.0;
         display.Bpm = basic * mult * options.Speed;
         display.Invalidate();
         if (!seek.IsDragging)
@@ -905,6 +1096,12 @@ internal sealed class JukeboxView : UserControl, IShellPage
             RefreshMixer();
             return;
         }
+        if (midiSong != null)
+        {
+            for (int c = 0; c < MidiSong.Channels; c++) mixer.Rows.Add(new ChannelRow { Label = c == GeneralMidi.DrumChannel ? "D10" : (c + 1).ToString() });
+            RefreshMixer();
+            return;
+        }
         bool melodic = song == null || song.IsMelodic;
         var labels = Song.VoiceLabels(melodic);
         for (int v = 0; v < labels.Length; v++) mixer.Rows.Add(new ChannelRow { Label = labels[v] });
@@ -932,6 +1129,11 @@ internal sealed class JukeboxView : UserControl, IShellPage
             {
                 row.Instrument = playing && vs.Instrument != null ? vs.Instrument : FirstSopInstrument(v);
                 row.Found = true;   // 악기는 곡 안에 있다
+            }
+            else if (midiSong != null)
+            {
+                row.Instrument = playing && vs.Instrument != null ? vs.Instrument : MidiInstrument(v);
+                row.Found = true;
             }
             else if (song != null)
             {
@@ -964,6 +1166,14 @@ internal sealed class JukeboxView : UserControl, IShellPage
                 }
             }
         return null;
+    }
+
+    private string MidiInstrument(int c)
+    {
+        if (midiSong == null || c >= MidiSong.Channels) return null;
+        if (c == GeneralMidi.DrumChannel) return "Drums";
+        int p = midiSong.FirstProgram[c];
+        return GeneralMidi.ProgramNames[p < 0 ? 0 : p];
     }
 
     private string FirstSopInstrument(int t)

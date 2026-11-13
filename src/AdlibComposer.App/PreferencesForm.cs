@@ -17,6 +17,11 @@ internal sealed class PreferencesForm : Form
     private readonly TextBox imsBox = new TextBox();
     private readonly TextBox sopBox = new TextBox();
     private readonly TextBox trkBox = new TextBox();
+    private readonly TextBox midBox = new TextBox();
+    private readonly TextBox midiBankBox = new TextBox();
+    private readonly CheckBox midiWinCheck = new CheckBox();
+    private readonly ComboBox midiModuleBox = new ComboBox();
+    private readonly TextBox mt32RomBox = new TextBox();
     private readonly TextBox bankFolderBox = new TextBox();
     private readonly TextBox bankBox = new TextBox();
     private readonly CheckBox loadBankCheck = new CheckBox();
@@ -60,6 +65,7 @@ internal sealed class PreferencesForm : Form
         root.Controls.Add(PathRow("IMS songs", imsBox, settings.ImsFolderPath, delegate { BrowseFolder(imsBox, "IMS song folder"); }));
         root.Controls.Add(PathRow("SOP songs (Jukebox)", sopBox, settings.SopFolderPath, delegate { BrowseFolder(sopBox, "SOP song folder"); }));
         root.Controls.Add(PathRow("S3M / STM (Tracker)", trkBox, settings.TrackerFolderPath, delegate { BrowseFolder(trkBox, "Scream Tracker song folder"); }));
+        root.Controls.Add(PathRow("MIDI / WRK (Jukebox)", midBox, settings.MidiFolderPath, delegate { BrowseFolder(midBox, "MIDI song folder"); }));
         root.Controls.Add(PathRow("Instrument banks (BNK)", bankFolderBox, settings.BankFolderPath, delegate { BrowseFolder(bankFolderBox, "Instrument bank folder"); }));
 
         root.Controls.Add(Section("Default instrument bank"));
@@ -88,7 +94,32 @@ internal sealed class PreferencesForm : Form
         root.Controls.Add(new Label
         {
             Text = "Applies everywhere: Composer, Instrument Maker preview, Jukebox (ROL / IMS / SOP) and S3M AdLib channels.\nOff = the built-in lightweight emulator. Switching while a song plays restarts the notes that are sounding.",
-            ForeColor = Subtle, AutoSize = true, MaximumSize = new Size(700, 0), Margin = new Padding(18, 0, 0, 12)
+            ForeColor = Subtle, AutoSize = true, MaximumSize = new Size(700, 0), Margin = new Padding(18, 0, 0, 8)
+        });
+        midiWinCheck.Text = "Play MIDI (.mid / .wrk) with the Windows synthesizer instead of OPL FM";
+        midiWinCheck.AutoSize = true;
+        midiWinCheck.Checked = settings.MidiWindowsSynth;
+        midiWinCheck.Margin = new Padding(0, 2, 0, 4);
+        root.Controls.Add(midiWinCheck);
+        root.Controls.Add(PathRow("MIDI FM bank (OP2 / BNK)", midiBankBox, settings.MidiBankPath ?? "", delegate { BrowseMidiBank(); }));
+        var moduleRow = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0, 4, 0, 4) };
+        moduleRow.Controls.Add(new Label { Text = "MIDI module", AutoSize = true, Margin = new Padding(0, 6, 8, 0), Width = 170 });
+        midiModuleBox.DropDownStyle = ComboBoxStyle.DropDownList;
+        midiModuleBox.Items.AddRange(new object[] { "General MIDI (GM)", "Roland MT-32" });
+        midiModuleBox.SelectedIndex = settings.MidiMt32 ? 1 : 0;
+        midiModuleBox.Width = 200;
+        moduleRow.Controls.Add(midiModuleBox);
+        root.Controls.Add(moduleRow);
+        root.Controls.Add(PathRow("MT-32 ROM folder", mt32RomBox, settings.Mt32RomFolderPath, delegate { BrowseFolder(mt32RomBox, "MT-32 ROM folder (control + PCM ROM)"); }));
+        root.Controls.Add(new Label
+        {
+            Text = "MT-32 uses the Munt emulator (mt32emu.dll) with your own Roland ROM files (e.g. MT32_CONTROL.ROM + MT32_PCM.ROM, or CM-32L).\nWithout ROMs, MT-32 songs play through GM (FM / Windows) with MT-32 instruments mapped to GM.",
+            ForeColor = Subtle, AutoSize = true, MaximumSize = new Size(700, 0), Margin = new Padding(0, 0, 0, 12)
+        });
+        root.Controls.Add(new Label
+        {
+            Text = "Empty = GENMIDI.OP2 in the bank folder if present, otherwise the default bank matched by instrument name.",
+            ForeColor = Subtle, AutoSize = true, MaximumSize = new Size(700, 0), Margin = new Padding(0, 0, 0, 12)
         });
 
         // 버튼 줄
@@ -174,6 +205,16 @@ internal sealed class PreferencesForm : Form
         }
     }
 
+    private void BrowseMidiBank()
+    {
+        using (var dlg = new OpenFileDialog { Filter = "GM FM bank (*.op2;*.bnk)|*.op2;*.bnk|All files (*.*)|*.*", Title = "MIDI FM bank" })
+        {
+            string dir = File.Exists(midiBankBox.Text) ? Path.GetDirectoryName(midiBankBox.Text) : bankFolderBox.Text;
+            if (Directory.Exists(dir)) dlg.InitialDirectory = dir;
+            if (dlg.ShowDialog(this) == DialogResult.OK) midiBankBox.Text = dlg.FileName;
+        }
+    }
+
     private void UpdateBankStatus()
     {
         string p = bankBox.Text.Trim();
@@ -195,6 +236,11 @@ internal sealed class PreferencesForm : Form
         imsBox.Text = d.ImsFolderPath;
         sopBox.Text = d.SopFolderPath;
         trkBox.Text = d.TrackerFolderPath;
+        midBox.Text = d.MidiFolderPath;
+        midiBankBox.Text = "";
+        midiWinCheck.Checked = false;
+        midiModuleBox.SelectedIndex = 0;
+        mt32RomBox.Text = d.Mt32RomFolderPath;
         bankFolderBox.Text = d.BankFolderPath;
         bankBox.Text = d.DefaultBankPath;
         loadBankCheck.Checked = true;
@@ -209,6 +255,11 @@ internal sealed class PreferencesForm : Form
             settings.ImsFolder = AppSettings.ToStored(SafeResolve(imsBox.Text));
             settings.SopFolder = AppSettings.ToStored(SafeResolve(sopBox.Text));
             settings.TrackerFolder = AppSettings.ToStored(SafeResolve(trkBox.Text));
+            settings.MidiFolder = AppSettings.ToStored(SafeResolve(midBox.Text));
+            settings.MidiBank = midiBankBox.Text.Trim().Length == 0 ? "" : AppSettings.ToStored(SafeResolve(midiBankBox.Text));
+            settings.MidiWindowsSynth = midiWinCheck.Checked;
+            settings.MidiMt32 = midiModuleBox.SelectedIndex == 1;
+            settings.Mt32RomFolder = AppSettings.ToStored(SafeResolve(mt32RomBox.Text));
             settings.BankFolder = AppSettings.ToStored(SafeResolve(bankFolderBox.Text));
             settings.DefaultBank = bankBox.Text.Trim().Length == 0 ? "" : AppSettings.ToStored(SafeResolve(bankBox.Text));
             settings.LoadDefaultBank = loadBankCheck.Checked;

@@ -20,10 +20,12 @@ public sealed class AudioEngine : IDisposable
     /// <summary>SOP는 최대 20트랙이 함께 울려 OPL2 곡보다 크다: 칩 출력을 줄여 SoftClip에 덜 걸리게 한다.</summary>
     private readonly OplChip opl3 = new OplChip(true) { MasterGain = 0.6 };
     private readonly SopPlayer sop;
+    /// <summary>MIDI (.mid / .wrk): SOP와 같은 OPL3 칩을 쓴다 (둘이 함께 울리지 않음).</summary>
+    private readonly MidiPlayer midi;
     private readonly MusicBoxPlayer musicBox = new MusicBoxPlayer();
     private readonly TrackerPlayer tracker = new TrackerPlayer();
     /// <summary>소리를 내는 쪽. 시음이나 ROL/IMS 재생을 시작하면 Opl2.</summary>
-    private enum Source { Opl2, Sop, MusicBox, Tracker }
+    private enum Source { Opl2, Sop, MusicBox, Tracker, Midi }
     private Source source = Source.Opl2;
     private bool sopMode { get { return source == Source.Sop; } }
     /// <summary>오르골 소리(−1~1)를 16bit 쪽 크기로.</summary>
@@ -49,6 +51,7 @@ public sealed class AudioEngine : IDisposable
         this.synth = synth;
         sequencer = new Sequencer(synth);
         sop = new SopPlayer(opl3);
+        midi = new MidiPlayer(opl3);
         toneL = toneR = OnePoleLowPass.Create(StandardCutoffHz, synth.NativeRate);
         spkL = spkR = SmallSpeaker.Create(OutputRate);
     }
@@ -107,6 +110,7 @@ public sealed class AudioEngine : IDisposable
                 case Source.Sop: return sop.IsPlaying && !sop.IsJam;
                 case Source.MusicBox: return musicBox.IsPlaying;
                 case Source.Tracker: return tracker.IsSongPlaying;
+                case Source.Midi: return midi.IsPlaying;
             }
             return sequencer.IsPlaying;
         }
@@ -121,6 +125,7 @@ public sealed class AudioEngine : IDisposable
                 case Source.Sop: return sop.PositionTick;
                 case Source.MusicBox: return musicBox.PositionTick;
                 case Source.Tracker: return tracker.PositionMs;   // 트래커는 ms
+                case Source.Midi: return midi.PositionTick;
             }
             return sequencer.PositionTick;
         }
@@ -169,6 +174,7 @@ public sealed class AudioEngine : IDisposable
             if (source == Source.Sop) sop.Stop();
             if (source == Source.MusicBox) musicBox.Stop();
             if (source == Source.Tracker) tracker.Stop();
+            if (source == Source.Midi) midi.Stop();
             source = Source.Opl2;
             Func<string, AdlibInstrument> resolver = name => bank != null ? bank.Find(name) : null;
             sequencer.Start(song, resolver, startTick, loopStart, loopEnd, onlyVoice, options);
@@ -183,11 +189,65 @@ public sealed class AudioEngine : IDisposable
         lock (sync)
         {
             if (sequencer.IsPlaying) sequencer.Stop();
-            musicBox.Stop();
+            musicBox.Stop(); tracker.Stop(); midi.Stop();
             source = Source.Sop;
             sop.Start(song, Math.Max(0, startTick), options);
             generation++;
             this.startTick = Math.Max(0, startTick);
+        }
+    }
+
+    /// <summary>MIDI 곡 재생 (.mid / .wrk). 위치 단위는 MIDI 틱. 조절값의 보이스 = MIDI 채널 0~15.</summary>
+    public void PlayMidi(MidiSong song, double startTick = 0, PlaybackOptions options = null)
+    {
+        lock (sync)
+        {
+            if (sequencer.IsPlaying) sequencer.Stop();
+            sop.Stop(); musicBox.Stop(); tracker.Stop();
+            source = Source.Midi;
+            midi.Start(song, Math.Max(0, startTick), options);
+            generation++;
+            this.startTick = Math.Max(0, startTick);
+        }
+    }
+
+    /// <summary>MIDI FM 재생에 쓸 GM 뱅크 (다음 재생부터).</summary>
+    public GmBank MidiBank { get { lock (sync) return midi.Bank; } set { lock (sync) midi.Bank = value; } }
+    /// <summary>MIDI를 FM으로 낼지 Windows 신디사이저로 낼지 (다음 재생부터).</summary>
+    public MidiSynth MidiSynth { get { lock (sync) return midi.Synth; } set { lock (sync) midi.Synth = value; } }
+    /// <summary>지금 MIDI 재생이 실제로 쓰는 신디사이저 (Windows 장치를 못 열면 FM).</summary>
+    public MidiSynth ActiveMidiSynth { get { lock (sync) return midi.ActiveSynth; } }
+
+    /// <summary>MT-32 출력을 FM 곡과 비슷한 크기로 (Munt 출력은 16bit 꽉 차게 나온다).</summary>
+    private const double Mt32Level = 0.7;
+    private Mt32Emu mt32Emu;
+    private string mt32Folder;
+
+    /// <summary>MIDI 모듈 규격 (다음 재생부터): GM / MT-32.</summary>
+    public MidiModule MidiModule { get { lock (sync) return midi.Module; } set { lock (sync) midi.Module = value; } }
+
+    /// <summary>
+    /// MT-32 에뮬레이터를 ROM 폴더로 연다 (이미 같은 폴더로 열려 있으면 그대로). 성공하면 ROM 설명, 실패하면 null과 이유.
+    /// 열린 에뮬레이터는 MT-32 모듈 재생에 쓰인다.
+    /// </summary>
+    public string OpenMt32(string romFolder, out string error)
+    {
+        error = null;
+        lock (sync)
+        {
+            if (mt32Emu != null && string.Equals(mt32Folder, romFolder, StringComparison.OrdinalIgnoreCase)) { midi.Mt32 = mt32Emu; return mt32Emu.RomDescription; }
+            if (source == Source.Midi && midi.ActiveSynth == MidiSynth.Mt32) midi.Stop();
+            if (mt32Emu != null) { mt32Emu.Dispose(); mt32Emu = null; }
+            midi.Mt32 = null;
+            mt32Folder = null;
+            try
+            {
+                mt32Emu = Mt32Emu.Open(romFolder);
+                mt32Folder = romFolder;
+                midi.Mt32 = mt32Emu;
+                return mt32Emu.RomDescription;
+            }
+            catch (Exception ex) { error = ex.Message; return null; }
         }
     }
 
@@ -197,7 +257,7 @@ public sealed class AudioEngine : IDisposable
         lock (sync)
         {
             if (sequencer.IsPlaying) sequencer.Stop();
-            sop.Stop();
+            sop.Stop(); midi.Stop();
             source = Source.MusicBox;
             musicBox.Start(hits, ticksPerSecond, Math.Max(0, startTick), endTick);
             generation++;
@@ -214,7 +274,7 @@ public sealed class AudioEngine : IDisposable
         lock (sync)
         {
             if (sequencer.IsPlaying) sequencer.Stop();
-            sop.Stop(); musicBox.Stop();
+            sop.Stop(); musicBox.Stop(); midi.Stop();
             source = Source.Tracker;
             tracker.Start(module, startOrder, startRow, singlePattern, loop, options, skipMs);
             generation++;
@@ -229,6 +289,7 @@ public sealed class AudioEngine : IDisposable
         {
             if (source == Source.Tracker && tracker.IsSongPlaying) return;
             if (sequencer.IsPlaying) sequencer.Stop();
+            if (source == Source.Midi) midi.Stop();
             source = Source.Tracker;
             tracker.Jam(module, sampleNo, note, channel);
         }
@@ -251,7 +312,7 @@ public sealed class AudioEngine : IDisposable
 
     public void Stop()
     {
-        lock (sync) { sequencer.Stop(); sop.Stop(); musicBox.Stop(); tracker.Stop(); }
+        lock (sync) { sequencer.Stop(); sop.Stop(); musicBox.Stop(); tracker.Stop(); midi.Stop(); }
     }
 
     // ---------------------------------------------------------------- 재생 조절 (Jukebox)
@@ -259,12 +320,12 @@ public sealed class AudioEngine : IDisposable
     /// <summary>지금 재생의 조절값 (Play에 넘긴 것). 값을 바꾼 뒤에는 아래 Set...을 부른다.</summary>
     public PlaybackOptions Options { get { lock (sync) { return CurrentOptions; } } }
 
-    private PlaybackOptions CurrentOptions { get { return sopMode ? sop.Options : source == Source.Tracker ? tracker.Options : sequencer.Options; } }
+    private PlaybackOptions CurrentOptions { get { return sopMode ? sop.Options : source == Source.Tracker ? tracker.Options : source == Source.Midi ? midi.Options : sequencer.Options; } }
 
-    public void SetSpeed(double speed) { lock (sync) { CurrentOptions.Speed = speed; if (sopMode) sop.ApplySpeed(); else if (source == Source.Tracker) tracker.ApplySpeed(); else sequencer.ApplySpeed(); } }
+    public void SetSpeed(double speed) { lock (sync) { CurrentOptions.Speed = speed; if (sopMode) sop.ApplySpeed(); else if (source == Source.Tracker) tracker.ApplySpeed(); else if (source == Source.Midi) midi.ApplySpeed(); else sequencer.ApplySpeed(); } }
     public void SetTranspose(int semitones) { lock (sync) { CurrentOptions.Transpose = semitones; } }
     public void SetVoiceTranspose(int voice, int semitones) { lock (sync) { CurrentOptions.VoiceTranspose[voice] = semitones; } }
-    public void SetVoiceMute(int voice, bool mute) { lock (sync) { CurrentOptions.VoiceMute[voice] = mute; if (sopMode) sop.ApplyMute(voice); else if (source == Source.Tracker) tracker.ApplyMute(voice); else sequencer.ApplyMute(voice); } }
+    public void SetVoiceMute(int voice, bool mute) { lock (sync) { CurrentOptions.VoiceMute[voice] = mute; if (sopMode) sop.ApplyMute(voice); else if (source == Source.Tracker) tracker.ApplyMute(voice); else if (source == Source.Midi) midi.ApplyMute(voice); else sequencer.ApplyMute(voice); } }
     public void SetGain(double gain) { lock (sync) { CurrentOptions.Gain = gain; } }
 
     /// <summary>지금 템포 배수 (곡의 템포 이벤트). SOP는 지금 템포 / 기본 템포.</summary>
@@ -276,13 +337,14 @@ public sealed class AudioEngine : IDisposable
             {
                 if (sopMode) return sop.Song != null && sop.Song.BasicTempo > 0 ? (double)sop.Tempo / sop.Song.BasicTempo : 1.0;
                 if (source == Source.Tracker) return tracker.Module != null && tracker.Module.Kind == TrackerKind.S3m && tracker.Module.Tempo > 0 ? (double)tracker.Tempo / tracker.Module.Tempo : 1.0;
+                if (source == Source.Midi) return midi.Song != null ? midi.Bpm / midi.Song.InitialBpm : 1.0;
                 return sequencer.TempoMultiplier;
             }
         }
     }
 
     /// <summary>보이스별 상태 (울리는 음, 볼륨, 악기). ROL/IMS는 11개, SOP는 트랙 20개.</summary>
-    public void GetVoiceStates(VoiceState[] dst) { lock (sync) { if (sopMode) sop.CopyStates(dst); else if (source == Source.Tracker) tracker.CopyStates(dst); else sequencer.CopyStates(dst); } }
+    public void GetVoiceStates(VoiceState[] dst) { lock (sync) { if (sopMode) sop.CopyStates(dst); else if (source == Source.Tracker) tracker.CopyStates(dst); else if (source == Source.Midi) midi.CopyStates(dst); else sequencer.CopyStates(dst); } }
 
     // ---------------------------------------------------------------- 시음 (Instrument Maker / 건반 클릭)
 
@@ -378,8 +440,9 @@ public sealed class AudioEngine : IDisposable
     private void RenderLocked(short[] buffer, int count, bool stereo)
     {
         var src = source;
-        bool useSop = src == Source.Sop;
-        double step = (double)(useSop ? opl3.NativeRate : src == Source.MusicBox ? MusicBoxPlayer.Rate : src == Source.Tracker ? TrackerPlayer.Rate : synth.NativeRate) / OutputRate;
+        bool useSop = src == Source.Sop || src == Source.Midi;
+        bool mt32 = src == Source.Midi && midi.ActiveSynth == MidiSynth.Mt32;
+        double step = (double)(src == Source.Midi ? midi.Rate : useSop ? opl3.NativeRate : src == Source.MusicBox ? MusicBoxPlayer.Rate : src == Source.Tracker ? TrackerPlayer.Rate : synth.NativeRate) / OutputRate;
         double gain = MasterVolume * CurrentOptions.Gain;
         for (int i = 0; i < count; i++)
         {
@@ -402,8 +465,9 @@ public sealed class AudioEngine : IDisposable
                 else if (useSop)
                 {
                     int l, r;
-                    sop.Step();
-                    opl3.GenerateStereo(out l, out r);
+                    if (src == Source.Midi) midi.Step(); else sop.Step();
+                    if (mt32) { midi.Mt32.Render(out l, out r); l = (int)(l * Mt32Level); r = (int)(r * Mt32Level); }
+                    else opl3.GenerateStereo(out l, out r);
                     curL = l; curR = r;
                 }
                 else
@@ -411,7 +475,7 @@ public sealed class AudioEngine : IDisposable
                     sequencer.Step();
                     curL = curR = synth.Generate();
                 }
-                if (toneStandard && (src == Source.Opl2 || useSop))
+                if (toneStandard && !mt32 && (src == Source.Opl2 || useSop))
                 {
                     curL = toneL.Process(curL);
                     curR = toneR.Process(curR);
@@ -452,5 +516,7 @@ public sealed class AudioEngine : IDisposable
     public void Dispose()
     {
         if (player != null) { player.Dispose(); player = null; }
+        midi.Dispose();
+        if (mt32Emu != null) { mt32Emu.Dispose(); mt32Emu = null; }
     }
 }

@@ -10,4 +10,8 @@
     <ProjectReference Include="..\..\src\AdlibComposer.Audio\AdlibComposer.Audio.csproj" />
     <ProjectReference Include="..\..\src\AdlibComposer.Notation\AdlibComposer.Notation.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- MT-32 에뮬레이터 DLL이 빌드돼 있으면 테스트에서도 쓴다 -->
+    <None Include="..\..\src\AdlibComposer.Mt32\mt32emu.dll" Link="mt32emu.dll" CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\..\src\AdlibComposer.Mt32\mt32emu.dll')" />
+  </ItemGroup>
 </Project>

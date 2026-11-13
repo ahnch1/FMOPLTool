@@ -161,8 +161,21 @@ internal sealed class PlayerDisplay : DeckControl
 /// <summary>가사 화면: 지금 줄(칠한 칸은 강조색, 카라오케처럼)과 다음 줄.</summary>
 internal sealed class LyricsPanel : DeckControl
 {
-    public IssLyrics Lyrics;
-    public LyricState State;
+    private IssLyrics lyrics;
+    private LyricState state;
+
+    /// <summary>가사. 바꾸면 바로 다시 그린다 (가사 없는 곡으로 바꿨을 때 앞 곡 가사가 남지 않게).</summary>
+    public IssLyrics Lyrics
+    {
+        get { return lyrics; }
+        set { if (!ReferenceEquals(lyrics, value)) { lyrics = value; Invalidate(); } }
+    }
+
+    public LyricState State
+    {
+        get { return state; }
+        set { if (!ReferenceEquals(state, value)) { state = value; Invalidate(); } }
+    }
     public string Empty = "가사 파일(.ISS)이 없습니다";
 
     protected override void OnPaint(PaintEventArgs e)

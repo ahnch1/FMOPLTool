@@ -7,7 +7,7 @@ BNK 악기를 보이스(채널)에 할당하고, 건반 악보에 노트를 배�
 - 화면: 원본 스크린샷(640x400 흑백 DOS 화면) 레이아웃을 따른 WinForms GUI
 - 확장: 곡 포맷, 악보(스코어) 변환, OPL 칩 교체를 위한 인터페이스 제공
 
-버전: `Directory.Build.props`의 `<Version>` (현재 1.4.0). 주·부 번호(1.1, 1.2 ...)는 직접 정하고, 작업마다 마지막 번호를 올린다.
+버전: `Directory.Build.props`의 `<Version>` (현재 1.4.1). 주·부 번호(1.1, 1.2 ...)는 직접 정하고, 작업마다 마지막 번호를 올린다.
 
 ## 빌드 / 실행
 
@@ -31,11 +31,15 @@ dotnet run --project tests/AdlibComposer.SelfTest -- --wav demo.wav   # 데모 �
 ```
 AdlibComposer.exe
 FMOPLTool.cfg        ← 설정 (처음 실행할 때 기본값으로 생성, File → Preferences / Ctrl+, 로 변경)
-bnk\STANDARD.BNK     ← 프로그램 기본 뱅크 (시작할 때 불러옴, 새 곡 기본 악기 piano1/bdrum/... 가 들어 있음)
+resource\            ← 프로그램 리소스 (기본 뱅크 폴더 · MT-32 ROM 폴더의 기본값)
+  STANDARD.BNK       ← 프로그램 기본 뱅크 (시작할 때 불러옴, 새 곡 기본 악기 piano1/bdrum/... 가 들어 있음)
+  GENMIDI.OP2        ← MIDI FM용 GM 뱅크 (Freedoom, BSD 3-Clause, GENMIDI.OP2.LICENSE.txt)
+  (MT-32 ROM)        ← 사용자가 넣는 Roland MT-32 컨트롤 + PCM ROM
 rol\                 ← ROL 곡 폴더
 ims\                 ← IMS 곡 폴더
 sop\                 ← SOP 곡 폴더 (Composer SOP 모드 · Jukebox)
 trk\                 ← S3M / STM / MOD / NST 곡 폴더 (Tracker · Jukebox)
+mid\                 ← MIDI (.mid) / Cakewalk (.wrk) 곡 폴더 (Jukebox)
 ```
 
 `FMOPLTool.cfg` (텍스트, 경로는 실행 폴더 기준 상대 경로 또는 절대 경로):
@@ -45,18 +49,25 @@ RolFolder=rol
 ImsFolder=ims
 SopFolder=sop
 TrackerFolder=trk
-BankFolder=bnk
-DefaultBank=bnk\STANDARD.BNK
+BankFolder=resource
+DefaultBank=resource\STANDARD.BNK
 LoadDefaultBank=true
 OplEmulator=builtin
 JukeboxTone=standard
 JukeboxSpeaker=default
+MidiFolder=mid
+MidiSynth=fm
+MidiBank=
+MidiModule=gm
+Mt32RomFolder=resource
 ```
 
+- `MidiSynth`: `fm`(OPL3 FM) / `windows`(Windows MIDI 신디사이저). `MidiBank`: FM용 GM 뱅크 (DMX `GENMIDI.OP2` 또는 BNK). 비우면 뱅크 폴더 또는 `resource` 폴더의 `GENMIDI.OP2`(Freedoom 프로젝트의 GM 뱅크를 함께 배포, BSD 3-Clause, `resource/GENMIDI.OP2.LICENSE.txt`), 없으면 기본 뱅크(STANDARD.BNK)에서 GM 번호마다 비슷한 이름의 악기를 골라 쓴다
+- `MidiModule`: `gm` / `mt32`. MT-32이면 Munt 에뮬레이터(`mt32emu.dll`, LGPL — `src/AdlibComposer.Mt32/build_mt32emu.bat`로 빌드)와 `Mt32RomFolder`의 Roland ROM(컨트롤 + PCM, 직접 준비)으로 재생하고 SysEx(사용자 음색)도 보낸다. DLL · ROM이 없으면 MT-32 음색 번호를 GM에 맞춰(`GeneralMidi.Mt32ToGm`) FM / Windows로 낸다
 - `OplEmulator`: `builtin`(내장 간이 에뮬레이터) / `nuked`(Nuked OPL3, 사이클 정밀). File → Preferences → Sound에서 바꾸며 프로그램 전체(Composer · Instrument Maker 시음 · Jukebox · S3M AdLib 채널)에 바로 적용된다
 
 - 곡 열기/저장 대화상자는 곡 형식에 맞는 폴더(ROL → rol, IMS → ims)에서 시작하고 왼쪽 목록에 두 폴더 바로가기가 있다. 뱅크·INS 대화상자와 뱅크 브라우저는 뱅크 폴더에서 시작한다
-- 기본 뱅크 원본은 `src/AdlibComposer.App/Defaults/bnk/STANDARD.BNK`. 실행 폴더의 사본을 고쳐 저장하면 다시 빌드해도 덮어쓰지 않는다
+- 리소스 원본은 `src/AdlibComposer.App/Defaults/resource/` (STANDARD.BNK, GENMIDI.OP2). 예전 기본값(`bnk`, `bnk\STANDARD.BNK`, `mt32rom`)을 쓰던 설정 파일은 처음 실행할 때 `resource`로 바뀐다. 실행 폴더의 사본을 고쳐 저장하면 다시 빌드해도 덮어쓰지 않는다
 - `_incoming/`(개인 샘플)은 저장소에서 제외된다. 있으면 자체 테스트가 실제 파일 검사를 하고, 없으면 건너뛴다
 
 ## 사용법
@@ -111,7 +122,7 @@ JukeboxSpeaker=default
 - PNG, 인쇄(실제 크기): 줄 간격 2mm · 격자 8mm로 가로 용지에 띠를 구간별로 싣고 "구간 n → n+1에 이어 붙이기" 표시. 실제 띠와 크기가 다르면 `OrgelView`의 `PrintRowPitchMm` / `PrintGridMm`
 
 **Jukebox** (곡 재생기, 옛 IMPLAY / OCPLAY 화면을 참고한 현대식 데크)
-- 왼쪽 위: 폴더 트리 (ROL 폴더 · IMS 폴더 · SOP 폴더 · S3M·STM 폴더 · 내 PC 드라이브), 왼쪽 아래: 고른 폴더의 ROL / IMS / SOP / S3M / STM 목록 (S3M/STM: 곡 안 샘플로 재생, 채널 믹서에 L1 R1 A1 …, 길이는 끝까지 빨리 돌려 잰다) (가사 = 같은 이름 .ISS, 뱅크 = 같은 이름 .BNK 표시). 두 번 클릭 / Enter로 재생
+- 왼쪽 위: 폴더 트리 (ROL 폴더 · IMS 폴더 · SOP 폴더 · S3M·STM 폴더 · MIDI·WRK 폴더 · 내 PC 드라이브), 왼쪽 아래: 고른 폴더의 곡 목록 (파일 · 곡 안 제목(IMS · SOP · S3M · STM · MOD · MIDI, 뒤에서 읽어 채움) · 형식 · 가사 · 뱅크), ROL / IMS / SOP / S3M / STM (S3M/STM: 곡 안 샘플로 재생, 채널 믹서에 L1 R1 A1 …, 길이는 끝까지 빨리 돌려 잰다) (가사 = 같은 이름 .ISS, 뱅크 = 같은 이름 .BNK 표시). 두 번 클릭 / Enter로 재생
 - 정보: 곡 제목(IMS 제목, 조합형 → 유니코드), 곡 파일 (불러온 악기 / 곡이 쓰는 악기), 뱅크 파일 (악기 수), 가사 파일, 지금 / 전체 시간, ♩ 템포 · 속도 · 키
 - 뱅크: 곡 옆에 같은 이름의 BNK가 있으면 그것을 먼저, 없으면 설정의 기본 뱅크(STANDARD.BNK). Composer의 작업 뱅크는 바꾸지 않는다
 - 가사: 같은 이름의 ISS. 조합형(원래 형식)과 완성형(CP949로 바꾼 파일)을 자동 판별. IMPLAY 규칙대로 기록 순서로 글자를 칠하고(카라오케), 다음 줄을 아래에 미리 보여 준다
@@ -120,6 +131,7 @@ JukeboxSpeaker=default
 - 채널 믹서: 채널마다 연주 중 표시등 · 악기 이름(뱅크에 없으면 빨간 취소선, 안 쓰는 채널은 흐리게) · 지금 음 · 음량 막대 · 켜기/끄기(오른쪽 클릭 = 솔로) · 음높이(반음). 높이가 모자라면 두 열로
 - 키: Space 재생/일시정지, Esc 정지, ← → 5초 (Ctrl+← → 어디서나), PageUp/PageDown 이전/다음 곡, + − 볼륨
 - 거친 음색: 끄면 '표준'(되먹임 1/8 줄임 + 칩 출력 12kHz 1-pole 로우패스, ROL/IMS/SOP), 켜면 칩 소리 그대로. 그 시절 스피커: 작은 PC 스피커 흉내 (하이패스 200Hz 4차 · 3.5kHz +12dB · 로우패스 9kHz). 재생 중에도 바뀌고 설정에 저장, Jukebox에서만 적용
+- MIDI (.mid / .midi, SMF 형식 0·1·2, RMID) · Cakewalk (.wrk, DOS 판 트랙 · 스트림 · 템포 · 주석, 트랙 채널이 이벤트 채널보다 앞섬, 꺼진 트랙은 뺌): 채널 믹서 = MIDI 채널 16개(10 = 드럼). FM이면 OPL3 2-op 18음(빈 채널 → 오래 꺼진 채널 → 오래 울린 음 뺏기), 볼륨 · 익스프레션 · 벨로시티 GM 곡선, 팬 3단계, 피치 벤드(RPN 범위), 서스테인 페달. 음색 · 스피커 · Nuked도 그대로 적용. Windows 신디사이저면 장치로 보내고 조옮김 · 채널 끄기 · 속도 · 볼륨만 적용
 - 다른 페이지로 가면 일시정지 (오디오 엔진을 Composer와 같이 쓴다). 돌아와서 Space로 이어 듣기
 - 엔진: `PlaybackOptions`(속도 · 키 · 채널 끄기 · 채널 음높이 · 출력 크기)를 `AudioEngine.Play(..., options)`로 넘기고 `SetSpeed / SetVoiceMute / ...`로 재생 중에 바꾼다. 채널 상태는 `AudioEngine.GetVoiceStates`
 
@@ -205,8 +217,8 @@ JukeboxSpeaker=default
 | 프로젝트 | 역할 |
 |---|---|
 | `AdlibComposer.Core` | 모델: `Song`(틱 기반 ROL 구조, SOP 모드 = 보이스 20 · 팬), `VoiceTrack`, `Note`, `AdlibInstrument`, `InstrumentBank`, `TempoMap` |
-| `AdlibComposer.Formats` | `RolFormat`, `ImsFormat`, `BnkFormat`, `InsFormat`, `IssLyrics`(ISS 가사), `KoreanText`(조합형/완성형 → 유니코드), `FormatRegistry`, `SopFormat` → `SopSong`(OPL3 곡 읽기 · 쓰기), `SopConvert`(SopSong ↔ Song SOP 모드 · 악기 레지스터), `TrackerModule` + `StmFormat` / `S3mFormat`(Scream Tracker 2/3 읽기·쓰기), `ModFormat`(MOD / NST ↔ S3M 모델), `MusicDuplicateFinder`(같은 곡 찾기 · 남길 파일 점수) |
-| `AdlibComposer.Audio` | `OplChip`(코어를 바꿔 끼우는 칩: 내장 / Nuked, `OplChip.GlobalCore`), `Opl2Emulator`(내장 OPL2), `Opl3Emulator`(18채널 · 4-op · 웨이브폼 8종 · 스테레오), `ToneFilters`(Jukebox 음색 · 스피커 필터), `OplSynth`(보이스→레지스터, 리듬 모드), `Sequencer`, `SopPlayer`(SOP → OPL3), `MusicBoxPlayer`(오르골 시험 연주), `TrackerPlayer`(STM/S3M 샘플 믹서 + AdLib), `AudioEngine`(스테레오 출력), `PlaybackOptions`(속도 · 키 · 채널 조절), `WaveOutPlayer`, `OplMapping` |
+| `AdlibComposer.Formats` | `RolFormat`, `ImsFormat`, `BnkFormat`, `InsFormat`, `IssLyrics`(ISS 가사), `KoreanText`(조합형/완성형 → 유니코드), `FormatRegistry`, `SopFormat` → `SopSong`(OPL3 곡 읽기 · 쓰기), `SopConvert`(SopSong ↔ Song SOP 모드 · 악기 레지스터), `TrackerModule` + `StmFormat` / `S3mFormat`(Scream Tracker 2/3 읽기·쓰기), `ModFormat`(MOD / NST ↔ S3M 모델), `MidiSong` + `MidiFileFormat` / `WrkFormat`(MIDI · Cakewalk 읽기), `GeneralMidi` · `GmBank`(GM 이름, GENMIDI.OP2 / BNK 이름 맞춤 FM 뱅크), `MusicDuplicateFinder`(같은 곡 찾기 · 남길 파일 점수) |
+| `AdlibComposer.Audio` | `OplChip`(코어를 바꿔 끼우는 칩: 내장 / Nuked, `OplChip.GlobalCore`), `Opl2Emulator`(내장 OPL2), `Opl3Emulator`(18채널 · 4-op · 웨이브폼 8종 · 스테레오), `ToneFilters`(Jukebox 음색 · 스피커 필터), `MidiPlayer`(MIDI → OPL3 FM · Windows MIDI 출력 · MT-32), `Mt32Emu`(Munt mt32emu.dll P/Invoke), `OplSynth`(보이스→레지스터, 리듬 모드), `Sequencer`, `SopPlayer`(SOP → OPL3), `MusicBoxPlayer`(오르골 시험 연주), `TrackerPlayer`(STM/S3M 샘플 믹서 + AdLib), `AudioEngine`(스테레오 출력), `PlaybackOptions`(속도 · 키 · 채널 조절), `WaveOutPlayer`, `OplMapping` |
 | `AdlibComposer.Nuked` | `NukedOpl3`: Nuked OPL3 1.8 (Nuke.YKT) C# 포팅. **LGPL-2.1 이상** (`src/AdlibComposer.Nuked/LICENSE`, 출력 폴더에 `LICENSE.Nuked-OPL3.txt`). 바꿔 끼울 수 있게 별도 어셈블리 |
 | `AdlibComposer.Notation` | `Score` 모델, `ScoreBuilder`(Song→마디/음표, 붙임줄), `NoteSpelling`(음표 나누기·셋잇단·음 이름), `MusicXmlExporter`, `MidiExporter`, 텍스트 내보내기, `OrgelComb` / `OrgelBuilder`(곡 → 30음 오르골 띠 구멍) |
 | `AdlibComposer.App` | WinForms GUI: `MainForm`, `Shell/`(사이드바 · 로그 · 셸 테마), `ComposerView`, `InstrumentView`, `JukeboxView`, `NoteView`, `OrganizerView`, `PianoRollControl`, `RetroSlider` 등 |

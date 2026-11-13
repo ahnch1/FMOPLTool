@@ -13,15 +13,22 @@
     <EmbeddedResource Include="AdlibComposer.ico" LogicalName="AdlibComposer.App.AppIcon.ico" />
   </ItemGroup>
   <ItemGroup>
-    <!-- 프로그램 기본 뱅크: 실행 폴더\bnk\STANDARD.BNK (이미 있으면 새 파일일 때만 덮어씀 = 사용자가 고친 뱅크 보존) -->
-    <None Include="Defaults\bnk\STANDARD.BNK" Link="bnk\STANDARD.BNK" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <!-- 프로그램 리소스: 실행 폴더\resource (기본 뱅크 STANDARD.BNK, MIDI FM용 GENMIDI.OP2, MT-32 ROM은 사용자가 넣음).
+         이미 있으면 새 파일일 때만 덮어씀 = 사용자가 고친 뱅크 보존 -->
+    <None Include="Defaults\resource\STANDARD.BNK" Link="resource\STANDARD.BNK" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <!-- MIDI FM용 GM 뱅크 (Freedoom, BSD 3-Clause) -->
+    <None Include="Defaults\resource\GENMIDI.OP2" Link="resource\GENMIDI.OP2" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="Defaults\resource\GENMIDI.OP2.LICENSE.txt" Link="resource\GENMIDI.OP2.LICENSE.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <!-- MT-32 에뮬레이터 (Munt, LGPL-2.1+): src/AdlibComposer.Mt32/build_mt32emu.bat로 빌드한 DLL이 있으면 실행 폴더로 -->
+    <None Include="..\AdlibComposer.Mt32\mt32emu.dll" Link="mt32emu.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" Condition="Exists('..\AdlibComposer.Mt32\mt32emu.dll')" />
+    <None Include="..\AdlibComposer.Mt32\LICENSE.mt32emu.txt" Link="LICENSE.mt32emu.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" Condition="Exists('..\AdlibComposer.Mt32\LICENSE.mt32emu.txt')" />
   </ItemGroup>
-  <!-- 실행 폴더에 곡(rol, ims) / 뱅크(bnk) 폴더 만들기 (빈 폴더는 복사되지 않으므로 직접 만든다. 실행 시에도 없으면 만든다) -->
+  <!-- 실행 폴더에 곡(rol, ims) / 리소스(resource) 폴더 만들기 (빈 폴더는 복사되지 않으므로 직접 만든다. 실행 시에도 없으면 만든다) -->
   <Target Name="CreateDataFolders" AfterTargets="Build">
-    <MakeDir Directories="$(OutDir)rol;$(OutDir)ims;$(OutDir)bnk" />
+    <MakeDir Directories="$(OutDir)rol;$(OutDir)ims;$(OutDir)resource" />
   </Target>
   <Target Name="CreatePublishDataFolders" AfterTargets="Publish">
-    <MakeDir Directories="$(PublishDir)rol;$(PublishDir)ims;$(PublishDir)bnk" />
+    <MakeDir Directories="$(PublishDir)rol;$(PublishDir)ims;$(PublishDir)resource" />
   </Target>
   <ItemGroup>
     <ProjectReference Include="..\AdlibComposer.Core\AdlibComposer.Core.csproj" />

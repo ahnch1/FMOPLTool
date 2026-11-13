@@ -272,7 +272,7 @@ internal sealed class MainForm : Form
         catch (Exception ex) { AppLog.Error("셸", "탐색기를 열 수 없습니다", ex); }
     }
 
-    /// <summary>설정의 기본 뱅크(기본: 실행 폴더\bnk\STANDARD.BNK)를 불러온다. 없으면 내장 새 뱅크 그대로.</summary>
+    /// <summary>설정의 기본 뱅크(기본: 실행 폴더\resource\STANDARD.BNK)를 불러온다. 없으면 내장 새 뱅크 그대로.</summary>
     private void LoadStartupBank()
     {
         string path = settings.DefaultBankPath;

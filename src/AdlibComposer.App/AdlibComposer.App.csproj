@@ -4,7 +4,7 @@
     <TargetFramework>net8.0-windows</TargetFramework>
     <UseWindowsForms>true</UseWindowsForms>
     <RootNamespace>AdlibComposer.App</RootNamespace>
-    <AssemblyName>AdlibComposer</AssemblyName>
+    <AssemblyName>FMOPLTools</AssemblyName>
     <!-- 실행 파일 아이콘 (원본: _incoming/FMOPLTool.ico, 16~256 다중 크기로 변환) -->
     <ApplicationIcon>AdlibComposer.ico</ApplicationIcon>
   </PropertyGroup>

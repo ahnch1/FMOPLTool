@@ -22,7 +22,7 @@
       "command": "dotnet",
       "args": [
         "build",
-        "${workspaceFolder}/AdlibComposer.sln",
+        "${workspaceFolder}/FMOPLTools.sln",
         "-c",
         "Debug",
         "/property:GenerateFullPaths=true",

@@ -7,13 +7,13 @@ BNK 악기를 보이스(채널)에 할당하고, 건반 악보에 노트를 배�
 - 화면: 원본 스크린샷(640x400 흑백 DOS 화면) 레이아웃을 따른 WinForms GUI
 - 확장: 곡 포맷, 악보(스코어) 변환, OPL 칩 교체를 위한 인터페이스 제공
 
-버전: `Directory.Build.props`의 `<Version>` (현재 1.4.1). 주·부 번호(1.1, 1.2 ...)는 직접 정하고, 작업마다 마지막 번호를 올린다.
+버전: `Directory.Build.props`의 `<Version>` (현재 1.5.0). 주·부 번호(1.1, 1.2 ...)는 직접 정하고, 작업마다 마지막 번호를 올린다.
 
 ## 빌드 / 실행
 
 필요: **Visual Studio 2022 17.8 이상** + **.NET 8 SDK** (Windows)
 
-1. `AdlibComposer.sln` 열기
+1. `FMOPLTools.sln` 열기
 2. 시작 프로젝트를 `AdlibComposer.App`으로 지정하고 F5
 3. `samples/demo.rol` + `samples/demo.bnk`로 동작 확인 (곡을 열면 같은 폴더의 BNK를 자동으로 제안)
 
@@ -29,7 +29,7 @@ dotnet run --project tests/AdlibComposer.SelfTest -- --wav demo.wav   # 데모 �
 **실행 폴더 구성** (빌드하면 자동으로 만들어진다)
 
 ```
-AdlibComposer.exe
+FMOPLTools.exe
 FMOPLTool.cfg        ← 설정 (처음 실행할 때 기본값으로 생성, File → Preferences / Ctrl+, 로 변경)
 resource\            ← 프로그램 리소스 (기본 뱅크 폴더 · MT-32 ROM 폴더의 기본값)
   STANDARD.BNK       ← 프로그램 기본 뱅크 (시작할 때 불러옴, 새 곡 기본 악기 piano1/bdrum/... 가 들어 있음)

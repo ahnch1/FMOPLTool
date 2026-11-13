@@ -6,6 +6,7 @@ using System.Windows.Forms;
 namespace AdlibComposer.App.Controls;
 
 /// <summary>Instrument Maker의 슬라이더(◁ ▒▒■▒▒ ▷ + 숫자). ShowWaveGlyph면 숫자 대신 파형 그림을 그린다.</summary>
+[System.ComponentModel.DesignerCategory("Code")]   // 코드로 만든 화면: 디자이너 대신 코드로 연다
 internal sealed class RetroSlider : Control
 {
     private const int ButtonW = 16;

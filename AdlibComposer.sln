@@ -3,6 +3,8 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AdlibComposer.App", "src\AdlibComposer.App\AdlibComposer.App.csproj", "{4B1E7C52-9D3A-4F6B-8A21-5C0D7E9F1A33}"
+EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{F22A578A-F284-462C-B713-534B78CF6EB3}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AdlibComposer.Core", "src\AdlibComposer.Core\AdlibComposer.Core.csproj", "{F5536CE3-4F64-48DB-AEC9-4724FB6BFC7C}"
@@ -12,8 +14,6 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AdlibComposer.Audio", "src\AdlibComposer.Audio\AdlibComposer.Audio.csproj", "{770C1878-A57B-4620-AEFF-B86A22819A97}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AdlibComposer.Notation", "src\AdlibComposer.Notation\AdlibComposer.Notation.csproj", "{92C9B8CA-F20A-4A4F-BE0E-130098C491E8}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AdlibComposer.App", "src\AdlibComposer.App\AdlibComposer.App.csproj", "{4B1E7C52-9D3A-4F6B-8A21-5C0D7E9F1A33}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{2CD5375E-7183-47F0-B2F5-09D7D4CFE189}"
 EndProject

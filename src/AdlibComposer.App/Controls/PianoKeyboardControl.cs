@@ -7,6 +7,7 @@ using AdlibComposer.Core;
 namespace AdlibComposer.App.Controls;
 
 /// <summary>Instrument Maker 하단의 가로 피아노 건반. 마우스 클릭과 컴퓨터 키 표시를 지원한다.</summary>
+[System.ComponentModel.DesignerCategory("Code")]   // 코드로 만든 화면: 디자이너 대신 코드로 연다
 internal sealed class PianoKeyboardControl : Control
 {
     private readonly HashSet<int> pressed = new HashSet<int>();

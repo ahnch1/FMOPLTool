@@ -50,6 +50,7 @@ internal static class Prompt
 }
 
 /// <summary>뱅크 안의 악기 고르기/추가/복제/이름 변경/삭제.</summary>
+[System.ComponentModel.DesignerCategory("Code")]   // 코드로 만든 화면: 디자이너 대신 코드로 연다
 internal sealed class InstrumentListForm : Form
 {
     private readonly InstrumentBank bank;
@@ -152,6 +153,7 @@ internal sealed class InstrumentListForm : Form
 }
 
 /// <summary>틱/값 목록 편집 (템포 배수, 볼륨, 피치 이벤트).</summary>
+[System.ComponentModel.DesignerCategory("Code")]   // 코드로 만든 화면: 디자이너 대신 코드로 연다
 internal sealed class EventEditorForm : Form
 {
     private readonly DataGridView grid = new DataGridView();
@@ -208,6 +210,7 @@ internal sealed class EventEditorForm : Form
 }
 
 /// <summary>곡 설정: 틱/박, 박/마디, 템포, 멜로딕/리듬 모드.</summary>
+[System.ComponentModel.DesignerCategory("Code")]   // 코드로 만든 화면: 디자이너 대신 코드로 연다
 internal sealed class SongSettingsForm : Form
 {
     private readonly NumericUpDown tickBeat = new NumericUpDown();

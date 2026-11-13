@@ -8,6 +8,7 @@ using AdlibComposer.Core;
 namespace AdlibComposer.App.Views;
 
 /// <summary>Instrument Maker 화면: Carrier(왼쪽)/Modulator(오른쪽) 두 열의 13개 파라미터 + 하단 건반.</summary>
+[System.ComponentModel.DesignerCategory("Code")]   // 코드로 만든 화면: 디자이너 대신 코드로 연다
 internal sealed class InstrumentView : UserControl
 {
     private const int HeaderHeight = 36;

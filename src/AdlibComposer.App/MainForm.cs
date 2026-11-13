@@ -11,6 +11,7 @@ using AdlibComposer.Notation;
 namespace AdlibComposer.App;
 
 /// <summary>Visual Composer(작곡)와 Instrument Maker(악기 편집)를 한 창에 담은 메인 폼.</summary>
+[System.ComponentModel.DesignerCategory("Code")]   // 코드로 만든 화면: 디자이너 대신 코드로 연다
 internal sealed class MainForm : Form
 {
     private readonly Workspace ws = new Workspace();

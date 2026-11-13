@@ -13,6 +13,7 @@ internal enum RollTool { Pencil, Select }
 /// Visual Composer의 건반 악보 화면. 왼쪽 세로 건반, 위쪽 Instr. 행, 격자(마디=실선, 박=점선),
 /// 노트는 가로 막대. 선택한 보이스는 굵게, 나머지 보이스는 얇게(All이면 모두 굵게) 표시한다.
 /// </summary>
+[System.ComponentModel.DesignerCategory("Code")]   // 코드로 만든 화면: 디자이너 대신 코드로 연다
 internal sealed class PianoRollControl : Control
 {
     public const int KeyboardWidth = 56;

@@ -8,6 +8,7 @@ using AdlibComposer.Core;
 namespace AdlibComposer.App.Views;
 
 /// <summary>Visual Composer 화면: 도구/보이스 선택줄 + Instr. 줄 + 건반 악보 + 스크롤바 + 줌 표시(1:1).</summary>
+[System.ComponentModel.DesignerCategory("Code")]   // 코드로 만든 화면: 디자이너 대신 코드로 연다
 internal sealed class ComposerView : UserControl
 {
     private const int TopHeight = 56;

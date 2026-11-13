@@ -91,6 +91,18 @@ internal sealed class Workspace : IDisposable
         return melodic && voice < Song.MelodicVoices ? "piano1" : DefaultInstruments[voice];
     }
 
+    /// <summary>새 곡 (보이스마다 기본 악기). 채보 등에서 곡을 만들 때.</summary>
+    public static Song CreateEmptySong() { return CreateNewSong(); }
+
+    /// <summary>만든 곡으로 바꾼다 (채보 결과 등). 저장하지 않은 새 곡으로 본다.</summary>
+    public void ReplaceSong(Song song)
+    {
+        Song = song;
+        undo.Clear(); redo.Clear();
+        SongDirty = true;
+        RaiseSongReplaced();
+    }
+
     private static Song CreateNewSong()
     {
         var s = new Song();

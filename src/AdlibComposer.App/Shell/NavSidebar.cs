@@ -6,7 +6,7 @@ using System.Windows.Forms;
 namespace AdlibComposer.App.Shell;
 
 /// <summary>프로그램의 페이지 (사이드바 메뉴 하나 = 페이지 하나).</summary>
-internal enum AppPage { Composer, Instrument, Jukebox, Note, Orgel, Tracker, Organizer }
+internal enum AppPage { Composer, Instrument, Jukebox, Note, Orgel, Tracker, Organizer, Transcribe }
 
 /// <summary>
 /// 왼쪽 어두운 사이드바: 프로그램 이름/버전, 구역 머리글(CREATE / PLAY / SCORE), 둥근 아이콘 메뉴.
@@ -64,6 +64,7 @@ internal sealed class NavSidebar : Control
         y = AddSection("SCORE", y + 6);
         y = AddItem(AppPage.Note, "Note", "오선 악보 보기 · MusicXML / MIDI / PNG · 인쇄", Glyphs.Note, false, y);
         y = AddItem(AppPage.Orgel, "Orgel Note", "30음 오르골 띠 구멍 위치 · 시험 연주 · 실제 크기 인쇄", Glyphs.Orgel, false, y);
+        y = AddItem(AppPage.Transcribe, "Transcribe", "음악 파일(MP3 · WAV)의 주 멜로디를 악보로 채보 (이 PC에서 분석)", Glyphs.Transcribe, false, y);
         y = AddSection("TOOLS", y + 6);
         AddItem(AppPage.Organizer, "Organizer", "같은 곡 찾기 · 정리 (ROL / IMS / SOP): 삭제 · 이동 · 시뮬레이션", Glyphs.Organizer, false, y);
     }

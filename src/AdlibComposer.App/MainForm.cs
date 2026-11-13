@@ -45,6 +45,7 @@ internal sealed class MainForm : Form
     private readonly OrgelView orgel;
     private readonly TrackerView trackerView;
     private readonly OrganizerView organizer;
+    private readonly TranscribeView transcribe;
     private readonly NoteView note;
     private ToolStripButton tbPlay, tbStop;
 
@@ -90,6 +91,7 @@ internal sealed class MainForm : Form
         note = new NoteView(ws, delegate { return settings.FolderForSong(ws.Song.FilePath); }) { Dock = DockStyle.Fill, Visible = false };
         trackerView = new TrackerView(ws, delegate { return settings; }, TryOpenAudio) { Dock = DockStyle.Fill, Visible = false };
         organizer = new OrganizerView(delegate { return settings; }) { Dock = DockStyle.Fill, Visible = false };
+        transcribe = new TranscribeView(ws, TryOpenAudio, SendTranscribedSong) { Dock = DockStyle.Fill, Visible = false };
         orgel = new OrgelView(ws, TryOpenAudio, delegate { return settings.FolderForSong(ws.Song.FilePath); }) { Dock = DockStyle.Fill, Visible = false };
         note.NoteActivated += delegate (int voice, int tick, int pitch) { ShowPage(AppPage.Composer); composer.GoTo(voice, tick, pitch); };
 
@@ -142,7 +144,7 @@ internal sealed class MainForm : Form
         sidebar.PageSelected += ShowPage;
 
         pageHost.Dock = DockStyle.Fill;
-        pageHost.Controls.AddRange(new Control[] { composer, instrument, jukebox, note, orgel, trackerView, organizer });
+        pageHost.Controls.AddRange(new Control[] { composer, instrument, jukebox, note, orgel, trackerView, organizer, transcribe });
 
         logPanel.Dock = DockStyle.Bottom;
         logPanel.Height = 140;
@@ -232,6 +234,7 @@ internal sealed class MainForm : Form
         orgel.Visible = target == AppPage.Orgel;
         trackerView.Visible = target == AppPage.Tracker;
         organizer.Visible = target == AppPage.Organizer;
+        transcribe.Visible = target == AppPage.Transcribe;
         if (target == AppPage.Instrument) instrument.ApplyPreview();
         var shown = PageControl(target) as IShellPage;
         if (shown != null) shown.OnShown();
@@ -252,6 +255,7 @@ internal sealed class MainForm : Form
             case AppPage.Orgel: return orgel;
             case AppPage.Tracker: return trackerView;
             case AppPage.Organizer: return organizer;
+            case AppPage.Transcribe: return transcribe;
         }
         return composer;
     }
@@ -285,6 +289,17 @@ internal sealed class MainForm : Form
         }
         try { ws.OpenBank(path); LogBank("기본 뱅크"); }
         catch (Exception ex) { statusMain.Text = "기본 뱅크를 열 수 없습니다: " + ex.Message; AppLog.Error("뱅크", "기본 뱅크를 열 수 없습니다", ex); }
+    }
+
+    /// <summary>채보한 멜로디(새 곡)를 작업 곡으로 바꾸고 그 페이지(Note / Composer)로 간다. 지금 곡을 버릴지 먼저 묻는다.</summary>
+    private bool SendTranscribedSong(Song song, AppPage target)
+    {
+        if (!ConfirmDiscardSong()) return false;
+        StopPlayback();
+        ws.ReplaceSong(song);
+        LogSong("채보");
+        ShowPage(target);
+        return true;
     }
 
     private void LogBank(string what)
@@ -544,6 +559,7 @@ internal sealed class MainForm : Form
         helpMenu.DropDownItems.Add(Item("About", delegate { About(); }));
 
         helpMenu.DropDownItems.Insert(0, new ToolStripSeparator());
+        helpMenu.DropDownItems.Insert(0, Item("Transcribe", delegate { ShowPage(AppPage.Transcribe); }, Keys.None, "Ctrl+8"));
         helpMenu.DropDownItems.Insert(0, Item("Organizer", delegate { ShowPage(AppPage.Organizer); }, Keys.None, "Ctrl+7"));
         helpMenu.DropDownItems.Insert(0, Item("Tracker", delegate { ShowPage(AppPage.Tracker); }, Keys.None, "Ctrl+6"));
         helpMenu.DropDownItems.Insert(0, Item("Orgel Note", delegate { ShowPage(AppPage.Orgel); }, Keys.None, "Ctrl+5"));
@@ -850,6 +866,7 @@ internal sealed class MainForm : Form
             case Keys.Control | Keys.D5: ShowPage(AppPage.Orgel); return true;
             case Keys.Control | Keys.D6: ShowPage(AppPage.Tracker); return true;
             case Keys.Control | Keys.D7: ShowPage(AppPage.Organizer); return true;
+            case Keys.Control | Keys.D8: ShowPage(AppPage.Transcribe); return true;
             case Keys.Space: if (composerMode && !text) { TogglePlay(); return true; } break;
             case Keys.Shift | Keys.Space:
                 if (composerMode && !text)

@@ -22,10 +22,15 @@ public sealed class AudioEngine : IDisposable
     private readonly SopPlayer sop;
     /// <summary>MIDI (.mid / .wrk): SOP와 같은 OPL3 칩을 쓴다 (둘이 함께 울리지 않음).</summary>
     private readonly MidiPlayer midi;
+    /// <summary>채보 화면: 원곡 PCM + 채보한 멜로디.</summary>
+    private readonly PcmPlayer pcm = new PcmPlayer();
+    private readonly PlaybackOptions pcmOptions = new PlaybackOptions();
+    /// <summary>PCM(−1~1)을 16bit 쪽 크기로.</summary>
+    private const double PcmScale = 16000;
     private readonly MusicBoxPlayer musicBox = new MusicBoxPlayer();
     private readonly TrackerPlayer tracker = new TrackerPlayer();
     /// <summary>소리를 내는 쪽. 시음이나 ROL/IMS 재생을 시작하면 Opl2.</summary>
-    private enum Source { Opl2, Sop, MusicBox, Tracker, Midi }
+    private enum Source { Opl2, Sop, MusicBox, Tracker, Midi, Pcm }
     private Source source = Source.Opl2;
     private bool sopMode { get { return source == Source.Sop; } }
     /// <summary>오르골 소리(−1~1)를 16bit 쪽 크기로.</summary>
@@ -111,6 +116,7 @@ public sealed class AudioEngine : IDisposable
                 case Source.MusicBox: return musicBox.IsPlaying;
                 case Source.Tracker: return tracker.IsSongPlaying;
                 case Source.Midi: return midi.IsPlaying;
+                case Source.Pcm: return pcm.IsPlaying;
             }
             return sequencer.IsPlaying;
         }
@@ -126,6 +132,7 @@ public sealed class AudioEngine : IDisposable
                 case Source.MusicBox: return musicBox.PositionTick;
                 case Source.Tracker: return tracker.PositionMs;   // 트래커는 ms
                 case Source.Midi: return midi.PositionTick;
+                case Source.Pcm: return pcm.PositionMs;   // ms
             }
             return sequencer.PositionTick;
         }
@@ -175,6 +182,7 @@ public sealed class AudioEngine : IDisposable
             if (source == Source.MusicBox) musicBox.Stop();
             if (source == Source.Tracker) tracker.Stop();
             if (source == Source.Midi) midi.Stop();
+            pcm.Stop();
             source = Source.Opl2;
             Func<string, AdlibInstrument> resolver = name => bank != null ? bank.Find(name) : null;
             sequencer.Start(song, resolver, startTick, loopStart, loopEnd, onlyVoice, options);
@@ -189,7 +197,7 @@ public sealed class AudioEngine : IDisposable
         lock (sync)
         {
             if (sequencer.IsPlaying) sequencer.Stop();
-            musicBox.Stop(); tracker.Stop(); midi.Stop();
+            musicBox.Stop(); tracker.Stop(); midi.Stop(); pcm.Stop();
             source = Source.Sop;
             sop.Start(song, Math.Max(0, startTick), options);
             generation++;
@@ -203,13 +211,32 @@ public sealed class AudioEngine : IDisposable
         lock (sync)
         {
             if (sequencer.IsPlaying) sequencer.Stop();
-            sop.Stop(); musicBox.Stop(); tracker.Stop();
+            sop.Stop(); musicBox.Stop(); tracker.Stop(); pcm.Stop();
             source = Source.Midi;
             midi.Start(song, Math.Max(0, startTick), options);
             generation++;
             this.startTick = Math.Max(0, startTick);
         }
     }
+
+    /// <summary>
+    /// 채보 화면 재생: 모노 PCM(원곡)과 채보한 멜로디(간단한 배음 소리)를 섞어 startSeconds부터. 위치(PositionTick) = ms.
+    /// </summary>
+    public void PlayPcm(float[] samples, int rate, IList<MelodyNote> melody, double startSeconds, bool original, bool melodyOn)
+    {
+        lock (sync)
+        {
+            if (sequencer.IsPlaying) sequencer.Stop();
+            sop.Stop(); musicBox.Stop(); tracker.Stop(); midi.Stop();
+            source = Source.Pcm;
+            pcm.Start(samples, rate, melody, startSeconds, original, melodyOn);
+            generation++;
+            this.startTick = startSeconds * 1000;
+        }
+    }
+
+    /// <summary>재생 중에 원곡 / 멜로디 켜고 끄기.</summary>
+    public void SetPcmMix(bool original, bool melodyOn) { lock (sync) { pcm.Original = original; pcm.Melody = melodyOn; } }
 
     /// <summary>MIDI FM 재생에 쓸 GM 뱅크 (다음 재생부터).</summary>
     public GmBank MidiBank { get { lock (sync) return midi.Bank; } set { lock (sync) midi.Bank = value; } }
@@ -257,7 +284,7 @@ public sealed class AudioEngine : IDisposable
         lock (sync)
         {
             if (sequencer.IsPlaying) sequencer.Stop();
-            sop.Stop(); midi.Stop();
+            sop.Stop(); midi.Stop(); pcm.Stop();
             source = Source.MusicBox;
             musicBox.Start(hits, ticksPerSecond, Math.Max(0, startTick), endTick);
             generation++;
@@ -274,7 +301,7 @@ public sealed class AudioEngine : IDisposable
         lock (sync)
         {
             if (sequencer.IsPlaying) sequencer.Stop();
-            sop.Stop(); musicBox.Stop(); midi.Stop();
+            sop.Stop(); musicBox.Stop(); midi.Stop(); pcm.Stop();
             source = Source.Tracker;
             tracker.Start(module, startOrder, startRow, singlePattern, loop, options, skipMs);
             generation++;
@@ -312,7 +339,7 @@ public sealed class AudioEngine : IDisposable
 
     public void Stop()
     {
-        lock (sync) { sequencer.Stop(); sop.Stop(); musicBox.Stop(); tracker.Stop(); midi.Stop(); }
+        lock (sync) { sequencer.Stop(); sop.Stop(); musicBox.Stop(); tracker.Stop(); midi.Stop(); pcm.Stop(); }
     }
 
     // ---------------------------------------------------------------- 재생 조절 (Jukebox)
@@ -320,7 +347,7 @@ public sealed class AudioEngine : IDisposable
     /// <summary>지금 재생의 조절값 (Play에 넘긴 것). 값을 바꾼 뒤에는 아래 Set...을 부른다.</summary>
     public PlaybackOptions Options { get { lock (sync) { return CurrentOptions; } } }
 
-    private PlaybackOptions CurrentOptions { get { return sopMode ? sop.Options : source == Source.Tracker ? tracker.Options : source == Source.Midi ? midi.Options : sequencer.Options; } }
+    private PlaybackOptions CurrentOptions { get { return sopMode ? sop.Options : source == Source.Tracker ? tracker.Options : source == Source.Midi ? midi.Options : source == Source.Pcm ? pcmOptions : sequencer.Options; } }
 
     public void SetSpeed(double speed) { lock (sync) { CurrentOptions.Speed = speed; if (sopMode) sop.ApplySpeed(); else if (source == Source.Tracker) tracker.ApplySpeed(); else if (source == Source.Midi) midi.ApplySpeed(); else sequencer.ApplySpeed(); } }
     public void SetTranspose(int semitones) { lock (sync) { CurrentOptions.Transpose = semitones; } }
@@ -442,7 +469,7 @@ public sealed class AudioEngine : IDisposable
         var src = source;
         bool useSop = src == Source.Sop || src == Source.Midi;
         bool mt32 = src == Source.Midi && midi.ActiveSynth == MidiSynth.Mt32;
-        double step = (double)(src == Source.Midi ? midi.Rate : useSop ? opl3.NativeRate : src == Source.MusicBox ? MusicBoxPlayer.Rate : src == Source.Tracker ? TrackerPlayer.Rate : synth.NativeRate) / OutputRate;
+        double step = (double)(src == Source.Pcm ? pcm.Rate : src == Source.Midi ? midi.Rate : useSop ? opl3.NativeRate : src == Source.MusicBox ? MusicBoxPlayer.Rate : src == Source.Tracker ? TrackerPlayer.Rate : synth.NativeRate) / OutputRate;
         double gain = MasterVolume * CurrentOptions.Gain;
         for (int i = 0; i < count; i++)
         {
@@ -451,7 +478,11 @@ public sealed class AudioEngine : IDisposable
             {
                 resamplePos -= 1.0;
                 prevL = curL; prevR = curR;
-                if (src == Source.Tracker)
+                if (src == Source.Pcm)
+                {
+                    curL = curR = pcm.Step() * PcmScale;
+                }
+                else if (src == Source.Tracker)
                 {
                     double tl, tr;
                     tracker.Generate(out tl, out tr);

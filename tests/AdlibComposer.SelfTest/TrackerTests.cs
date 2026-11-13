@@ -144,7 +144,7 @@ public static class TrackerTests
 
     // ------------------------------------------------------------ 도우미
 
-    private static TrackerSample Square(string name, int length, int c2, bool loop)
+    internal static TrackerSample Square(string name, int length, int c2, bool loop)
     {
         var d = new short[length];
         for (int i = 0; i < length; i++) d[i] = (short)((i / 16) % 2 == 0 ? 47 << 8 : -(47 << 8));   // 8bit로 정확히 저장되는 값
@@ -162,7 +162,7 @@ public static class TrackerTests
         return b;
     }
 
-    private static double Pitch(TrackerModule m, double skip, double seconds)
+    internal static double Pitch(TrackerModule m, double skip, double seconds)
     {
         var b = Render(m, skip, seconds);
         int cross = 0;
@@ -170,7 +170,7 @@ public static class TrackerTests
         return cross / 2.0 / seconds;
     }
 
-    private static double Rms(TrackerModule m, double skip, double seconds) { return RmsOf(Render(m, skip, seconds)); }
+    internal static double Rms(TrackerModule m, double skip, double seconds) { return RmsOf(Render(m, skip, seconds)); }
 
     private static double RmsOf(short[] b)
     {

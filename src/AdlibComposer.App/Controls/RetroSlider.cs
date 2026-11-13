@@ -101,7 +101,7 @@ internal sealed class RetroSlider : Control
         g.FillPolygon(Brushes.Black, tri);
     }
 
-    /// <summary>OPL 웨이브폼 0~3 (사인, 반파, 절대값, 펄스형)의 작은 그림.</summary>
+    /// <summary>OPL 웨이브폼 0~3 (사인, 반파, 절대값, 펄스형), OPL3 4~7 (반주기 2배 사인, 반주기 2배 절대값, 사각, 로그 톱니)의 작은 그림.</summary>
     internal static void DrawWave(Graphics g, Rectangle r, int wave)
     {
         int n = Math.Max(8, r.Width);
@@ -116,9 +116,14 @@ internal sealed class RetroSlider : Control
                 case 1: v = s > 0 ? s : 0; break;
                 case 2: v = Math.Abs(s); break;
                 case 3: v = (s > 0 && (ph % Math.PI) < Math.PI / 2) ? s : ((s < 0 && ((ph % Math.PI) < Math.PI / 2)) ? -s : 0); break;
+                case 4: v = ph < Math.PI ? Math.Sin(2 * ph) : 0; break;
+                case 5: v = ph < Math.PI ? Math.Abs(Math.Sin(2 * ph)) : 0; break;
+                case 6: v = s >= 0 ? 1 : -1; break;
+                case 7: { double f = ph < Math.PI ? ph / Math.PI : (ph - Math.PI) / Math.PI; v = (ph < Math.PI ? 1 : -1) * Math.Pow(1 - f, 3); break; }
                 default: v = s; break;
             }
-            float y = wave == 0 ? (float)(r.Y + r.Height / 2.0 - v * r.Height / 2.0)
+            bool bipolar = wave == 0 || wave == 4 || wave == 6 || wave == 7;
+            float y = bipolar ? (float)(r.Y + r.Height / 2.0 - v * r.Height / 2.0)
                                 : (float)(r.Bottom - v * r.Height);
             pts[i] = new PointF(r.X + i, y);
         }

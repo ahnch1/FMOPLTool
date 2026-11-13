@@ -3,11 +3,11 @@
 AdLib Visual Composer(작곡)와 Instrument Maker(악기 편집)를 **한 프로그램**으로 재현하는 C# 솔루션.
 BNK 악기를 보이스(채널)에 할당하고, 건반 악보에 노트를 배치하고, OPL2 에뮬레이션으로 재생한다.
 
-- 파일: ROL·IMS(곡) / BNK(악기 뱅크) / INS(악기 1개) 읽기·쓰기, SOP(OPL3 곡) 읽기·쓰기·재생 (Composer SOP 모드 작곡, Jukebox), STM · S3M(Scream Tracker 2/3) 만들기·읽기·쓰기·재생
+- 파일: ROL·IMS(곡) / BNK(악기 뱅크) / INS(악기 1개) 읽기·쓰기, SOP(OPL3 곡) 읽기·쓰기·재생 (Composer SOP 모드 작곡, Jukebox), STM · S3M(Scream Tracker 2/3) · MOD · NST(ProTracker / NoiseTracker) 만들기·읽기·쓰기·재생, 같은 곡 찾기 · 정리 (ROL / IMS / SOP)
 - 화면: 원본 스크린샷(640x400 흑백 DOS 화면) 레이아웃을 따른 WinForms GUI
 - 확장: 곡 포맷, 악보(스코어) 변환, OPL 칩 교체를 위한 인터페이스 제공
 
-버전: `Directory.Build.props`의 `<Version>` (현재 1.3.2). 주·부 번호(1.1, 1.2 ...)는 직접 정하고, 작업마다 마지막 번호를 올린다.
+버전: `Directory.Build.props`의 `<Version>` (현재 1.3.3). 주·부 번호(1.1, 1.2 ...)는 직접 정하고, 작업마다 마지막 번호를 올린다.
 
 ## 빌드 / 실행
 
@@ -35,7 +35,7 @@ bnk\STANDARD.BNK     ← 프로그램 기본 뱅크 (시작할 때 불러옴, �
 rol\                 ← ROL 곡 폴더
 ims\                 ← IMS 곡 폴더
 sop\                 ← SOP 곡 폴더 (Composer SOP 모드 · Jukebox)
-trk\                 ← S3M / STM 곡 폴더 (Tracker · Jukebox)
+trk\                 ← S3M / STM / MOD / NST 곡 폴더 (Tracker · Jukebox)
 ```
 
 `FMOPLTool.cfg` (텍스트, 경로는 실행 폴더 기준 상대 경로 또는 절대 경로):
@@ -61,7 +61,7 @@ LoadDefaultBank=true
 | 영역 | 내용 |
 |---|---|
 | 메뉴 / 툴바 | 원본 메뉴(F5~F10) + 툴바(새 곡 · 열기 · 저장 · 뱅크 브라우저 · 재생 · 정지 · 설정) |
-| 왼쪽 사이드바 | **Composer** · **Instrument Maker** · **Tracker** (CREATE), **Jukebox** (PLAY), **Note** · **Orgel Note** (SCORE). Ctrl+1~6 (Tracker = Ctrl+6) |
+| 왼쪽 사이드바 | **Composer** · **Instrument Maker** · **Tracker** (CREATE), **Jukebox** (PLAY), **Note** · **Orgel Note** (SCORE), **Organizer** (TOOLS). Ctrl+1~7 (Tracker = Ctrl+6, Organizer = Ctrl+7) |
 | 페이지 머리글 | 현재 페이지 이름과 설명 |
 | 진행 로그 | 시작 · 뱅크/곡 열기·저장 · 경고 · 오류 기록. 필터(전체/정보/경고/오류), 상세(예외 내용), 복사, 지우기. 위쪽 경계를 끌어 높이 조절 |
 | 상태 표시줄 | 곡 · 템포 · 커서 · 뱅크, `FMOPLTool.cfg` / 실행 폴더 바로 열기 |
@@ -76,14 +76,24 @@ LoadDefaultBank=true
 - MIDI: 곡에서 바로 (틱 그대로), PPQ = 박당 틱, 템포 변화, 볼륨 → 세기, 피치 → 피치벤드, 드럼은 채널 10 GM 음(BD 36 SD 38 TO 45 CY 49 HH 42). 숨긴 보이스는 빠진다
 - 아직 없음: 빔(꼬리를 묶는 가로줄), 화음(한 보이스는 한 음뿐이라 필요 없음), 오른쪽 끝 맞춤
 
-**Tracker** (Scream Tracker 2/3 편집기, Ctrl+6 — 화면과 키는 ST3를 따른다)
+**Tracker** (Scream Tracker 2/3 편집기 + MOD / NST, Ctrl+6 — 화면과 키는 ST3를 따른다)
 - 새 곡: S3M(ST3, 32채널 · AdLib A1~A9, 처음 8채널 L1 R1 L2 R2 …) / STM(ST2, 4채널, 명령 A~J). 열기 · 저장은 확장자대로, 다른 형식으로 저장하면 바꿔서 쓰고 빠진 것을 알려 준다 (STM은 4채널 · 31악기 · 8bit · A~J)
 - F1 주문·변수: 주문 목록(더블클릭/G/Enter = 그 패턴 편집, Ins/Del, +++ 건너뜀, --- 끝), 곡 이름 · 속도(A) · 템포(T) · 전역/마스터 볼륨 · 스테레오 · 빠른 볼륨 슬라이드 · 아미가 한계, 채널 32개 종류(L1~L8 R1~R8 A1~A9 --)와 팬
 - F2 패턴: 한 칸 `C-5 04 12 H81` (음, 악기, 볼륨, 명령, 인포). 아랫줄 Z S X D C V G B H N J M = 기준 옥타브, 윗줄 Q 2 W 3 E R 5 T 6 Y 7 U I 9 O 0 P = 한 옥타브 위 (입력하면 소리), `/` `*` 옥타브, `.` 지우기, `1` ^^ 노트 오프, `<` `>` 악기, `+` `-` 패턴, `{` `}` 속도, Ins/Del(Shift = 모든 채널), Enter = 칸의 악기 가져오기, `4` 칸 듣기, `8` 줄 듣기, Shift+화살표/끌기 = 영역, Ctrl+C/X/V, Alt+Q/A = 반음 올림/내림, Alt+L 채널 선택, Ctrl+Z 되돌리기
 - F3 악기: 목록(##, 이름, SMP/AMel, 볼륨, C4Spd, 길이, 루프), 이름 · 파일 이름 · 볼륨 · C4Spd · 루프, 파형, WAV 불러오기/저장, AdLib 파라미터 D00~D0B. 건반 키로 들어 보기
 - 재생: F5 곡, F6 패턴 되풀이, Shift+F6 지금 주문부터, F7 커서부터, F8 정지. 따라가기(재생 위치를 따라 패턴 화면 이동)
 - 재생기(`TrackerPlayer`): STM은 st2play(viiri/st2play)를 그대로 옮김(템포 바이트 · 주기 표 · FXMULT · LFO · 명령 A~J). S3M은 ST3 규칙(TECH.DOC 주기 공식 · 틱 = 2.5/템포초)과 ST3.DOC 명령 A B C D E F G H I J K L O Q R S(3 4 8 B C D E) T U V X, 볼륨 칸, 채널 팬, AdLib 멜로디 채널(OPL2). 샘플은 선형 보간
-- 아직 없음: ST3 화음 모드 · 폴리채널 · 악기 라이브러리(F4) · 정보 화면(F5 화면), AdLib 드럼 채널, 샘플 편집(자르기 등)
+- MOD / NST (`ModFormat`): ProTracker · NoiseTracker (`M.K.` `M!K!` `4CHN` `6CHN` `8CHN` `xxCH` `FLT4/8` `CD81` `OKTA` `N.T.`, 서명 없는 15샘플 SoundTracker도). S3M 모델로 바꿔 열고 (채널 L R R L, 아미가 한계 켬, 주기 428 = ProTracker C-2 = ST3 C-4, 파인튠 → C4Spd), 명령은 S3M 명령으로 (`Cxx` = 볼륨 칸, `Dxx` = C, `Exy` = S 명령 · 미세 슬라이드, `Fxx` = A 속도 / T 템포). `.mod` / `.nst`로 저장하면 거꾸로 바꿔 쓰고 빠진 것을 알려 준다 (AdLib, 음역 밖 음, MOD에 없는 명령, 명령과 겹친 볼륨 칸, ^^는 C00으로). 채널은 실제로 쓰는 샘플 채널만 (최소 4, 짝수)
+- 아직 없음: ST3 화음 모드 · 폴리채널 · 악기 라이브러리(F4) · 정보 화면(F5 화면), AdLib 드럼 채널, 샘플 편집(자르기 등), MOD 고유 재생 규칙 (MOD도 S3M 규칙으로 재생)
+
+**Organizer** (같은 곡 찾기 · 정리, Ctrl+7)
+- 폴더(하위 폴더 포함 가능)의 ROL / IMS / SOP를 모두 읽어 같은 곡을 묶는다. 판정 (`MusicDuplicateFinder`):
+  같은 바이트(크기 + SHA-1) · 같은 음표(형식 · 박당 틱 · 보이스 배치와 상관없이 모든 음의 시작 · 길이 · 음높이 — 같은 곡의 ROL과 IMS도 묶인다) ·
+  곡 안 제목 + 악기 순서가 같고 음 개수 5% 안 · 형식 + 크기 + 악기 순서가 같고 음표 90% 이상 같음(조금 고친 판)
+- 남길 파일 점수: 같은 이름 BNK +30, 같은 이름 ISS +30, 뜻 있는 파일 이름 +20, 숫자만 나열된 이름(예: `0001`, `SONG001`, `MUS00012`) −20, 곡 안 제목 +5. 같으면 음이 많은 것 → 짧은 이름
+- 왼쪽: 파일 목록(파일 · 경로 · 형식 · 크기 · 제목 · 음 · 점수 · 판정), 같은 곡끼리 묶음 머리글(이유 · 남길 파일). `같은 곡만 보기`를 끄면 나머지도 보인다
+- 오른쪽: 고른 파일 정보 (경로 · 크기 · 날짜 · BNK · ISS · SHA-1, 제목 · 템포 · 길이 · 보이스 · 음 · 악기 순서, 점수 내역 · 같은 그룹 파일)
+- 아래: `추천대로 체크`(그룹마다 남길 파일 빼고 체크), `체크 해제`, `시뮬레이션`(기본 켬: 할 일 목록만 보여 주고 로그에 남김), `같은 이름 BNK · ISS도 함께`(같은 폴더에 같은 이름의 다른 곡이 남으면 그대로 둠), 삭제(휴지통) / 폴더로 이동(같은 이름이 있으면 `이름 (2).ROL`). 그룹 전체를 체크하면 경고
 
 **Orgel Note** (30음 오르골 종이 띠, Ctrl+5)
 - 지금 곡을 손으로 돌리는 30음 오르골 띠의 구멍 위치로 보여 준다. 시간은 왼쪽 → 오른쪽, 아래 줄이 낮은 음 (띠에 인쇄된 음계 표시를 180도 돌린 방향)
@@ -163,7 +173,7 @@ LoadDefaultBank=true
 - 열기: `.sop`를 열면 곡 안 악기로 새 작업 뱅크를 만든다 (같은 이름의 BNK 악기와 소리가 달라 섞지 않음). 길이 0 노트(다음 노트까지)는 다음 노트까지 늘리고, 겹친 노트는 앞 노트를 자른다
 - 저장: SOP 모드 곡은 `.sop`로만 (곡이 쓰는 악기만 곡 안에 넣는다, 악기가 없는 보이스는 기본 악기). ROL/IMS 모드 곡을 `.sop`로 저장하면 SOP 모드로 바뀐다
 - 모드 바꾸기: SOP → With / Without Percussion이면 보이스 12~20(노트가 있으면 묻는다) · 팬 · 4-op는 ROL/IMS에 들어가지 않는다 (지우지 않고 숨김)
-- 시음(건반 · 키보드)은 OPL2 시음 신디사이저: 보이스 12~20은 보이스 1 자리로, 4-op 악기는 오퍼레이터 1·2만 들린다. OPL3 파형 4~7은 Instrument Maker에서 3까지만 보인다 (값은 보존)
+- 시음(건반 · 키보드): 2-op 악기는 OPL2 시음 신디사이저 (보이스 12~20은 보이스 1 자리로), 4-op 악기는 OPL3로 시음한다 (멜로디 보이스)
 - SOP 마스터 볼륨 이벤트는 읽은 값을 보존 · 재생만 한다 (편집 화면 없음). 원래 SOP 제목 · 설명은 저장할 때 파일 이름으로 바뀐다
 
 **Instrument Maker**
@@ -179,16 +189,20 @@ LoadDefaultBank=true
 - Bass Drum 모드는 두 열(Carrier + Modulator)이 보인다 — 원본과 같음 (OPL도 두 오퍼레이터를 쓰고, bdrum/bdrum1도 두 쪽 모두 실제 값)
 - 화면 위: 뱅크 파일 정보(파일 이름 · 폴더 · 악기 수 · 지금 악기 번호 · 이름 칸), 그 아래 F6 Option 메뉴를 버튼으로 (모드 6개 · Additive · 건반 Oct −/+ · Master Volume)
 - 왼쪽: 뱅크 악기 목록(번호 · 이름 · 모드, ↑ ↓로 이동) + New / Copy / Rename / Delete (예전 `List...` 대화상자와 `< >` 버튼 대신)
+- **4-op 악기** (SOP · OPL3, 이 프로그램의 추가 기능): `4-Op` 버튼으로 켜기 / 끄기 (Melodic 모드만, 켜면 오퍼레이터 3·4를 1·2와 같은 값으로 시작), `Op 1·2` / `Op 3·4` 버튼(F3 / F4)으로 두 짝을 번갈아 편집. 열 머리글이 Op 2 Carrier / Op 1 Modulator, Op 4 Carrier / Op 3 Modulator로 바뀐다
+  - `Additive`는 지금 보이는 짝의 연결 비트 → 연결 4가지 (옆에 표시: `1→2→3→4`, `1 + 2→3→4`, `1→2 + 3→4`, `1 + 2→3 + 4`)
+  - 웨이브폼은 OPL3의 0~7 (반주기 2배 사인, 그 절대값, 사각, 로그 톱니 포함), 2-op 악기는 OPL2의 0~3
+  - 시음은 OPL3 (채널 0+3 짝)로, 누르고 있는 동안 고친 값이 바로 들린다. 오퍼레이터 3·4는 SOP 곡으로 저장할 때만 들어간다 (BNK · INS에는 1·2만, 저장할 때 로그에 경고)
 
 ## 구조
 
 | 프로젝트 | 역할 |
 |---|---|
 | `AdlibComposer.Core` | 모델: `Song`(틱 기반 ROL 구조, SOP 모드 = 보이스 20 · 팬), `VoiceTrack`, `Note`, `AdlibInstrument`, `InstrumentBank`, `TempoMap` |
-| `AdlibComposer.Formats` | `RolFormat`, `ImsFormat`, `BnkFormat`, `InsFormat`, `IssLyrics`(ISS 가사), `KoreanText`(조합형/완성형 → 유니코드), `FormatRegistry`, `SopFormat` → `SopSong`(OPL3 곡 읽기 · 쓰기), `SopConvert`(SopSong ↔ Song SOP 모드 · 악기 레지스터), `TrackerModule` + `StmFormat` / `S3mFormat`(Scream Tracker 2/3 읽기·쓰기) |
+| `AdlibComposer.Formats` | `RolFormat`, `ImsFormat`, `BnkFormat`, `InsFormat`, `IssLyrics`(ISS 가사), `KoreanText`(조합형/완성형 → 유니코드), `FormatRegistry`, `SopFormat` → `SopSong`(OPL3 곡 읽기 · 쓰기), `SopConvert`(SopSong ↔ Song SOP 모드 · 악기 레지스터), `TrackerModule` + `StmFormat` / `S3mFormat`(Scream Tracker 2/3 읽기·쓰기), `ModFormat`(MOD / NST ↔ S3M 모델), `MusicDuplicateFinder`(같은 곡 찾기 · 남길 파일 점수) |
 | `AdlibComposer.Audio` | `Opl2Emulator`(내장 OPL2), `Opl3Emulator`(18채널 · 4-op · 웨이브폼 8종 · 스테레오), `OplSynth`(보이스→레지스터, 리듬 모드), `Sequencer`, `SopPlayer`(SOP → OPL3), `MusicBoxPlayer`(오르골 시험 연주), `TrackerPlayer`(STM/S3M 샘플 믹서 + AdLib), `AudioEngine`(스테레오 출력), `PlaybackOptions`(속도 · 키 · 채널 조절), `WaveOutPlayer`, `OplMapping` |
 | `AdlibComposer.Notation` | `Score` 모델, `ScoreBuilder`(Song→마디/음표, 붙임줄), `NoteSpelling`(음표 나누기·셋잇단·음 이름), `MusicXmlExporter`, `MidiExporter`, 텍스트 내보내기, `OrgelComb` / `OrgelBuilder`(곡 → 30음 오르골 띠 구멍) |
-| `AdlibComposer.App` | WinForms GUI: `MainForm`, `Shell/`(사이드바 · 로그 · 셸 테마), `ComposerView`, `InstrumentView`, `JukeboxView`, `NoteView`, `PianoRollControl`, `RetroSlider` 등 |
+| `AdlibComposer.App` | WinForms GUI: `MainForm`, `Shell/`(사이드바 · 로그 · 셸 테마), `ComposerView`, `InstrumentView`, `JukeboxView`, `NoteView`, `OrganizerView`, `PianoRollControl`, `RetroSlider` 등 |
 | `tests/AdlibComposer.SelfTest` | 의존성 없는 자체 테스트 + 데모 WAV 렌더러 |
 
 ## 확장 방법

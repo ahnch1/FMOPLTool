@@ -6,7 +6,7 @@ using System.Windows.Forms;
 namespace AdlibComposer.App.Shell;
 
 /// <summary>프로그램의 페이지 (사이드바 메뉴 하나 = 페이지 하나).</summary>
-internal enum AppPage { Composer, Instrument, Jukebox, Note, Orgel, Tracker }
+internal enum AppPage { Composer, Instrument, Jukebox, Note, Orgel, Tracker, Organizer }
 
 /// <summary>
 /// 왼쪽 어두운 사이드바: 프로그램 이름/버전, 구역 머리글(CREATE / PLAY / SCORE), 둥근 아이콘 메뉴.
@@ -58,12 +58,14 @@ internal sealed class NavSidebar : Control
         y = AddSection("CREATE", y);
         y = AddItem(AppPage.Composer, "Composer", "건반 악보 작곡 · 재생 (ROL / IMS)", Glyphs.Composer, false, y);
         y = AddItem(AppPage.Instrument, "Instrument Maker", "FM 악기 편집 · 시음 (BNK / INS)", Glyphs.Instrument, false, y);
-        y = AddItem(AppPage.Tracker, "Tracker", "Scream Tracker 2/3 곡 만들기 (STM / S3M)", Glyphs.Tracker, false, y);
+        y = AddItem(AppPage.Tracker, "Tracker", "트래커 곡 만들기 (S3M / STM / MOD / NST)", Glyphs.Tracker, false, y);
         y = AddSection("PLAY", y + 6);
-        y = AddItem(AppPage.Jukebox, "Jukebox", "폴더의 곡 재생 (ROL · IMS · SOP · S3M · STM) · 가사 · 채널 믹서", Glyphs.Jukebox, false, y);
+        y = AddItem(AppPage.Jukebox, "Jukebox", "폴더의 곡 재생 (ROL · IMS · SOP · S3M · STM · MOD) · 가사 · 채널 믹서", Glyphs.Jukebox, false, y);
         y = AddSection("SCORE", y + 6);
         y = AddItem(AppPage.Note, "Note", "오선 악보 보기 · MusicXML / MIDI / PNG · 인쇄", Glyphs.Note, false, y);
-        AddItem(AppPage.Orgel, "Orgel Note", "30음 오르골 띠 구멍 위치 · 시험 연주 · 실제 크기 인쇄", Glyphs.Orgel, false, y);
+        y = AddItem(AppPage.Orgel, "Orgel Note", "30음 오르골 띠 구멍 위치 · 시험 연주 · 실제 크기 인쇄", Glyphs.Orgel, false, y);
+        y = AddSection("TOOLS", y + 6);
+        AddItem(AppPage.Organizer, "Organizer", "같은 곡 찾기 · 정리 (ROL / IMS / SOP): 삭제 · 이동 · 시뮬레이션", Glyphs.Organizer, false, y);
     }
 
     private int AddSection(string title, int y)

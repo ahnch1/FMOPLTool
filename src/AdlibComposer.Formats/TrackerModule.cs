@@ -670,25 +670,42 @@ public static class S3mFormat
     private static void Put32(byte[] d, int o, int v) { d[o] = (byte)v; d[o + 1] = (byte)(v >> 8); d[o + 2] = (byte)(v >> 16); d[o + 3] = (byte)(v >> 24); }
 }
 
-/// <summary>확장자로 STM / S3M 고르기.</summary>
+/// <summary>확장자로 STM / S3M / MOD · NST 고르기. MOD · NST는 S3M 모델로 읽고 쓴다 (<see cref="ModFormat"/>).</summary>
 public static class TrackerFiles
 {
-    public static readonly string[] Extensions = { ".s3m", ".stm" };
+    public static readonly string[] Extensions = { ".s3m", ".stm", ".mod", ".nst" };
 
     public static bool IsTracker(string path)
     {
         string e = Path.GetExtension(path).ToLowerInvariant();
-        return e == ".s3m" || e == ".stm";
+        return Array.IndexOf(Extensions, e) >= 0;
     }
+
+    /// <summary>파일 대화상자 필터 (읽기).</summary>
+    public const string OpenFilter = "Tracker modules (*.s3m;*.stm;*.mod;*.nst)|*.s3m;*.stm;*.mod;*.nst|S3M (*.s3m)|*.s3m|STM (*.stm)|*.stm|MOD · NST (*.mod;*.nst)|*.mod;*.nst|All files (*.*)|*.*";
+    /// <summary>파일 대화상자 필터 (저장): 1 S3M, 2 STM, 3 MOD, 4 NST.</summary>
+    public const string SaveFilter = "S3M — Scream Tracker 3 (*.s3m)|*.s3m|STM — Scream Tracker 2 (*.stm)|*.stm|MOD — ProTracker (*.mod)|*.mod|NST — NoiseTracker (*.nst)|*.nst";
+
+    /// <summary>MOD · NST 파일인지 (형식 이름 표시용).</summary>
+    public static bool IsMod(string path) { return path != null && ModFormat.IsMod(path); }
 
     public static TrackerModule Load(string path)
     {
+        if (ModFormat.IsMod(path)) return ModFormat.Load(path);
         return string.Equals(Path.GetExtension(path), ".stm", StringComparison.OrdinalIgnoreCase) ? StmFormat.Load(path) : S3mFormat.Load(path);
     }
 
     /// <summary>확장자에 맞는 형식으로 저장 (필요하면 바꾼다). 바꾸면서 잃은 것은 warnings.</summary>
     public static TrackerModule Save(TrackerModule m, string path, List<string> warnings)
     {
+        if (ModFormat.IsMod(path))
+        {
+            var mod = m.ConvertTo(TrackerKind.S3m, warnings);
+            File.WriteAllBytes(path, ModFormat.Write(mod, warnings));
+            // 저장한 MOD를 다시 읽어 편집을 이어 간다 (MOD에 없는 것은 빠진 상태가 보이도록)
+            var back = ModFormat.Load(path);
+            return back;
+        }
         bool stm = string.Equals(Path.GetExtension(path), ".stm", StringComparison.OrdinalIgnoreCase);
         var target = m.ConvertTo(stm ? TrackerKind.Stm : TrackerKind.S3m, warnings);
         File.WriteAllBytes(path, stm ? StmFormat.Write(target) : S3mFormat.Write(target));

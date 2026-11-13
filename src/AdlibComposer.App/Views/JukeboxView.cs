@@ -23,7 +23,7 @@ namespace AdlibComposer.App.Views;
 [System.ComponentModel.DesignerCategory("Code")]   // 코드로 만든 화면: 디자이너 대신 코드로 연다
 internal sealed class JukeboxView : UserControl, IShellPage
 {
-    private static readonly string[] SongExtensions = { ".rol", ".ims", ".sop", ".s3m", ".stm" };
+    private static readonly string[] SongExtensions = { ".rol", ".ims", ".sop", ".s3m", ".stm", ".mod", ".nst" };
 
     private readonly Workspace ws;
     private readonly Func<AppSettings> settings;
@@ -152,7 +152,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
         folderLabel.AutoEllipsis = true;
         folderLabel.Padding = new Padding(8, 3, 4, 0);
         inner.Panel2.Controls.Add(folderLabel);
-        inner.Panel2.Controls.Add(SectionHeader("곡 파일 (ROL · IMS · SOP · S3M · STM)"));
+        inner.Panel2.Controls.Add(SectionHeader("곡 파일 (ROL · IMS · SOP · S3M · STM · MOD)"));
     }
 
     private static Control SectionHeader(string text)
@@ -173,7 +173,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
         AddRoot("ROL 폴더", s.SongFolderPath);
         AddRoot("IMS 폴더", s.ImsFolderPath);
         AddRoot("SOP 폴더", s.SopFolderPath);
-        AddRoot("S3M · STM 폴더", s.TrackerFolderPath);
+        AddRoot("S3M · STM · MOD 폴더", s.TrackerFolderPath);
         var pc = new TreeNode("내 PC");
         try
         {
@@ -566,7 +566,8 @@ internal sealed class JukeboxView : UserControl, IShellPage
         display.BankSameName = false;
         display.LyricFile = null;
         display.TotalSeconds = totalSeconds;
-        display.Mode = (stm ? "STM · Scream Tracker 2 · 4채널" : "S3M · Scream Tracker 3 · " + voiceUsed.Count(u => u) + "/" + channels + "채널")
+        bool modFile = TrackerFiles.IsMod(path);
+        display.Mode = (stm ? "STM · Scream Tracker 2 · 4채널" : modFile ? "MOD · ProTracker · " + channels + "채널" : "S3M · Scream Tracker 3 · " + voiceUsed.Count(u => u) + "/" + channels + "채널")
             + " · 패턴 " + m.Patterns.Count + " · 주문 " + m.PlayOrders().Count;
         lyrics.Lyrics = null;
         lyrics.State = null;
@@ -574,7 +575,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
         seek.Enabled = true;
         RebuildMixerRows();
         MarkPlaying();
-        AppLog.Info("Jukebox", "재생: " + Path.GetFileName(path) + " — " + (stm ? "STM" : "S3M") + " " + channels + "채널, 샘플 " + samples + (adlib > 0 ? ", AdLib " + adlib : "") + ", " + DeckTheme.Clock(totalSeconds));
+        AppLog.Info("Jukebox", "재생: " + Path.GetFileName(path) + " — " + (stm ? "STM" : modFile ? "MOD" : "S3M") + " " + channels + "채널, 샘플 " + samples + (adlib > 0 ? ", AdLib " + adlib : "") + ", " + DeckTheme.Clock(totalSeconds));
         StartAt(0);
     }
 

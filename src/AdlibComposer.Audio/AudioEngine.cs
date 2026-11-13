@@ -62,7 +62,7 @@ public sealed class AudioEngine : IDisposable
         {
             switch (source)
             {
-                case Source.Sop: return sop.IsPlaying;
+                case Source.Sop: return sop.IsPlaying && !sop.IsJam;
                 case Source.MusicBox: return musicBox.IsPlaying;
                 case Source.Tracker: return tracker.IsSongPlaying;
             }
@@ -244,14 +244,73 @@ public sealed class AudioEngine : IDisposable
 
     // ---------------------------------------------------------------- 시음 (Instrument Maker / 건반 클릭)
 
-    public void PreviewSetMode(bool rhythm) { lock (sync) { LeaveSop(); synth.SetRhythmMode(rhythm); } }
-    public void PreviewSetInstrument(int voice, AdlibInstrument ins) { lock (sync) { LeaveSop(); synth.SetInstrument(voice, ins); } }
-    public void PreviewNoteOn(int voice, int note) { lock (sync) { LeaveSop(); if (!SourcePlaying) synth.NoteOn(voice, note); } }
-    public void PreviewNoteOff(int voice) { lock (sync) { if (!SourcePlaying) synth.NoteOff(voice); } }
-    public void PreviewAllOff() { lock (sync) { if (!SourcePlaying) synth.AllNotesOff(); } }
+    // 4-op 악기(SOP)는 OPL2 시음 신디사이저로 낼 수 없어 OPL3(SopPlayer 시음)로 소리 낸다. 멜로디 보이스만.
+    private readonly AdlibInstrument[] previewIns = new AdlibInstrument[OplSynth.VoiceCount];
+    private int jamVoice = -1;
 
-    /// <summary>SOP 재생이 끝났으면 OPL2 쪽(시음)으로 돌아간다.</summary>
-    private void LeaveSop() { if (source != Source.Opl2 && !SourcePlaying) source = Source.Opl2; }
+    private bool Is4OpPreview(int voice)
+    {
+        if (voice < 0 || voice >= previewIns.Length) return false;
+        var ins = previewIns[voice];
+        return ins != null && ins.Is4Op && (!synth.RhythmMode || voice < 6);
+    }
+
+    /// <summary>시음 모드 (리듬 / 멜로디). 4-op 시음 중이면 그 소리는 그대로 둔다 (편집하면서 누르고 있는 음).</summary>
+    public void PreviewSetMode(bool rhythm) { lock (sync) { if (!(source == Source.Sop && sop.IsJam)) LeaveSop(); synth.SetRhythmMode(rhythm); } }
+
+    public void PreviewSetInstrument(int voice, AdlibInstrument ins)
+    {
+        lock (sync)
+        {
+            if (voice >= 0 && voice < previewIns.Length) previewIns[voice] = ins;
+            if (source == Source.Sop && sop.IsJam && voice == jamVoice && ins != null && ins.Is4Op) { sop.JamUpdate(SopConvert.ToSop(ins)); return; }
+            LeaveSop();
+            synth.SetInstrument(voice, ins);
+        }
+    }
+
+    public void PreviewNoteOn(int voice, int note)
+    {
+        lock (sync)
+        {
+            LeaveSop();
+            if (SourcePlaying) return;
+            if (Is4OpPreview(voice))
+            {
+                synth.AllNotesOff();
+                source = Source.Sop;
+                jamVoice = voice;
+                sop.JamOn(SopConvert.ToSop(previewIns[voice]), note);
+                return;
+            }
+            synth.NoteOn(voice, note);
+        }
+    }
+
+    public void PreviewNoteOff(int voice)
+    {
+        lock (sync)
+        {
+            if (source == Source.Sop && sop.IsJam) { if (voice == jamVoice) sop.JamOff(); return; }
+            if (!SourcePlaying) synth.NoteOff(voice);
+        }
+    }
+
+    public void PreviewAllOff()
+    {
+        lock (sync)
+        {
+            if (source == Source.Sop && sop.IsJam) { sop.JamOff(); return; }
+            if (!SourcePlaying) synth.AllNotesOff();
+        }
+    }
+
+    /// <summary>SOP 재생(또는 4-op 시음)이 끝났으면 OPL2 쪽(시음)으로 돌아간다.</summary>
+    private void LeaveSop()
+    {
+        if (source == Source.Sop && sop.IsJam) { sop.Stop(); source = Source.Opl2; return; }
+        if (source != Source.Opl2 && !SourcePlaying) source = Source.Opl2;
+    }
 
     // ---------------------------------------------------------------- 렌더
 

@@ -94,7 +94,8 @@ public sealed class OplOperator
     public void Set(OperatorParameter p, int value)
     {
         var info = ParameterInfo.Get(p);
-        int v = Calc.Clamp(value, info.Min, info.Max);
+        // 웨이브폼은 OPL3(4-op · SOP) 0~7까지 받는다. OPL2 재생은 아래 2비트만 쓴다
+        int v = Calc.Clamp(value, info.Min, p == OperatorParameter.WaveForm ? 7 : info.Max);
         switch (p)
         {
             case OperatorParameter.AttackRate: Attack = v; break;
@@ -114,6 +115,29 @@ public sealed class OplOperator
     }
 
     public OplOperator Clone() { return (OplOperator)MemberwiseClone(); }
+
+    /// <summary>OPL 레지스터 5개 (20 · 40 · 60 · 80 · E0)로. E0은 OPL3 웨이브폼 0~7.</summary>
+    public void ToRegisters(byte[] d, int i)
+    {
+        d[i] = (byte)((Am != 0 ? 0x80 : 0) | (Vib != 0 ? 0x40 : 0) | (Eg != 0 ? 0x20 : 0) | (Ksr != 0 ? 0x10 : 0) | (Multiple & 0x0F));
+        d[i + 1] = (byte)(((Ksl & 3) << 6) | (TotalLevel & 0x3F));
+        d[i + 2] = (byte)(((Attack & 0x0F) << 4) | (Decay & 0x0F));
+        d[i + 3] = (byte)(((Sustain & 0x0F) << 4) | (ReleaseRate & 0x0F));
+        d[i + 4] = (byte)(WaveSelect & 7);
+    }
+
+    /// <summary>OPL 레지스터 5개 (20 · 40 · 60 · 80 · E0)에서. Feedback · Con은 C0에서 따로 채운다.</summary>
+    public static OplOperator FromRegisters(byte[] d, int i)
+    {
+        return new OplOperator
+        {
+            Am = (d[i] >> 7) & 1, Vib = (d[i] >> 6) & 1, Eg = (d[i] >> 5) & 1, Ksr = (d[i] >> 4) & 1, Multiple = d[i] & 0x0F,
+            Ksl = d[i + 1] >> 6, TotalLevel = d[i + 1] & 0x3F,
+            Attack = d[i + 2] >> 4, Decay = d[i + 2] & 0x0F,
+            Sustain = d[i + 3] >> 4, ReleaseRate = d[i + 3] & 0x0F,
+            WaveSelect = d[i + 4] & 7,
+        };
+    }
 }
 
 /// <summary>2-오퍼레이터 FM 악기 1개.</summary>
@@ -142,6 +166,40 @@ public sealed class AdlibInstrument
     public string LongName { get; set; }
 
     public bool Is4Op { get { return Sop4OpPair != null && Sop4OpPair.Length >= 11; } }
+
+    /// <summary>4-op 둘째 짝 (오퍼레이터 3 = 모듈레이터 자리, 4 = 캐리어 자리)을 오퍼레이터로 푼다. Feedback · Con은 짝의 C0에서 (Con 0 = 가산).</summary>
+    public void GetPairOperators(out OplOperator op3, out OplOperator op4)
+    {
+        var d = Sop4OpPair ?? new byte[11];
+        op3 = OplOperator.FromRegisters(d, 0);
+        op4 = OplOperator.FromRegisters(d, 6);
+        op3.Feedback = (d[5] >> 1) & 7;
+        op3.Con = op4.Con = (d[5] & 1) != 0 ? 0 : 1;
+    }
+
+    /// <summary>4-op 둘째 짝을 레지스터 값으로 되돌려 쓴다.</summary>
+    public void SetPairOperators(OplOperator op3, OplOperator op4)
+    {
+        var d = new byte[11];
+        op3.ToRegisters(d, 0);
+        d[5] = (byte)(((op3.Feedback & 7) << 1) | (op3.Con == 0 ? 1 : 0));
+        op4.ToRegisters(d, 6);
+        Sop4OpPair = d;
+    }
+
+    /// <summary>4-op 연결 이름 (OPL3 CNT 비트 두 개: 첫 짝 = Additive, 둘째 짝 = 짝 C0 비트 0).</summary>
+    public string FourOpAlgorithm
+    {
+        get
+        {
+            if (!Is4Op) return Additive ? "1 + 2" : "1 → 2";
+            bool c2 = (Sop4OpPair[5] & 1) != 0;
+            if (!Additive && !c2) return "1→2→3→4";
+            if (Additive && !c2) return "1 + 2→3→4";
+            if (!Additive && c2) return "1→2 + 3→4";
+            return "1 + 2→3 + 4";
+        }
+    }
 
     /// <summary>connector 필드가 0이면 OPL additive(두 오퍼레이터 합산).</summary>
     public bool Additive { get { return Modulator.Con == 0; } }

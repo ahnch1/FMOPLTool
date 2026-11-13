@@ -11,7 +11,7 @@ using AdlibComposer.Formats;
 namespace AdlibComposer.App.Views;
 
 /// <summary>
-/// Tracker 페이지 (CREATE): Scream Tracker 3를 본뜬 STM / S3M 편집기.
+/// Tracker 페이지 (CREATE): Scream Tracker 3를 본뜬 STM / S3M 편집기 (MOD · NST도 S3M 모델로 열고 저장).
 /// F1 = 주문 목록 · 곡 변수 · 채널, F2 = 패턴 편집, F3 = 악기 목록 (샘플 WAV 불러오기/저장, AdLib 파라미터).
 /// F5 = 곡 재생, F6 = 패턴 재생, F7 = 커서부터, F8 = 정지 (ST3 키). 새 곡 S3M/STM, 열기, 저장(확장자에 맞게 바꿔 저장).
 /// </summary>
@@ -189,7 +189,7 @@ internal sealed class TrackerView : UserControl, IShellPage
     private void OpenFile()
     {
         if (!ConfirmDiscard()) return;
-        using (var dlg = new OpenFileDialog { Filter = "Scream Tracker (*.s3m;*.stm)|*.s3m;*.stm|S3M (*.s3m)|*.s3m|STM (*.stm)|*.stm|All files (*.*)|*.*", Title = "Scream Tracker 곡 열기" })
+        using (var dlg = new OpenFileDialog { Filter = TrackerFiles.OpenFilter, Title = "트래커 곡 열기 (S3M · STM · MOD · NST)" })
         {
             string dir = settings().TrackerFolderPath;
             if (Directory.Exists(dir)) dlg.InitialDirectory = dir;
@@ -216,6 +216,15 @@ internal sealed class TrackerView : UserControl, IShellPage
         }
     }
 
+    /// <summary>저장 대화상자 기본 형식: 지금 파일의 확장자 (MOD 3, NST 4), 없으면 곡 종류.</summary>
+    private int SaveFilterIndex()
+    {
+        string ext = module.FilePath != null ? Path.GetExtension(module.FilePath).ToLowerInvariant() : "";
+        if (ext == ".mod") return 3;
+        if (ext == ".nst") return 4;
+        return module.Kind == TrackerKind.Stm ? 2 : 1;
+    }
+
     private bool Save(bool saveAs)
     {
         CommitOrderEdits();
@@ -224,8 +233,8 @@ internal sealed class TrackerView : UserControl, IShellPage
         {
             using (var dlg = new SaveFileDialog
             {
-                Filter = "S3M — Scream Tracker 3 (*.s3m)|*.s3m|STM — Scream Tracker 2 (*.stm)|*.stm",
-                FilterIndex = module.Kind == TrackerKind.Stm ? 2 : 1, AddExtension = true, Title = "Scream Tracker 곡 저장",
+                Filter = TrackerFiles.SaveFilter,
+                FilterIndex = SaveFilterIndex(), AddExtension = true, Title = "Scream Tracker 곡 저장",
                 FileName = Path.GetFileNameWithoutExtension(DisplayName),
             })
             {
@@ -239,7 +248,7 @@ internal sealed class TrackerView : UserControl, IShellPage
         {
             var warnings = new List<string>();
             var saved = TrackerFiles.Save(module, path, warnings);
-            bool converted = saved.Kind != module.Kind;
+            bool converted = saved.Kind != module.Kind || TrackerFiles.IsMod(path);
             module = saved;
             dirty = false;
             if (converted) Bind(); else UpdateHeader();

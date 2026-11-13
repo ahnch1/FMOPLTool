@@ -49,26 +49,9 @@ public static class SopConvert
         return new SopInstrument { Type = type, ShortName = a.Name ?? "", LongName = a.LongName ?? "", Data = d };
     }
 
-    private static OplOperator ToOperator(byte[] d, int i)
-    {
-        return new OplOperator
-        {
-            Am = (d[i] >> 7) & 1, Vib = (d[i] >> 6) & 1, Eg = (d[i] >> 5) & 1, Ksr = (d[i] >> 4) & 1, Multiple = d[i] & 0x0F,
-            Ksl = d[i + 1] >> 6, TotalLevel = d[i + 1] & 0x3F,
-            Attack = d[i + 2] >> 4, Decay = d[i + 2] & 0x0F,
-            Sustain = d[i + 3] >> 4, ReleaseRate = d[i + 3] & 0x0F,
-            WaveSelect = d[i + 4] & 7,
-        };
-    }
+    private static OplOperator ToOperator(byte[] d, int i) { return OplOperator.FromRegisters(d, i); }
 
-    private static void FromOperator(OplOperator op, byte[] d, int i)
-    {
-        d[i] = (byte)((op.Am != 0 ? 0x80 : 0) | (op.Vib != 0 ? 0x40 : 0) | (op.Eg != 0 ? 0x20 : 0) | (op.Ksr != 0 ? 0x10 : 0) | (op.Multiple & 0x0F));
-        d[i + 1] = (byte)(((op.Ksl & 3) << 6) | (op.TotalLevel & 0x3F));
-        d[i + 2] = (byte)(((op.Attack & 0x0F) << 4) | (op.Decay & 0x0F));
-        d[i + 3] = (byte)(((op.Sustain & 0x0F) << 4) | (op.ReleaseRate & 0x0F));
-        d[i + 4] = (byte)(op.WaveSelect & 7);
-    }
+    private static void FromOperator(OplOperator op, byte[] d, int i) { op.ToRegisters(d, i); }
 
     // ------------------------------------------------------------ SOP → Song
 

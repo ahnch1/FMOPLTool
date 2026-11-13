@@ -119,6 +119,40 @@ public sealed class SopPlayer
     public SopPlayer(Opl3Emulator chip) { this.chip = chip; }
 
     public bool IsPlaying { get { return playing; } }
+    /// <summary>시음 중 (곡 재생이 아님): <see cref="JamOn"/>.</summary>
+    public bool IsJam { get; private set; }
+
+    /// <summary>
+    /// 시음: 악기 하나를 트랙 0(4-op면 채널 0+3 짝)에 실어 음 하나를 친다. 끝나지 않고 <see cref="JamOff"/>까지 울린다.
+    /// Instrument Maker / Composer에서 4-op 악기를 OPL3로 들을 때 쓴다.
+    /// </summary>
+    public void JamOn(SopInstrument ins, int note)
+    {
+        bool four = ins.Is4Op;
+        if (!IsJam || song == null || song.Tracks[0].ChannelMode != (four ? 1 : 2))
+        {
+            song = new SopSong { BasicTempo = 120, TickBeat = 1, Tracks = new[] { new SopTrack { ChannelMode = four ? 1 : 2 } } };
+            options = new PlaybackOptions();
+            events.Clear();
+            ResetChip();
+        }
+        IsJam = true;
+        if (keyOn[0]) KeyOffRegister(0);
+        keyOn[0] = false;
+        SetVoiceTimbre(0, ins);
+        next = 0; tick = 0; ticksPerSample = 0; endTick = int.MaxValue; ending = false; tailSamples = 0;
+        playing = true;
+        NoteOn(0, note, 0);
+    }
+
+    /// <summary>시음 중 악기 값이 바뀌었을 때 (누르고 있는 음에 바로 반영).</summary>
+    public void JamUpdate(SopInstrument ins)
+    {
+        if (!IsJam || song == null || ins.Is4Op != op4[0]) return;
+        SetVoiceTimbre(0, ins);
+    }
+
+    public void JamOff() { if (IsJam) KeyOff(0); }
     public double PositionTick { get { return tick; } }
     public PlaybackOptions Options { get { return options; } }
     public SopSong Song { get { return song; } }
@@ -129,6 +163,7 @@ public sealed class SopPlayer
 
     public void Start(SopSong s, int startTick, PlaybackOptions opts = null)
     {
+        IsJam = false;
         song = s;
         options = opts ?? new PlaybackOptions();
         BuildEvents();
@@ -142,6 +177,7 @@ public sealed class SopPlayer
     public void Stop()
     {
         playing = false;
+        IsJam = false;
         AllNotesOff();
     }
 

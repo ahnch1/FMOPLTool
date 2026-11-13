@@ -20,6 +20,8 @@ namespace AdlibComposer.App.Views;
 /// 스네어/탐탐/심벌/하이햇 모드는 단일 오퍼레이터라 Carrier 열 하나만 보인다
 /// (값은 BNK의 모듈레이터 필드에 저장됨 — 실제 STANDARD.BNK snare1/tom1/cymbal1/hihat1로 확인).
 /// 예전의 &lt; &gt; 버튼과 List... 대화상자 대신 왼쪽 목록에서 고르고 편집한다 (↑ ↓로도 이동).
+/// 4-op (SOP · OPL3, 이 프로그램의 추가 기능): 4-Op 버튼으로 켜고, Op 1·2 / Op 3·4 버튼으로 두 짝을 번갈아 편집한다.
+/// Additive는 지금 보이는 짝의 연결 비트 (OPL3 CNT 두 개 = 연결 4가지). 4-op 악기는 OPL3로 시음한다.
 /// </summary>
 [System.ComponentModel.DesignerCategory("Code")]   // 코드로 만든 화면: 디자이너 대신 코드로 연다
 internal sealed class InstrumentView : UserControl
@@ -62,6 +64,14 @@ internal sealed class InstrumentView : UserControl
     private readonly TextBox txtName = new TextBox();
     private readonly List<Button> modeButtons = new List<Button>();
     private readonly Button btnAdditive = new Button();
+    private readonly Button btn4Op = new Button();
+    private readonly Button btnPair12 = new Button();
+    private readonly Button btnPair34 = new Button();
+    private readonly Label lblAlgo = new Label();
+    /// <summary>4-op 악기의 둘째 짝(오퍼레이터 3·4)을 편집 중인지.</summary>
+    private bool showPair2;
+    /// <summary>둘째 짝을 푼 오퍼레이터 (편집하면 <see cref="AdlibInstrument.SetPairOperators"/>로 되돌려 쓴다).</summary>
+    private OplOperator pairOp3, pairOp4;
     private readonly Button btnOctDown = new Button();
     private readonly Button btnOctUp = new Button();
     private readonly Label lblRange = new Label();
@@ -117,7 +127,51 @@ internal sealed class InstrumentView : UserControl
     {
         if (current == null) return null;
         if (SingleOperator) return current.Modulator;
+        if (EditingPair2) return carrierColumn ? pairOp4 : pairOp3;
         return current.GetOperator(carrierColumn);
+    }
+
+    /// <summary>4-op는 멜로디 모드에서만 (드럼 채널은 짝을 지을 수 없다).</summary>
+    public bool FourOpAvailable { get { return current != null && previewVoice == 0; } }
+
+    private bool EditingPair2 { get { return showPair2 && current != null && current.Is4Op && pairOp3 != null && previewVoice == 0; } }
+
+    /// <summary>4-Op 켜기 / 끄기. 켜면 오퍼레이터 3·4를 1·2와 같은 값으로 시작한다.</summary>
+    public void Toggle4Op()
+    {
+        if (!FourOpAvailable) return;
+        if (current.Is4Op)
+        {
+            if (MessageBox.Show(FindForm(), "'" + current.Name + "'의 오퍼레이터 3·4를 지우고 2-op 악기로 바꿀까요?", "4-Op",
+                    MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+            current.Sop4OpPair = null;
+            showPair2 = false;
+        }
+        else
+        {
+            var op3 = current.Modulator.Clone();
+            var op4 = current.Carrier.Clone();
+            op3.Con = op4.Con = 1;   // 둘째 짝은 FM으로 시작 (1→2→3→4 또는 1 + 2→3→4)
+            current.SetPairOperators(op3, op4);
+        }
+        LoadPair();
+        Edited();
+        Bind(current);
+    }
+
+    /// <summary>Op 1·2 / Op 3·4 짝 고르기 (4-op 악기).</summary>
+    public void ShowPair(bool second)
+    {
+        if (second && (current == null || !current.Is4Op)) return;
+        if (showPair2 == second) return;
+        showPair2 = second;
+        Bind(current);
+    }
+
+    private void LoadPair()
+    {
+        if (current != null && current.Is4Op) current.GetPairOperators(out pairOp3, out pairOp4);
+        else { pairOp3 = pairOp4 = null; showPair2 = false; }
     }
 
     /// <summary>Option → Melodic/Bass Drum/.../Hi-hat Mode: 시음 보이스를 바꾸고 악기의 퍼커션 정보(BNK iPercussive/iVoiceNum)에 기록한다.</summary>
@@ -143,12 +197,13 @@ internal sealed class InstrumentView : UserControl
     /// <summary>Option → Additive Synthesis (connection 비트). 멜로딕/베이스드럼 모드에서만 의미가 있다.</summary>
     public bool Additive
     {
-        get { return current != null && current.Additive; }
+        get { return current != null && (EditingPair2 ? pairOp3.Con == 0 : current.Additive); }
         set
         {
-            if (current == null || current.Additive == value) return;
+            if (current == null || Additive == value) return;
             int con = value ? 0 : 1;
-            current.Modulator.Con = con; current.Carrier.Con = con;
+            if (EditingPair2) { pairOp3.Con = con; pairOp4.Con = con; }
+            else { current.Modulator.Con = con; current.Carrier.Con = con; }
             Edited();
             UpdateOptionButtons();
             if (ModeChanged != null) ModeChanged();
@@ -233,8 +288,28 @@ internal sealed class InstrumentView : UserControl
         x += 10;
         Setup(btnAdditive, "Additive", x, y, 68, h);
         btnAdditive.Click += delegate { if (AdditiveAvailable) Additive = !Additive; };
-        tips.SetToolTip(btnAdditive, "Additive Synthesis (F6): 모듈레이터와 캐리어 소리를 더한다 (Melodic · Bass Drum 모드)");
+        tips.SetToolTip(btnAdditive, "Additive Synthesis (F6): 모듈레이터와 캐리어 소리를 더한다 (Melodic · Bass Drum 모드). 4-op면 지금 보이는 짝의 연결");
         x += 68 + 10;
+        Setup(btn4Op, "4-Op", x, y, 48, h);
+        btn4Op.Click += delegate { Toggle4Op(); };
+        tips.SetToolTip(btn4Op, "4-오퍼레이터 악기 (SOP · OPL3): 켜기 / 끄기. Melodic 모드만. BNK · INS에는 저장되지 않고 SOP 곡에 들어간다");
+        x += 47;
+        Setup(btnPair12, "Op 1·2", x, y, 54, h);
+        btnPair12.Click += delegate { ShowPair(false); };
+        tips.SetToolTip(btnPair12, "오퍼레이터 1 (Modulator) · 2 (Carrier) 편집 (F3)");
+        x += 53;
+        Setup(btnPair34, "Op 3·4", x, y, 54, h);
+        btnPair34.Click += delegate { ShowPair(true); };
+        tips.SetToolTip(btnPair34, "오퍼레이터 3 (Modulator) · 4 (Carrier) 편집 (F4)");
+        x += 58;
+        lblAlgo.Font = Theme.SmallFont;
+        lblAlgo.ForeColor = Muted;
+        lblAlgo.AutoSize = false;
+        lblAlgo.TextAlign = ContentAlignment.MiddleLeft;
+        lblAlgo.SetBounds(x, y, 86, h);
+        tips.SetToolTip(lblAlgo, "연결 (→ = 변조, + = 소리를 더함). 첫 짝 Additive + 둘째 짝 Additive로 4가지");
+        Controls.Add(lblAlgo);
+        x += 90;
         Setup(btnOctDown, "Oct −", x, y, 46, h);
         btnOctDown.Click += delegate { TransposeKeyboard(-1); };
         tips.SetToolTip(btnOctDown, "Transpose Keyboard Down (PgDn)");
@@ -290,6 +365,13 @@ internal sealed class InstrumentView : UserControl
         for (int i = 0; i < modeButtons.Count; i++) SetOn(modeButtons[i], ModeVoices[i] == previewVoice);
         SetOn(btnAdditive, Additive && AdditiveAvailable);
         btnAdditive.Enabled = AdditiveAvailable;
+        bool four = current != null && current.Is4Op;
+        btn4Op.Enabled = FourOpAvailable;
+        SetOn(btn4Op, four);
+        btnPair12.Enabled = btnPair34.Enabled = four && FourOpAvailable;
+        SetOn(btnPair12, four && FourOpAvailable && !EditingPair2);
+        SetOn(btnPair34, EditingPair2);
+        lblAlgo.Text = current == null || SingleOperator ? "" : current.FourOpAlgorithm;
         lblRange.Text = "from " + NoteHelper.Name(baseNote);
     }
 
@@ -350,6 +432,7 @@ internal sealed class InstrumentView : UserControl
 
     private static string ModeText(AdlibInstrument i)
     {
+        if (i.Is4Op) return "4-op";
         if (!i.Percussive) return "Melodic";
         switch (i.VoiceNum) { case 6: return "BD"; case 7: return "SD"; case 8: return "Tom"; case 9: return "Cymbal"; case 10: return "Hi-hat"; }
         return "Melodic";
@@ -505,6 +588,15 @@ internal sealed class InstrumentView : UserControl
         return c;
     }
 
+    /// <summary>열 머리글: 4-op 악기는 오퍼레이터 번호를 붙인다.</summary>
+    private void UpdateHeaderText()
+    {
+        bool four = current != null && current.Is4Op && !SingleOperator;
+        if (!four) { carrierHeader.Text = "F1  Carrier"; modulatorHeader.Text = "F2  Modulator"; return; }
+        carrierHeader.Text = EditingPair2 ? "F1  Op 4  Carrier" : "F1  Op 2  Carrier";
+        modulatorHeader.Text = EditingPair2 ? "F2  Op 3  Modulator" : "F2  Op 1  Modulator";
+    }
+
     private void UpdateHeaderHighlight()
     {
         carrierHeader.BackColor = activeCarrier ? Color.Black : Color.White;
@@ -521,17 +613,28 @@ internal sealed class InstrumentView : UserControl
     {
         bool changed = !ReferenceEquals(current, ins);
         current = ins;
-        if (changed && ins != null)
+        if (changed)
         {
-            int mode = ins.Percussive && ins.VoiceNum >= 6 && ins.VoiceNum <= 10 ? ins.VoiceNum : 0;
-            if (mode != previewVoice) { ws.Audio.PreviewAllOff(); previewVoice = mode; ApplyLayout(); ApplyModeRange(); }
+            showPair2 = false;
+            if (ins != null)
+            {
+                int mode = ins.Percussive && ins.VoiceNum >= 6 && ins.VoiceNum <= 10 ? ins.VoiceNum : 0;
+                if (mode != previewVoice) { ws.Audio.PreviewAllOff(); previewVoice = mode; ApplyLayout(); ApplyModeRange(); }
+            }
         }
+        LoadPair();
+        UpdateHeaderText();
         binding = true;
         try
         {
             txtName.Text = ins != null ? ins.Name : "";
             foreach (var r in rows)
             {
+                // 웨이브폼: 4-op(OPL3) 악기는 0~7, 나머지(OPL2)는 0~3
+                var wave = r.Info.Id == OperatorParameter.WaveForm;
+                int waveMax = ins != null && ins.Is4Op ? 7 : 3;
+                if (wave && r.Carrier is RetroSlider) ((RetroSlider)r.Carrier).Maximum = waveMax;
+                if (wave && r.Modulator is RetroSlider) ((RetroSlider)r.Modulator).Maximum = waveMax;
                 SetControl(r.Carrier, ins, OpFor(true), r.Info);
                 SetControl(r.Modulator, ins, OpFor(false), r.Info);
             }
@@ -594,6 +697,7 @@ internal sealed class InstrumentView : UserControl
 
     private void Edited()
     {
+        if (EditingPair2) current.SetPairOperators(pairOp3, pairOp4);
         ws.BankDirty = true;
         ApplyPreview();
         RefreshFileInfo();

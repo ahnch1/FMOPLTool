@@ -35,6 +35,7 @@ public static class Program
         JukeboxTests.Run(Check);
         SopTests.Run(Check);
         SopComposeTests.Run(Check);
+        FeatureTests.Run(Check);
         OrgelTests.Run(Check);
         TrackerTests.Run(Check);
         TestRegistry();

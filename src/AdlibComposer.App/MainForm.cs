@@ -44,6 +44,7 @@ internal sealed class MainForm : Form
     private readonly JukeboxView jukebox;
     private readonly OrgelView orgel;
     private readonly TrackerView trackerView;
+    private readonly OrganizerView organizer;
     private readonly NoteView note;
     private ToolStripButton tbPlay, tbStop;
 
@@ -87,6 +88,7 @@ internal sealed class MainForm : Form
         jukebox = new JukeboxView(ws, delegate { return settings; }, TryOpenAudio) { Dock = DockStyle.Fill, Visible = false };
         note = new NoteView(ws, delegate { return settings.FolderForSong(ws.Song.FilePath); }) { Dock = DockStyle.Fill, Visible = false };
         trackerView = new TrackerView(ws, delegate { return settings; }, TryOpenAudio) { Dock = DockStyle.Fill, Visible = false };
+        organizer = new OrganizerView(delegate { return settings; }) { Dock = DockStyle.Fill, Visible = false };
         orgel = new OrgelView(ws, TryOpenAudio, delegate { return settings.FolderForSong(ws.Song.FilePath); }) { Dock = DockStyle.Fill, Visible = false };
         note.NoteActivated += delegate (int voice, int tick, int pitch) { ShowPage(AppPage.Composer); composer.GoTo(voice, tick, pitch); };
 
@@ -139,7 +141,7 @@ internal sealed class MainForm : Form
         sidebar.PageSelected += ShowPage;
 
         pageHost.Dock = DockStyle.Fill;
-        pageHost.Controls.AddRange(new Control[] { composer, instrument, jukebox, note, orgel, trackerView });
+        pageHost.Controls.AddRange(new Control[] { composer, instrument, jukebox, note, orgel, trackerView, organizer });
 
         logPanel.Dock = DockStyle.Bottom;
         logPanel.Height = 140;
@@ -228,6 +230,7 @@ internal sealed class MainForm : Form
         note.Visible = target == AppPage.Note;
         orgel.Visible = target == AppPage.Orgel;
         trackerView.Visible = target == AppPage.Tracker;
+        organizer.Visible = target == AppPage.Organizer;
         if (target == AppPage.Instrument) instrument.ApplyPreview();
         var shown = PageControl(target) as IShellPage;
         if (shown != null) shown.OnShown();
@@ -247,6 +250,7 @@ internal sealed class MainForm : Form
             case AppPage.Note: return note;
             case AppPage.Orgel: return orgel;
             case AppPage.Tracker: return trackerView;
+            case AppPage.Organizer: return organizer;
         }
         return composer;
     }
@@ -529,6 +533,7 @@ internal sealed class MainForm : Form
         helpMenu.DropDownItems.Add(Item("About", delegate { About(); }));
 
         helpMenu.DropDownItems.Insert(0, new ToolStripSeparator());
+        helpMenu.DropDownItems.Insert(0, Item("Organizer", delegate { ShowPage(AppPage.Organizer); }, Keys.None, "Ctrl+7"));
         helpMenu.DropDownItems.Insert(0, Item("Tracker", delegate { ShowPage(AppPage.Tracker); }, Keys.None, "Ctrl+6"));
         helpMenu.DropDownItems.Insert(0, Item("Orgel Note", delegate { ShowPage(AppPage.Orgel); }, Keys.None, "Ctrl+5"));
         helpMenu.DropDownItems.Insert(0, Item("Note", delegate { ShowPage(AppPage.Note); }, Keys.None, "Ctrl+4"));
@@ -825,12 +830,15 @@ internal sealed class MainForm : Form
             case Keys.F10: helpMenu.ShowDropDown(); return true;
             case Keys.F1: if (instrumentMode) { instrument.FocusColumn(true); return true; } break;
             case Keys.F2: if (instrumentMode) { instrument.FocusColumn(false); return true; } break;
+            case Keys.F3: if (instrumentMode) { instrument.ShowPair(false); return true; } break;   // 4-op: 오퍼레이터 1·2
+            case Keys.F4: if (instrumentMode) { instrument.ShowPair(true); return true; } break;    // 4-op: 오퍼레이터 3·4
             case Keys.Control | Keys.D1: ShowPage(AppPage.Composer); return true;
             case Keys.Control | Keys.D2: ShowPage(AppPage.Instrument); return true;
             case Keys.Control | Keys.D3: ShowPage(AppPage.Jukebox); return true;
             case Keys.Control | Keys.D4: ShowPage(AppPage.Note); return true;
             case Keys.Control | Keys.D5: ShowPage(AppPage.Orgel); return true;
             case Keys.Control | Keys.D6: ShowPage(AppPage.Tracker); return true;
+            case Keys.Control | Keys.D7: ShowPage(AppPage.Organizer); return true;
             case Keys.Space: if (composerMode && !text) { TogglePlay(); return true; } break;
             case Keys.Shift | Keys.Space:
                 if (composerMode && !text)
@@ -1042,6 +1050,9 @@ internal sealed class MainForm : Form
                 path = dlg.FileName;
             }
         }
+        int fourOps = 0;
+        foreach (var i in ws.Bank.Instruments) if (i.IsUsed && i.Is4Op) fourOps++;
+        if (fourOps > 0) AppLog.Warn("뱅크", "4-op 악기 " + fourOps + "개는 BNK에 오퍼레이터 1·2만 저장됩니다 (3·4는 SOP 곡으로 저장할 때만 들어감)");
         try { ws.SaveBank(path); LogBank("저장"); UpdateStatus(); return true; }
         catch (Exception ex) { Fail("뱅크를 저장할 수 없습니다.", ex); return false; }
     }
@@ -1063,6 +1074,7 @@ internal sealed class MainForm : Form
         using (var dlg = new SaveFileDialog { Filter = FormatRegistry.BuildFilter(ws.Formats.Instruments), DefaultExt = "ins", FileName = ins.Name + ".ins", Title = "Export instrument", InitialDirectory = StartDir(ws.Bank.FilePath, settings.BankFolderPath) })
         {
             if (dlg.ShowDialog(this) != DialogResult.OK) return;
+            if (ins.Is4Op) AppLog.Warn("악기", ins.Name + ": 4-op 악기는 INS에 오퍼레이터 1·2만 저장됩니다");
             try { ws.ExportInstrument(dlg.FileName, ins); AppLog.Info("악기", "내보내기: " + ins.Name + " → " + dlg.FileName); }
             catch (Exception ex) { Fail("악기를 내보낼 수 없습니다.", ex); }
         }

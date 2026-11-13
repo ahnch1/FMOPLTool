@@ -144,7 +144,8 @@ LoadDefaultBank=true
   (STANDARD.BNK의 snare1/tom1/cymbal1/hihat1에서 실제 값이 모듈레이터 쪽에 있고 캐리어 쪽은 bdrum과 같은 남은 값인 것으로 확인)
 - 드럼 모드(Bass Drum ~ Hi-hat)는 건반이 C2부터 시작한다 (멜로딕으로 돌아오면 이전 옥타브)
 - Bass Drum 모드는 두 열(Carrier + Modulator)이 보인다 — 원본과 같음 (OPL도 두 오퍼레이터를 쓰고, bdrum/bdrum1도 두 쪽 모두 실제 값)
-- `List...`로 뱅크 안 악기 선택/추가/복사/이름변경/삭제
+- 화면 위: 뱅크 파일 정보(파일 이름 · 폴더 · 악기 수 · 지금 악기 번호 · 이름 칸), 그 아래 F6 Option 메뉴를 버튼으로 (모드 6개 · Additive · 건반 Oct −/+ · Master Volume)
+- 왼쪽: 뱅크 악기 목록(번호 · 이름 · 모드, ↑ ↓로 이동) + New / Copy / Rename / Delete (예전 `List...` 대화상자와 `< >` 버튼 대신)
 
 ## 구조
 

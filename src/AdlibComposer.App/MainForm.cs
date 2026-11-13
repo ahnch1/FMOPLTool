@@ -41,6 +41,7 @@ internal sealed class MainForm : Form
     private readonly LogPanel logPanel = new LogPanel();
     private readonly Splitter logSplitter = new Splitter();
     private readonly JukeboxView jukebox;
+    private readonly OrgelView orgel;
     private readonly NoteView note;
     private ToolStripButton tbPlay, tbStop;
 
@@ -83,6 +84,7 @@ internal sealed class MainForm : Form
         instrument = new InstrumentView(ws) { Dock = DockStyle.Fill, Visible = false };
         jukebox = new JukeboxView(ws, delegate { return settings; }, TryOpenAudio) { Dock = DockStyle.Fill, Visible = false };
         note = new NoteView(ws, delegate { return settings.FolderForSong(ws.Song.FilePath); }) { Dock = DockStyle.Fill, Visible = false };
+        orgel = new OrgelView(ws, TryOpenAudio, delegate { return settings.FolderForSong(ws.Song.FilePath); }) { Dock = DockStyle.Fill, Visible = false };
         note.NoteActivated += delegate (int voice, int tick, int pitch) { ShowPage(AppPage.Composer); composer.GoTo(voice, tick, pitch); };
 
         BuildMenu();
@@ -134,7 +136,7 @@ internal sealed class MainForm : Form
         sidebar.PageSelected += ShowPage;
 
         pageHost.Dock = DockStyle.Fill;
-        pageHost.Controls.AddRange(new Control[] { composer, instrument, jukebox, note });
+        pageHost.Controls.AddRange(new Control[] { composer, instrument, jukebox, note, orgel });
 
         logPanel.Dock = DockStyle.Bottom;
         logPanel.Height = 140;
@@ -221,6 +223,7 @@ internal sealed class MainForm : Form
         instrument.Visible = target == AppPage.Instrument;
         jukebox.Visible = target == AppPage.Jukebox;
         note.Visible = target == AppPage.Note;
+        orgel.Visible = target == AppPage.Orgel;
         if (target == AppPage.Instrument) instrument.ApplyPreview();
         var shown = PageControl(target) as IShellPage;
         if (shown != null) shown.OnShown();
@@ -238,13 +241,14 @@ internal sealed class MainForm : Form
             case AppPage.Instrument: return instrument;
             case AppPage.Jukebox: return jukebox;
             case AppPage.Note: return note;
+            case AppPage.Orgel: return orgel;
         }
         return composer;
     }
 
     private void UpdateHeader()
     {
-        string name = page == AppPage.Instrument ? "Instrument Maker" : page.ToString();
+        string name = page == AppPage.Instrument ? "Instrument Maker" : page == AppPage.Orgel ? "Orgel Note" : page.ToString();
         headerTitle.Text = name + "  —  " + sidebar.HintFor(page);
     }
 
@@ -516,6 +520,7 @@ internal sealed class MainForm : Form
         helpMenu.DropDownItems.Add(Item("About", delegate { About(); }));
 
         helpMenu.DropDownItems.Insert(0, new ToolStripSeparator());
+        helpMenu.DropDownItems.Insert(0, Item("Orgel Note", delegate { ShowPage(AppPage.Orgel); }, Keys.None, "Ctrl+5"));
         helpMenu.DropDownItems.Insert(0, Item("Note", delegate { ShowPage(AppPage.Note); }, Keys.None, "Ctrl+4"));
         helpMenu.DropDownItems.Insert(0, Item("Jukebox", delegate { ShowPage(AppPage.Jukebox); }, Keys.None, "Ctrl+3"));
         helpMenu.DropDownItems.Insert(0, Item("Instrument Maker", delegate { ShowPage(AppPage.Instrument); }, Keys.None, "Ctrl+2"));
@@ -672,7 +677,7 @@ internal sealed class MainForm : Form
         {
             Text = "FMOPL Tool - Instrument Maker - " + bankName + (instrument.Current != null ? " [" + instrument.Current.Name + "]" : "");
         }
-        else Text = "FMOPL Tool - " + page;
+        else Text = "FMOPL Tool - " + (page == AppPage.Orgel ? "Orgel Note" : page.ToString());
         composer.RefreshLabels();
     }
 
@@ -780,6 +785,7 @@ internal sealed class MainForm : Form
             case Keys.Control | Keys.D2: ShowPage(AppPage.Instrument); return true;
             case Keys.Control | Keys.D3: ShowPage(AppPage.Jukebox); return true;
             case Keys.Control | Keys.D4: ShowPage(AppPage.Note); return true;
+            case Keys.Control | Keys.D5: ShowPage(AppPage.Orgel); return true;
             case Keys.Space: if (composerMode && !text) { TogglePlay(); return true; } break;
             case Keys.Shift | Keys.Space:
                 if (composerMode && !text)

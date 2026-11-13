@@ -1,11 +1,12 @@
 using System;
+using System.Collections.Generic;
 using AdlibComposer.Core;
 using AdlibComposer.Formats;
 
 namespace AdlibComposer.Audio;
 
 /// <summary>
-/// 오디오 엔진: OplSynth + Sequencer (ROL/IMS, OPL2) 또는 SopPlayer (SOP, OPL3) + 출력 장치(스테레오).
+/// 오디오 엔진: OplSynth + Sequencer (ROL/IMS, OPL2), SopPlayer (SOP, OPL3), MusicBoxPlayer (오르골 시험 연주) 중 하나 + 출력 장치(스테레오).
 /// UI 스레드와 오디오 스레드가 같은 락을 쓴다.
 /// Render()만 단독으로 호출하면 장치 없이 오프라인 렌더링도 가능 (테스트용).
 /// </summary>
@@ -19,8 +20,13 @@ public sealed class AudioEngine : IDisposable
     /// <summary>SOP는 최대 20트랙이 함께 울려 OPL2 곡보다 크다: 칩 출력을 줄여 SoftClip에 덜 걸리게 한다.</summary>
     private readonly Opl3Emulator opl3 = new Opl3Emulator { MasterGain = 0.6 };
     private readonly SopPlayer sop;
-    /// <summary>true면 SOP(OPL3) 쪽을 소리 낸다. 시음이나 ROL/IMS 재생을 시작하면 false.</summary>
-    private bool sopMode;
+    private readonly MusicBoxPlayer musicBox = new MusicBoxPlayer();
+    /// <summary>소리를 내는 쪽. 시음이나 ROL/IMS 재생을 시작하면 Opl2.</summary>
+    private enum Source { Opl2, Sop, MusicBox }
+    private Source source = Source.Opl2;
+    private bool sopMode { get { return source == Source.Sop; } }
+    /// <summary>오르골 소리(−1~1)를 16bit 쪽 크기로.</summary>
+    private const double MusicBoxScale = 7000;
     private WaveOutPlayer player;
     private double resamplePos;
     private double prevL, curL, prevR, curR;
@@ -49,8 +55,15 @@ public sealed class AudioEngine : IDisposable
     public bool IsDeviceOpen { get { return player != null && player.IsOpen; } }
     public bool IsPlaying { get { lock (sync) { return SourcePlaying; } } }
 
-    private bool SourcePlaying { get { return sopMode ? sop.IsPlaying : sequencer.IsPlaying; } }
-    private double SourceTick { get { return sopMode ? sop.PositionTick : sequencer.PositionTick; } }
+    private bool SourcePlaying
+    {
+        get { return source == Source.Sop ? sop.IsPlaying : source == Source.MusicBox ? musicBox.IsPlaying : sequencer.IsPlaying; }
+    }
+
+    private double SourceTick
+    {
+        get { return source == Source.Sop ? sop.PositionTick : source == Source.MusicBox ? musicBox.PositionTick : sequencer.PositionTick; }
+    }
 
     /// <summary>지금 스피커에서 들리는 위치(틱). 장치가 없으면 시퀀서 위치.</summary>
     public double PositionTick
@@ -92,7 +105,9 @@ public sealed class AudioEngine : IDisposable
     {
         lock (sync)
         {
-            if (sopMode) { sop.Stop(); sopMode = false; }
+            if (source == Source.Sop) sop.Stop();
+            if (source == Source.MusicBox) musicBox.Stop();
+            source = Source.Opl2;
             Func<string, AdlibInstrument> resolver = name => bank != null ? bank.Find(name) : null;
             sequencer.Start(song, resolver, startTick, loopStart, loopEnd, onlyVoice, options);
             generation++;
@@ -106,16 +121,34 @@ public sealed class AudioEngine : IDisposable
         lock (sync)
         {
             if (sequencer.IsPlaying) sequencer.Stop();
-            sopMode = true;
+            musicBox.Stop();
+            source = Source.Sop;
             sop.Start(song, Math.Max(0, startTick), options);
             generation++;
             this.startTick = Math.Max(0, startTick);
         }
     }
 
+    /// <summary>오르골 시험 연주: (틱, 음 번호) 목록을 빗살 소리로. ticksPerSecond = 돌리는 속도.</summary>
+    public void PlayMusicBox(IEnumerable<KeyValuePair<int, int>> hits, double ticksPerSecond, int startTick, int endTick)
+    {
+        lock (sync)
+        {
+            if (sequencer.IsPlaying) sequencer.Stop();
+            sop.Stop();
+            source = Source.MusicBox;
+            musicBox.Start(hits, ticksPerSecond, Math.Max(0, startTick), endTick);
+            generation++;
+            this.startTick = Math.Max(0, startTick);
+        }
+    }
+
+    /// <summary>오르골 시험 연주 속도 (틱/초)를 재생 중에 바꾼다.</summary>
+    public void SetMusicBoxSpeed(double ticksPerSecond) { lock (sync) { musicBox.SetSpeed(ticksPerSecond); } }
+
     public void Stop()
     {
-        lock (sync) { sequencer.Stop(); sop.Stop(); }
+        lock (sync) { sequencer.Stop(); sop.Stop(); musicBox.Stop(); }
     }
 
     // ---------------------------------------------------------------- 재생 조절 (Jukebox)
@@ -156,7 +189,7 @@ public sealed class AudioEngine : IDisposable
     public void PreviewAllOff() { lock (sync) { if (!SourcePlaying) synth.AllNotesOff(); } }
 
     /// <summary>SOP 재생이 끝났으면 OPL2 쪽(시음)으로 돌아간다.</summary>
-    private void LeaveSop() { if (sopMode && !sop.IsPlaying) sopMode = false; }
+    private void LeaveSop() { if (source != Source.Opl2 && !SourcePlaying) source = Source.Opl2; }
 
     // ---------------------------------------------------------------- 렌더
 
@@ -181,8 +214,9 @@ public sealed class AudioEngine : IDisposable
 
     private void RenderLocked(short[] buffer, int count, bool stereo)
     {
-        bool useSop = sopMode;
-        double step = (double)(useSop ? opl3.NativeRate : synth.NativeRate) / OutputRate;
+        var src = source;
+        bool useSop = src == Source.Sop;
+        double step = (double)(useSop ? opl3.NativeRate : src == Source.MusicBox ? MusicBoxPlayer.Rate : synth.NativeRate) / OutputRate;
         double gain = MasterVolume * CurrentOptions.Gain;
         for (int i = 0; i < count; i++)
         {
@@ -191,7 +225,12 @@ public sealed class AudioEngine : IDisposable
             {
                 resamplePos -= 1.0;
                 prevL = curL; prevR = curR;
-                if (useSop)
+                if (src == Source.MusicBox)
+                {
+                    musicBox.Step();
+                    curL = curR = musicBox.Generate() * MusicBoxScale;
+                }
+                else if (useSop)
                 {
                     int l, r;
                     sop.Step();

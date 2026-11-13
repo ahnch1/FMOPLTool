@@ -18,6 +18,16 @@ public sealed class AudioEngine : IDisposable
     private double resamplePos;
     private double prev, cur;
 
+    // 재생 커서 동기화: 렌더한 블록마다 (출력 샘플 위치, 시작/끝 틱)을 기록해 두고,
+    // 장치가 실제로 재생 중인 샘플 위치로 틱을 찾는다 (출력 버퍼만큼 앞서 가는 렌더 위치 대신).
+    private struct Mark { public long Start; public int Count; public double T0, T1; public bool Playing; public int Gen; }
+    private readonly Mark[] marks = new Mark[128];
+    private int markNext;
+    private long renderedSamples;
+    private long deviceBase;
+    private int generation;
+    private double startTick;
+
     public AudioEngine() : this(new OplSynth()) { }
 
     public AudioEngine(OplSynth synth)
@@ -30,24 +40,51 @@ public sealed class AudioEngine : IDisposable
     public double MasterVolume { get; set; } = 1.5;
     public bool IsDeviceOpen { get { return player != null && player.IsOpen; } }
     public bool IsPlaying { get { lock (sync) { return sequencer.IsPlaying; } } }
-    public double PositionTick { get { lock (sync) { return sequencer.PositionTick; } } }
+
+    /// <summary>지금 스피커에서 들리는 위치(틱). 장치가 없으면 시퀀서 위치.</summary>
+    public double PositionTick
+    {
+        get
+        {
+            long played = player != null ? player.PlayedSamples : -1;
+            lock (sync)
+            {
+                if (played < 0) return sequencer.PositionTick;
+                long at = deviceBase + played;
+                for (int k = 1; k <= marks.Length; k++)
+                {
+                    var m = marks[(markNext - k + marks.Length) % marks.Length];
+                    if (m.Count == 0) break;
+                    if (at < m.Start) continue;
+                    if (at >= m.Start + m.Count) return sequencer.PositionTick;   // 기록보다 앞: 거의 없음
+                    if (m.Gen != generation || !m.Playing) return startTick;       // 아직 이전 버퍼(무음)가 나오는 중
+                    if (m.T1 < m.T0) return m.T0;                                  // 루프 되감기 블록
+                    return m.T0 + (m.T1 - m.T0) * (at - m.Start) / m.Count;
+                }
+                return startTick;
+            }
+        }
+    }
 
     /// <summary>출력 장치를 연다 (Windows 전용). 실패하면 예외.</summary>
     public void OpenDevice()
     {
         if (player != null) return;
-        player = new WaveOutPlayer(OutputRate, 2048, Render);
+        lock (sync) deviceBase = renderedSamples;
+        player = new WaveOutPlayer(OutputRate, 512, Render);   // 6 x 512 샘플 ≈ 70ms
         player.Start();
     }
 
     // ---------------------------------------------------------------- 곡 재생
 
-    public void Play(Song song, InstrumentBank bank, int startTick = 0, int loopStart = -1, int loopEnd = -1)
+    public void Play(Song song, InstrumentBank bank, int startTick = 0, int loopStart = -1, int loopEnd = -1, int onlyVoice = -1)
     {
         lock (sync)
         {
             Func<string, AdlibInstrument> resolver = name => bank != null ? bank.Find(name) : null;
-            sequencer.Start(song, resolver, startTick, loopStart, loopEnd);
+            sequencer.Start(song, resolver, startTick, loopStart, loopEnd, onlyVoice);
+            generation++;
+            this.startTick = Math.Max(0, startTick);
         }
     }
 
@@ -70,6 +107,18 @@ public sealed class AudioEngine : IDisposable
     public void Render(short[] buffer, int count)
     {
         lock (sync)
+        {
+            var mark = new Mark { Start = renderedSamples, Count = count, T0 = sequencer.PositionTick, Playing = sequencer.IsPlaying, Gen = generation };
+            RenderLocked(buffer, count);
+            mark.T1 = sequencer.PositionTick;
+            renderedSamples += count;
+            marks[markNext] = mark;
+            markNext = (markNext + 1) % marks.Length;
+        }
+    }
+
+    private void RenderLocked(short[] buffer, int count)
+    {
         {
             double step = (double)synth.NativeRate / OutputRate;
             double gain = MasterVolume;

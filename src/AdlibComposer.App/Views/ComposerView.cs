@@ -58,7 +58,8 @@ internal sealed class ComposerView : UserControl
         roll.SongEdited += OnRollEdited;
         roll.ViewChanged += UpdateScrollBars;
         roll.EditCursorChanged += UpdateInstrLabel;
-        roll.TimbreRequested += delegate (int tick) { ChooseInstrumentAt(tick); };
+        roll.TimbreRequested += delegate (int tick) { EditBandAt(tick); };
+        roll.BandDeleteRequested += DeleteBandEventNear;
         roll.HoverNote += delegate (int n) { noteLabel.Text = n >= 0 ? NoteHelper.Name(n) : ""; if (HoverNoteChanged != null) HoverNoteChanged(n); };
         roll.PreviewOn += PreviewNote;
         roll.PreviewOff += delegate { ws.Audio.PreviewNoteOff(roll.CurrentVoice); };
@@ -76,6 +77,13 @@ internal sealed class ComposerView : UserControl
     }
 
     public PianoRollControl Roll { get { return roll; } }
+
+    /// <summary>연필(입력) / I(선택, 원본 Edit → Edit) 도구.</summary>
+    public RollTool Tool
+    {
+        get { return roll.Tool; }
+        set { if (value == RollTool.Select) selButton.Checked = true; else penButton.Checked = true; }
+    }
 
     // ------------------------------------------------------------ 구성
 
@@ -121,7 +129,7 @@ internal sealed class ComposerView : UserControl
         instrLabel.BackColor = Color.White;
         instrLabel.SetBounds(56, 30, 260, 22);
         instrLabel.TextAlign = ContentAlignment.MiddleLeft;
-        instrLabel.DoubleClick += delegate { ChooseInstrumentAt(roll.CursorTick); };
+        instrLabel.DoubleClick += delegate { EditBandAt(roll.CursorTick); };
         topPanel.Controls.Add(instrLabel);
     }
 
@@ -238,6 +246,86 @@ internal sealed class ComposerView : UserControl
         UpdateInstrLabel();
     }
 
+    // ------------------------------------------------------------ 원본 Display 메뉴: 위쪽 행 트랙 / 입력 값 / 격자
+
+    /// <summary>위쪽 행에 넣을 값 (원본 Display 메뉴 항목 옆 숫자). 기본: Tempo 1.0, Volume 0.75, Pitch 1.0.</summary>
+    public double TempoValue { get; set; } = 1.0;
+    public double VolumeValue { get; set; } = 0.75;
+    public double PitchValue { get; set; } = 1.0;
+
+    public BandTrack Band
+    {
+        get { return roll.Band; }
+        set { roll.Band = value; UpdateInstrLabel(); roll.Invalidate(); }
+    }
+
+    /// <summary>격자 크기 = 박당 화면 폭. 0 Large, 1 Medium(1:1), 2 Small.</summary>
+    public static readonly float[] GridPixelsPerBeat = { 80f, 40f, 20f };
+
+    public int GridSize
+    {
+        get
+        {
+            for (int i = 0; i < GridPixelsPerBeat.Length; i++) if (Math.Abs(roll.PixelsPerBeat - GridPixelsPerBeat[i]) < 0.5f) return i;
+            return -1;
+        }
+        set { roll.PixelsPerBeat = GridPixelsPerBeat[Math.Max(0, Math.Min(2, value))]; UpdateScrollBars(); roll.Invalidate(); }
+    }
+
+    /// <summary>위쪽 행 더블클릭/Insert: Instrument는 악기 선택, 나머지는 현재 입력 값으로 이벤트를 넣는다.</summary>
+    public void EditBandAt(int tick)
+    {
+        tick = Math.Max(0, tick);
+        if (roll.Band == BandTrack.Instrument) { ChooseInstrumentAt(tick); return; }
+        ws.PushUndo();
+        var voice = ws.Song.Voices[roll.CurrentVoice];
+        switch (roll.Band)
+        {
+            case BandTrack.Tempo:
+                ws.Song.TempoEvents.RemoveAll(e => e.Tick == tick);
+                ws.Song.TempoEvents.Add(new TempoEvent { Tick = tick, Multiplier = (float)TempoValue });
+                ws.Song.TempoEvents.Sort((a, b) => a.Tick.CompareTo(b.Tick));
+                break;
+            case BandTrack.Volume:
+                voice.Volumes.RemoveAll(e => e.Tick == tick);
+                voice.Volumes.Add(new VolumeEvent { Tick = tick, Volume = (float)VolumeValue });
+                voice.Volumes.Sort((a, b) => a.Tick.CompareTo(b.Tick));
+                break;
+            case BandTrack.Pitch:
+                voice.Pitches.RemoveAll(e => e.Tick == tick);
+                voice.Pitches.Add(new PitchEvent { Tick = tick, Pitch = (float)PitchValue });
+                voice.Pitches.Sort((a, b) => a.Tick.CompareTo(b.Tick));
+                break;
+        }
+        AfterEventEdit();
+    }
+
+    /// <summary>위쪽 행 오른쪽 클릭: 클릭 위치 근처의 이벤트를 지운다.</summary>
+    public void DeleteBandEventNear(int tick)
+    {
+        int tol = roll.TickTolerance;
+        var voice = ws.Song.Voices[roll.CurrentVoice];
+        Predicate<int> near = t => Math.Abs(t - tick) <= tol;
+        bool any;
+        switch (roll.Band)
+        {
+            case BandTrack.Tempo: any = ws.Song.TempoEvents.Exists(e => near(e.Tick)); break;
+            case BandTrack.Volume: any = voice.Volumes.Exists(e => near(e.Tick)); break;
+            case BandTrack.Pitch: any = voice.Pitches.Exists(e => near(e.Tick)); break;
+            default: any = voice.Timbres.Exists(e => near(e.Tick)); break;
+        }
+        if (!any) return;
+        ws.PushUndo();
+        switch (roll.Band)
+        {
+            case BandTrack.Tempo: ws.Song.TempoEvents.RemoveAll(e => near(e.Tick)); break;
+            case BandTrack.Volume: voice.Volumes.RemoveAll(e => near(e.Tick)); break;
+            case BandTrack.Pitch: voice.Pitches.RemoveAll(e => near(e.Tick)); break;
+            default: voice.Timbres.RemoveAll(e => near(e.Tick)); break;
+        }
+        AfterEventEdit();
+    }
+
     public void ZoomIn() { roll.PixelsPerBeat = roll.PixelsPerBeat * 1.25f; }
     public void ZoomOut() { roll.PixelsPerBeat = roll.PixelsPerBeat * 0.8f; }
 
@@ -282,8 +370,40 @@ internal sealed class ComposerView : UserControl
 
     private void UpdateInstrLabel()
     {
-        var t = ws.Song.Voices[Math.Min(roll.CurrentVoice, Song.MaxVoices - 1)].TimbreAt(roll.CursorTick);
-        instrLabel.Text = t != null ? t.InstrumentName : "(default)";
+        var inv = System.Globalization.CultureInfo.InvariantCulture;
+        int tick = roll.CursorTick;
+        var voice = ws.Song.Voices[Math.Min(roll.CurrentVoice, Song.MaxVoices - 1)];
+        instrCaption.Text = PianoRollControl.BandCaption(roll.Band);
+        switch (roll.Band)
+        {
+            case BandTrack.Tempo:
+            {
+                double m = 1.0;
+                foreach (var e in ws.Song.TempoEvents) if (e.Tick <= tick) m = e.Multiplier;
+                instrLabel.Text = m.ToString("0.00", inv) + "  (" + (ws.Song.BasicTempo * m).ToString("0.#", inv) + " BPM)";
+                break;
+            }
+            case BandTrack.Volume:
+            {
+                double v = 1.0;
+                foreach (var e in voice.Volumes) if (e.Tick <= tick) v = e.Volume;
+                instrLabel.Text = v.ToString("0.00", inv);
+                break;
+            }
+            case BandTrack.Pitch:
+            {
+                double v = 1.0;
+                foreach (var e in voice.Pitches) if (e.Tick <= tick) v = e.Pitch;
+                instrLabel.Text = v.ToString("0.00", inv);
+                break;
+            }
+            default:
+            {
+                var t = voice.TimbreAt(tick);
+                instrLabel.Text = t != null ? t.InstrumentName : "(default)";
+                break;
+            }
+        }
     }
 
     private void UpdateScrollBars()
@@ -432,6 +552,14 @@ internal sealed class ComposerView : UserControl
         if (ws.Song.IsMelodic == !rhythm) return;
         ws.PushUndo();
         ws.Song.IsMelodic = !rhythm;
+        // 보이스 7~11이 노트 없이 이전 모드의 기본 악기만 갖고 있으면 새 모드의 기본 악기로 바꾼다 (예: piano1 -> bdrum)
+        for (int v = 6; v < Song.MaxVoices; v++)
+        {
+            var vt = ws.Song.Voices[v];
+            if (vt.Notes.Count == 0 && vt.Timbres.Count == 1 && vt.Timbres[0].Tick == 0
+                && string.Equals(vt.Timbres[0].InstrumentName, Workspace.DefaultInstrumentFor(v, rhythm), StringComparison.OrdinalIgnoreCase))
+                vt.Timbres[0].InstrumentName = Workspace.DefaultInstrumentFor(v, !rhythm);
+        }
         ws.SongDirty = true;
         BindSong();
         if (SongModified != null) SongModified();

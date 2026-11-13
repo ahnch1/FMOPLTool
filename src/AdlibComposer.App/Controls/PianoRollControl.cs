@@ -9,6 +9,9 @@ namespace AdlibComposer.App.Controls;
 
 internal enum RollTool { Pencil, Select }
 
+/// <summary>악보 위쪽 행에 보여 줄 트랙 (원본 Display 메뉴: Tempo / Instrument / Volume / Pitch).</summary>
+internal enum BandTrack { Tempo, Instrument, Volume, Pitch }
+
 /// <summary>
 /// Visual Composer의 건반 악보 화면. 왼쪽 세로 건반, 위쪽 Instr. 행, 격자(마디=실선, 박=점선),
 /// 노트는 가로 막대. 선택한 보이스는 굵게, 나머지 보이스는 얇게(All이면 모두 굵게) 표시한다.
@@ -51,7 +54,13 @@ internal sealed class PianoRollControl : Control
     public event Action SongEdited;
     public event Action ViewChanged;
     public event Action EditCursorChanged;
+    /// <summary>위쪽 행 더블클릭: 그 위치에 이벤트 넣기/바꾸기.</summary>
     public event Action<int> TimbreRequested;
+    /// <summary>위쪽 행 오른쪽 클릭: 그 위치 근처의 이벤트 지우기.</summary>
+    public event Action<int> BandDeleteRequested;
+    public BandTrack Band { get; set; } = BandTrack.Instrument;
+    /// <summary>원본 Options → Audio Feedback: 노트를 넣거나 고를 때 소리를 낸다 (건반 클릭은 항상 소리).</summary>
+    public bool AudioFeedback { get; set; } = true;
     public event Action<int> HoverNote;
     public event Action<int> PreviewOn;
     public event Action PreviewOff;
@@ -220,23 +229,41 @@ internal sealed class PianoRollControl : Control
         }
     }
 
+    public static string BandCaption(BandTrack b)
+    {
+        switch (b) { case BandTrack.Tempo: return "Tempo"; case BandTrack.Volume: return "Volume"; case BandTrack.Pitch: return "Pitch"; }
+        return "Instr.";
+    }
+
     private void DrawBand(Graphics g)
     {
         g.FillRectangle(Brushes.White, 0, 0, Width, BandHeight);
         g.DrawLine(Pens.Black, 0, BandHeight, Width, BandHeight);
-        g.DrawString("Instr.", Theme.UiFont, Brushes.Black, 3, 3);
+        g.DrawString(BandCaption(Band), Theme.UiFont, Brushes.Black, 3, 3);
         var clip = new Rectangle(KeyboardWidth, 0, Math.Max(1, Width - KeyboardWidth), BandHeight);
         var saved = g.Clip;
         g.SetClip(clip);
-        foreach (var t in Voice.Timbres)
+        var inv = System.Globalization.CultureInfo.InvariantCulture;
+        var items = new List<KeyValuePair<int, string>>();
+        switch (Band)
         {
-            int x = TickToX(t.Tick);
+            case BandTrack.Instrument: foreach (var t in Voice.Timbres) items.Add(new KeyValuePair<int, string>(t.Tick, t.InstrumentName)); break;
+            case BandTrack.Tempo: foreach (var t in song.TempoEvents) items.Add(new KeyValuePair<int, string>(t.Tick, t.Multiplier.ToString("0.00", inv))); break;
+            case BandTrack.Volume: foreach (var t in Voice.Volumes) items.Add(new KeyValuePair<int, string>(t.Tick, t.Volume.ToString("0.00", inv))); break;
+            case BandTrack.Pitch: foreach (var t in Voice.Pitches) items.Add(new KeyValuePair<int, string>(t.Tick, t.Pitch.ToString("0.00", inv))); break;
+        }
+        foreach (var it in items)
+        {
+            int x = TickToX(it.Key);
             if (x > Width) continue;
             g.DrawLine(Pens.Black, x, 2, x, BandHeight - 2);
-            g.DrawString(t.InstrumentName, Theme.UiFont, Brushes.Black, x + 3, 3);
+            g.DrawString(it.Value, Theme.UiFont, Brushes.Black, x + 3, 3);
         }
         g.Clip = saved;
     }
+
+    /// <summary>화면 x 위치 근처(±4px)에 있는 틱 범위 (위쪽 행 이벤트 지우기용).</summary>
+    public int TickTolerance { get { return Math.Max(0, (int)Math.Ceiling(4 / PxPerTick)); } }
 
     private void DrawKeyboard(Graphics g)
     {
@@ -304,6 +331,23 @@ internal sealed class PianoRollControl : Control
         RaiseEdited();
     }
 
+    public void CutSelection()
+    {
+        CopySelection();
+        DeleteSelection();
+    }
+
+    /// <summary>선택한 노트를 반음 단위로 옮긴다 (Edit → Semitone/Octave Up/Down). 범위를 벗어나면 움직이지 않는다.</summary>
+    public void Transpose(int semitones)
+    {
+        if (Selection.Count == 0) return;
+        foreach (var n in Selection)
+            if (n.Pitch + semitones < Song.MinNote || n.Pitch + semitones > Song.MaxNote) return;
+        RaiseBeforeEdit();
+        foreach (var n in Selection) n.Pitch += semitones;
+        RaiseEdited();
+    }
+
     public void EnsureTickVisible(int tick)
     {
         if (tick < ScrollTick || tick > ScrollTick + VisibleTicks) { ScrollTick = Math.Max(0, tick - VisibleTicks / 10); Invalidate(); if (ViewChanged != null) ViewChanged(); }
@@ -329,7 +373,9 @@ internal sealed class PianoRollControl : Control
         }
         if (e.Y < BandHeight)
         {
-            if (e.X >= KeyboardWidth) SetCursor(SnapDown(XToTick(e.X)));
+            if (e.X < KeyboardWidth) return;
+            if (e.Button == MouseButtons.Right) { if (BandDeleteRequested != null) BandDeleteRequested(XToTick(e.X)); }
+            else SetCursor(SnapDown(XToTick(e.X)));
             return;
         }
 
@@ -360,7 +406,7 @@ internal sealed class PianoRollControl : Control
             drag = DragMode.Draw;
             Capture = true;
             SetCursor(start);
-            if (PreviewOn != null) PreviewOn(note);
+            if (AudioFeedback && PreviewOn != null) PreviewOn(note);
             Invalidate();
             return;
         }
@@ -380,7 +426,7 @@ internal sealed class PianoRollControl : Control
             dragStartTick = tick; dragStartNote = note;
             dragUndoPushed = false;
             Capture = true;
-            if (PreviewOn != null) PreviewOn(hit.Pitch);
+            if (AudioFeedback && PreviewOn != null) PreviewOn(hit.Pitch);
         }
         else
         {

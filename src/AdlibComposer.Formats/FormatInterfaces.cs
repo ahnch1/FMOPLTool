@@ -48,9 +48,10 @@ public sealed class FormatRegistry
     {
         var r = new FormatRegistry();
         r.Songs.Add(new RolFormat());
+        r.Songs.Add(new ImsFormat());
         r.Banks.Add(new BnkFormat());
         r.Instruments.Add(new InsFormat());
-        // 포맷 확장 지점: r.Songs.Add(new ImsFormat()); r.Songs.Add(new SopFormat());
+        // 포맷 확장 지점: r.Songs.Add(new SopFormat());
         return r;
     }
 

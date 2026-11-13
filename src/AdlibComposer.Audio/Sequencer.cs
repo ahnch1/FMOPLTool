@@ -38,7 +38,8 @@ public sealed class Sequencer
     public double PositionTick { get { return tick; } }
 
     /// <param name="resolver">ROL의 악기 이름 → 악기 (null 반환 시 기본 악기).</param>
-    public void Start(Song song, Func<string, AdlibInstrument> resolver, int startTick, int loopStartTick, int loopEndTick)
+    /// <param name="onlyVoice">0 이상이면 그 보이스의 노트만 재생 (원본 Playback → Play Voice).</param>
+    public void Start(Song song, Func<string, AdlibInstrument> resolver, int startTick, int loopStartTick, int loopEndTick, int onlyVoice = -1)
     {
         this.resolver = resolver;
         synth.AllNotesOff();
@@ -50,7 +51,7 @@ public sealed class Sequencer
             synth.SetInstrument(v, null);
         }
         basicTicksPerSecond = song.BasicTempo / 60.0 * song.TickBeat;
-        BuildEvents(song);
+        BuildEvents(song, onlyVoice);
         endTick = song.LengthTicks;
         loopStart = loopStartTick;
         loopEnd = loopEndTick;
@@ -66,7 +67,7 @@ public sealed class Sequencer
         synth.AllNotesOff();
     }
 
-    private void BuildEvents(Song song)
+    private void BuildEvents(Song song, int onlyVoice)
     {
         events.Clear();
         foreach (var t in song.TempoEvents)
@@ -77,6 +78,7 @@ public sealed class Sequencer
             foreach (var e in vt.Timbres) events.Add(new Ev { Tick = e.Tick, Type = EvType.Timbre, Voice = v, Name = e.InstrumentName });
             foreach (var e in vt.Volumes) events.Add(new Ev { Tick = e.Tick, Type = EvType.Volume, Voice = v, F = e.Volume });
             foreach (var e in vt.Pitches) events.Add(new Ev { Tick = e.Tick, Type = EvType.Pitch, Voice = v, F = e.Pitch });
+            if (onlyVoice >= 0 && v != onlyVoice) continue;
             foreach (var n in vt.Notes)
             {
                 events.Add(new Ev { Tick = n.StartTick, Type = EvType.NoteOn, Voice = v, Value = n.Pitch });

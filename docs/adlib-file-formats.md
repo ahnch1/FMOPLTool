@@ -1,4 +1,4 @@
-# AdLib 파일 포맷 정리 (INS / BNK / ROL)
+# AdLib 파일 포맷 정리 (INS / BNK / ROL / IMS)
 
 Visual Composer 재현용 포맷 레퍼런스. 모든 정수는 **리틀엔디언**, `Single`은 float32.
 
@@ -311,3 +311,45 @@ public sealed class AdlibInstrument
 - 리듬 모드 탐탐 초기 주파수
 
 → 실제 `STANDARD.BNK` 및 ROL 곡 파일로 읽어 확인하면서 보완
+
+---
+
+## 7. IMS 포맷 (.ims) — IMPlay 곡 (실제 파일로 분석)
+
+AdLib MUS(MIDI 파생) 구조 + 끝에 악기 이름표. 악기 데이터는 같은 이름의 BNK. 모든 정수 리틀엔디언.
+`WZ-GAME1.IMS` ↔ `WZ-GAME1.ROL`(같은 곡)을 비교해 확인했다.
+
+```
+[헤더 70B] [이벤트 dataSize B] [UINT16 0x7777] [UINT16 nInst] [char[9] × nInst]
+```
+
+| 오프셋 | 타입 | 내용 |
+|---|---|---|
+| 0 | u8, u8 | 버전 (1.0) |
+| 2 | u32 | tuneId (0) |
+| 6 | char[30] | 곡 제목 (조합형 한글, 0 패딩) |
+| 36 | u8 | tickBeat (실제 파일 240) |
+| 37 | u8 | beatMeasure |
+| 38 | u32 | totalTick (마지막 이벤트 틱, 파일에 따라 실제와 다를 수 있음) |
+| 42 | u32 | dataSize |
+| 46 | u32 | nrCommand (이벤트 수 + F8 바이트 수) |
+| 50 | u8[8] | 0 |
+| 58 | u8 | soundMode: 0 멜로딕(9채널), 1 리듬(11채널) — **ROL isMelodic과 반대** |
+| 59 | u8 | pitchBRange (반음, 실제 파일 1) |
+| 60 | u16 | basicTempo |
+| 62 | u8[8] | 0 |
+
+이벤트: `[F8 × n (각 240틱)] [지연 u8] [상태 바이트(생략 시 running status)] [데이터]`
+
+| 상태 | 데이터 | 의미 |
+|---|---|---|
+| 9n | note, vel | vel > 0 노트 온 (vel = 보이스 볼륨 0~127), vel = 0 노트 오프 |
+| 8n | note, vel | **vel > 0 이음 노트 온** (앞 노트가 이 시점에 끝남, 쉼 없이 이어지는 노트) |
+| An | vol | 볼륨 (ROL 볼륨 × 127) |
+| Cn | inst | 악기 = 이름표[inst] |
+| En | lsb, msb | 피치벤드 14bit, 0x2000 = ROL 피치 1.0 (값 / 0x2000) |
+| F0 7F 00 i f F7 | | 템포 배수 = i + f/128 |
+| FC | | 곡 끝 |
+
+- 노트 번호는 ROL과 같다 (60 = 가운데 도). 채널 번호 = ROL 보이스 번호 (리듬 모드 6~10 = BD SD TO CY HH).
+- ROL 틱 = IMS 틱 ÷ (240 / ROL tickBeat). 읽을 때 모든 틱의 최대공약수로 나눠 해상도를 줄인다.

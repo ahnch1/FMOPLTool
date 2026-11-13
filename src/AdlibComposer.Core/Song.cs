@@ -118,6 +118,8 @@ public sealed class Song
     /// <summary>true = 멜로딕 9채널, false = 리듬 모드 11채널 (파일의 isMelodic).</summary>
     public bool IsMelodic { get; set; } = true;
     public float BasicTempo { get; set; } = 120f;
+    /// <summary>피치 이벤트 0.0/2.0이 몇 반음인지 (IMS 헤더 pitchBRange, ROL은 기본 1).</summary>
+    public int PitchBendRange { get; set; } = 1;
     public string Title { get; set; } = "Untitled";
     public string FilePath { get; set; }
     public List<TempoEvent> TempoEvents { get; } = new List<TempoEvent>();
@@ -153,7 +155,7 @@ public sealed class Song
         {
             VersionMajor = VersionMajor, VersionMinor = VersionMinor, Signature = Signature,
             TickBeat = TickBeat, BeatsPerMeasure = BeatsPerMeasure, ScaleX = ScaleX, ScaleY = ScaleY,
-            IsMelodic = IsMelodic, BasicTempo = BasicTempo, Title = Title, FilePath = FilePath
+            IsMelodic = IsMelodic, BasicTempo = BasicTempo, PitchBendRange = PitchBendRange, Title = Title, FilePath = FilePath
         };
         foreach (var t in TempoEvents) c.TempoEvents.Add(new TempoEvent { Tick = t.Tick, Multiplier = t.Multiplier });
         for (int i = 0; i < MaxVoices; i++) c.Voices[i] = Voices[i].Clone();

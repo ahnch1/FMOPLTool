@@ -21,7 +21,7 @@ public static class Program
 
     public static int Main(string[] args)
     {
-        if (args.Length > 0 && (args[0] == "--probe" || args[0] == "--render")) return Probe.Run(args);
+        if (args.Length > 0 && (args[0] == "--probe" || args[0] == "--render" || args[0] == "--latency")) return Probe.Run(args);
         if (args.Length > 0 && args[0].StartsWith("--")) return DemoRender.Run(args);
         TestBnk();
         TestIns();
@@ -332,7 +332,8 @@ public static class Program
         var reg = FormatRegistry.CreateDefault();
         Check("Registry finds ROL/BNK/INS by extension",
             reg.FindSong("a.ROL") != null && reg.FindBank("x.bnk") != null && reg.FindInstrument("y.ins") != null);
-        Check("Registry unknown extension -> null", reg.FindSong("a.ims") == null);
+        Check("Registry unknown extension -> null", reg.FindSong("a.sop") == null);
+        Check("Registry finds IMS", reg.FindSong("A.IMS") is ImsFormat);
         string f = FormatRegistry.BuildFilter(new IFileFormat[] { reg.Songs[0] });
         Check("Registry open filter", f.Contains("*.rol") && f.Contains("*.*"), f);
     }

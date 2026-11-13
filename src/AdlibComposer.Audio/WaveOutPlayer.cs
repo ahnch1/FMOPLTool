@@ -4,12 +4,18 @@ using System.Threading;
 
 namespace AdlibComposer.Audio;
 
-/// <summary>winmm waveOut 기반 출력 (외부 NuGet 패키지 없이 동작). 16bit 모노.</summary>
+/// <summary>
+/// winmm waveOut 기반 출력 (외부 NuGet 패키지 없이 동작). 16bit 모노.
+/// 짧은 버퍼 여러 개를 이벤트 콜백으로 채워 지연을 줄이고, <see cref="PlayedSamples"/>로 실제로 소리 난 위치를 알려준다.
+/// </summary>
 public sealed class WaveOutPlayer : IDisposable
 {
     public delegate void FillBuffer(short[] buffer, int sampleCount);
 
-    private const int BufferCount = 4;
+    private const int BufferCount = 6;
+    private const uint CALLBACK_EVENT = 0x00050000;
+    private const uint TIME_BYTES = 0x0004;
+    private const uint TIME_SAMPLES = 0x0002;
     private const uint WAVE_MAPPER = 0xFFFFFFFF;
     private const uint WHDR_DONE = 0x1;
 
@@ -38,7 +44,16 @@ public sealed class WaveOutPlayer : IDisposable
         public IntPtr reserved;
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MMTIME
+    {
+        public uint wType;
+        public uint value;
+        public uint pad;
+    }
+
     [DllImport("winmm.dll")] private static extern int waveOutOpen(out IntPtr hwo, uint deviceId, ref WAVEFORMATEX format, IntPtr callback, IntPtr instance, uint flags);
+    [DllImport("winmm.dll")] private static extern int waveOutGetPosition(IntPtr hwo, ref MMTIME time, uint size);
     [DllImport("winmm.dll")] private static extern int waveOutClose(IntPtr hwo);
     [DllImport("winmm.dll")] private static extern int waveOutPrepareHeader(IntPtr hwo, IntPtr header, uint size);
     [DllImport("winmm.dll")] private static extern int waveOutUnprepareHeader(IntPtr hwo, IntPtr header, uint size);
@@ -54,6 +69,10 @@ public sealed class WaveOutPlayer : IDisposable
     private IntPtr device = IntPtr.Zero;
     private Thread thread;
     private volatile bool running;
+    private readonly AutoResetEvent bufferDone = new AutoResetEvent(false);
+    private int nextBuffer;
+    private uint lastPos;
+    private long posHigh;
 
     public WaveOutPlayer(int sampleRate, int samplesPerBuffer, FillBuffer fill)
     {
@@ -73,7 +92,7 @@ public sealed class WaveOutPlayer : IDisposable
             wFormatTag = 1, nChannels = 1, nSamplesPerSec = (uint)sampleRate,
             wBitsPerSample = 16, nBlockAlign = 2, nAvgBytesPerSec = (uint)(sampleRate * 2), cbSize = 0
         };
-        int rc = waveOutOpen(out device, WAVE_MAPPER, ref fmt, IntPtr.Zero, IntPtr.Zero, 0);
+        int rc = waveOutOpen(out device, WAVE_MAPPER, ref fmt, bufferDone.SafeWaitHandle.DangerousGetHandle(), IntPtr.Zero, CALLBACK_EVENT);
         if (rc != 0) { device = IntPtr.Zero; throw new InvalidOperationException("오디오 장치를 열 수 없습니다 (waveOutOpen=" + rc + ")"); }
 
         int hdrSize = Marshal.SizeOf(typeof(WAVEHDR));
@@ -86,8 +105,10 @@ public sealed class WaveOutPlayer : IDisposable
             waveOutPrepareHeader(device, headers[i], (uint)hdrSize);
             FillAndWrite(i);
         }
+        nextBuffer = 0;
+        lastPos = 0; posHigh = 0;
         running = true;
-        thread = new Thread(Loop) { IsBackground = true, Name = "WaveOut" };
+        thread = new Thread(Loop) { IsBackground = true, Name = "WaveOut", Priority = ThreadPriority.AboveNormal };
         thread.Start();
     }
 
@@ -102,12 +123,33 @@ public sealed class WaveOutPlayer : IDisposable
     {
         while (running)
         {
-            for (int i = 0; i < BufferCount && running; i++)
+            bufferDone.WaitOne(20);
+            // 재생 순서를 지키기 위해 링 순서대로, 끝난 버퍼만 다시 채운다
+            while (running)
             {
-                var h = (WAVEHDR)Marshal.PtrToStructure(headers[i], typeof(WAVEHDR));
-                if ((h.dwFlags & WHDR_DONE) != 0) FillAndWrite(i);
+                var h = (WAVEHDR)Marshal.PtrToStructure(headers[nextBuffer], typeof(WAVEHDR));
+                if ((h.dwFlags & WHDR_DONE) == 0) break;
+                FillAndWrite(nextBuffer);
+                nextBuffer = (nextBuffer + 1) % BufferCount;
             }
-            Thread.Sleep(3);
+        }
+    }
+
+    /// <summary>장치가 실제로 재생을 마친 샘플 수 (Start 이후 누적). 장치를 열지 않았으면 -1.</summary>
+    public long PlayedSamples
+    {
+        get
+        {
+            if (device == IntPtr.Zero) return -1;
+            var t = new MMTIME { wType = TIME_SAMPLES };
+            if (waveOutGetPosition(device, ref t, (uint)Marshal.SizeOf(typeof(MMTIME))) != 0) return -1;
+            uint pos = t.wType == TIME_BYTES ? t.value / 2 : t.value;
+            lock (bufferDone)
+            {
+                if (pos < lastPos && lastPos - pos > 0x80000000u) posHigh += 0x100000000L;   // 32bit 랩어라운드
+                lastPos = pos;
+                return posHigh + pos;
+            }
         }
     }
 

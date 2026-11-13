@@ -13,7 +13,7 @@ internal sealed class Workspace : IDisposable
     private readonly List<Song> undo = new List<Song>();
     private readonly List<Song> redo = new List<Song>();
 
-    public Song Song { get; private set; } = new Song();
+    public Song Song { get; private set; } = CreateNewSong();
     public InstrumentBank Bank { get; private set; } = InstrumentBank.CreateNew();
     public FormatRegistry Formats { get; } = FormatRegistry.CreateDefault();
     public AudioEngine Audio { get; } = new AudioEngine();
@@ -80,9 +80,27 @@ internal sealed class Workspace : IDisposable
 
     // ------------------------------------------------------------ 곡 파일
 
+    /// <summary>새 곡의 보이스별 기본 악기 (원본 Display → Instrument 기본값: 1~6 piano1, BD bdrum, SD snare1, TO tom1, CY cymbal1, HH hihat1).
+    /// STANDARD.BNK에 "hihat"은 없고 "hihat1"이 있어 hihat1을 쓴다. 멜로딕 모드의 7~9도 piano1.</summary>
+    public static readonly string[] DefaultInstruments =
+        { "piano1", "piano1", "piano1", "piano1", "piano1", "piano1", "bdrum", "snare1", "tom1", "cymbal1", "hihat1" };
+
+    public static string DefaultInstrumentFor(int voice, bool melodic)
+    {
+        return melodic && voice < Song.MelodicVoices ? "piano1" : DefaultInstruments[voice];
+    }
+
+    private static Song CreateNewSong()
+    {
+        var s = new Song();
+        for (int v = 0; v < Song.MaxVoices; v++)
+            s.Voices[v].Timbres.Add(new TimbreEvent { Tick = 0, InstrumentName = DefaultInstrumentFor(v, s.IsMelodic) });
+        return s;
+    }
+
     public void NewSong()
     {
-        Song = new Song();
+        Song = CreateNewSong();
         undo.Clear(); redo.Clear();
         SongDirty = false;
         RaiseSongReplaced();
@@ -147,6 +165,35 @@ internal sealed class Workspace : IDisposable
         BankDirty = false;
         CurrentInstrument = FirstUsed();
         if (BankReplaced != null) BankReplaced(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// 다른 뱅크의 악기를 복사해 현재 뱅크에 넣는다 (뱅크 브라우저).
+    /// replace = true면 같은 이름의 악기를 덮어쓰고, false면 새 이름(NAME2 ...)으로 추가한다. 넣은 개수를 돌려준다.
+    /// </summary>
+    public int AddInstruments(IEnumerable<AdlibInstrument> instruments, bool replace)
+    {
+        int n = 0;
+        AdlibInstrument last = null;
+        foreach (var src in instruments)
+        {
+            var c = src.Clone();
+            c.IsUsed = true;
+            var existing = Bank.Find(c.Name);
+            if (existing != null && replace)
+            {
+                Bank.Instruments[Bank.Instruments.IndexOf(existing)] = c;
+                if (ReferenceEquals(CurrentInstrument, existing)) CurrentInstrument = c;
+            }
+            else Bank.Add(c);
+            last = c;
+            n++;
+        }
+        if (n == 0) return 0;
+        BankDirty = true;
+        CurrentInstrument = last;
+        if (BankReplaced != null) BankReplaced(this, EventArgs.Empty);
+        return n;
     }
 
     public void SaveBank(string path)

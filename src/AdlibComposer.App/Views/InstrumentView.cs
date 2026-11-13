@@ -7,7 +7,11 @@ using AdlibComposer.Core;
 
 namespace AdlibComposer.App.Views;
 
-/// <summary>Instrument Maker 화면: Carrier(왼쪽)/Modulator(오른쪽) 두 열의 13개 파라미터 + 하단 건반.</summary>
+/// <summary>
+/// Instrument Maker 화면: Carrier(왼쪽)/Modulator(오른쪽) 두 열의 13개 파라미터 + 하단 건반.
+/// 스네어/탐탐/심벌/하이햇 모드는 단일 오퍼레이터라 Carrier 열 하나만 보인다
+/// (값은 BNK의 모듈레이터 필드에 저장됨 — 실제 STANDARD.BNK snare1/tom1/cymbal1/hihat1로 확인).
+/// </summary>
 [System.ComponentModel.DesignerCategory("Code")]   // 코드로 만든 화면: 디자이너 대신 코드로 연다
 internal sealed class InstrumentView : UserControl
 {
@@ -31,7 +35,6 @@ internal sealed class InstrumentView : UserControl
     private readonly Button btnPrev = new Button();
     private readonly Button btnNext = new Button();
     private readonly Button btnList = new Button();
-    private readonly CheckBox chkAdditive = new CheckBox();
     private readonly Label lblInfo = new Label();
     private readonly PianoKeyboardControl keyboard = new PianoKeyboardControl();
     private readonly Dictionary<Keys, int> keyMap = new Dictionary<Keys, int>();
@@ -43,8 +46,69 @@ internal sealed class InstrumentView : UserControl
 
     public event Action InstrumentEdited;
 
-    /// <summary>시음에 쓰는 보이스 (0 = 멜로딕 1번, 6~10 = BD/SD/TO/CY/HH).</summary>
-    public int PreviewVoice { get; set; }
+    private int previewVoice;
+
+    /// <summary>악기 모드 = 시음 보이스 (0 = Melodic, 6~10 = Bass Drum/Snare/Tom/Cymbal/Hi-hat). 원본 Option 메뉴의 ... Mode.</summary>
+    public int PreviewVoice
+    {
+        get { return previewVoice; }
+        set { previewVoice = value; ApplyLayout(); }
+    }
+
+    /// <summary>단일 오퍼레이터 퍼커션 모드 (SD/TO/CY/HH): Carrier 열만 보이고, 값은 파일의 모듈레이터 필드.</summary>
+    public bool SingleOperator { get { return previewVoice >= 7; } }
+
+    public event Action ModeChanged;
+
+    /// <summary>파일 값이 들어 있는 오퍼레이터. 단일 오퍼레이터 모드의 Carrier 열 = 파일의 모듈레이터 필드.</summary>
+    private OplOperator OpFor(bool carrierColumn)
+    {
+        if (current == null) return null;
+        if (SingleOperator) return current.Modulator;
+        return current.GetOperator(carrierColumn);
+    }
+
+    /// <summary>Option → Melodic/Bass Drum/.../Hi-hat Mode: 시음 보이스를 바꾸고 악기의 퍼커션 정보(BNK iPercussive/iVoiceNum)에 기록한다.</summary>
+    public void SetMode(int voice)
+    {
+        ws.Audio.PreviewAllOff();
+        PreviewVoice = voice;
+        if (current != null)
+        {
+            bool perc = voice >= 6;
+            int num = perc ? voice : 0;
+            if (current.Percussive != perc || current.VoiceNum != num)
+            {
+                current.Percussive = perc;
+                current.VoiceNum = num;
+                ws.BankDirty = true;
+                if (InstrumentEdited != null) InstrumentEdited();
+            }
+        }
+        Bind(current);
+    }
+
+    /// <summary>Option → Additive Synthesis (connection 비트). 멜로딕/베이스드럼 모드에서만 의미가 있다.</summary>
+    public bool Additive
+    {
+        get { return current != null && current.Additive; }
+        set
+        {
+            if (current == null || current.Additive == value) return;
+            int con = value ? 0 : 1;
+            current.Modulator.Con = con; current.Carrier.Con = con;
+            Edited();
+        }
+    }
+
+    public bool AdditiveAvailable { get { return current != null && !SingleOperator; } }
+
+    /// <summary>Option → Transpose Keyboard Up/Down (한 옥타브).</summary>
+    public void TransposeKeyboard(int octaves)
+    {
+        baseNote = Math.Max(36, Math.Min(84, baseNote + 12 * octaves));
+        RefreshKeyLabels();
+    }
 
     public InstrumentView(Workspace ws)
     {
@@ -82,17 +146,6 @@ internal sealed class InstrumentView : UserControl
         txtName.Leave += delegate { CommitName(); };
         txtName.KeyDown += delegate (object s, KeyEventArgs e) { if (e.KeyCode == Keys.Enter) { CommitName(); e.SuppressKeyPress = true; } };
 
-        chkAdditive.Text = "Additive connection";
-        chkAdditive.Font = Theme.UiFont;
-        chkAdditive.SetBounds(264, 8, 180, 22);
-        chkAdditive.CheckedChanged += delegate
-        {
-            if (binding || current == null) return;
-            int con = chkAdditive.Checked ? 0 : 1;
-            current.Modulator.Con = con; current.Carrier.Con = con;
-            Edited();
-        };
-
         lblInfo.Font = Theme.UiFont;
         lblInfo.TextAlign = ContentAlignment.MiddleRight;
         lblInfo.Anchor = AnchorStyles.Top | AnchorStyles.Right;
@@ -104,7 +157,7 @@ internal sealed class InstrumentView : UserControl
         {
             h.Font = Theme.UiFont; h.TextAlign = ContentAlignment.MiddleCenter; h.Height = 22; h.AutoSize = false;
         }
-        Controls.AddRange(new Control[] { btnPrev, btnNext, txtName, btnList, chkAdditive, lblInfo, carrierHeader, modulatorHeader });
+        Controls.AddRange(new Control[] { btnPrev, btnNext, txtName, btnList, lblInfo, carrierHeader, modulatorHeader });
         UpdateHeaderHighlight();
     }
 
@@ -130,7 +183,7 @@ internal sealed class InstrumentView : UserControl
             cb.CheckedChanged += delegate
             {
                 if (binding || current == null) return;
-                current.GetOperator(carrier).Set(info.Id, cb.Checked ? 1 : 0);
+                OpFor(carrier).Set(info.Id, cb.Checked ? 1 : 0);
                 Edited();
             };
             c = cb;
@@ -141,7 +194,7 @@ internal sealed class InstrumentView : UserControl
             sl.ValueChanged += delegate
             {
                 if (binding || current == null) return;
-                current.GetOperator(carrier).Set(info.Id, sl.Value);
+                OpFor(carrier).Set(info.Id, sl.Value);
                 Edited();
             };
             c = sl;
@@ -165,16 +218,21 @@ internal sealed class InstrumentView : UserControl
 
     public void Bind(AdlibInstrument ins)
     {
+        bool changed = !ReferenceEquals(current, ins);
         current = ins;
+        if (changed && ins != null)
+        {
+            int mode = ins.Percussive && ins.VoiceNum >= 6 && ins.VoiceNum <= 10 ? ins.VoiceNum : 0;
+            if (mode != previewVoice) { ws.Audio.PreviewAllOff(); previewVoice = mode; ApplyLayout(); }
+        }
         binding = true;
         try
         {
             txtName.Text = ins != null ? ins.Name : "";
-            chkAdditive.Checked = ins != null && ins.Additive;
             foreach (var r in rows)
             {
-                SetControl(r.Carrier, ins, ins != null ? ins.Carrier : null, r.Info);
-                SetControl(r.Modulator, ins, ins != null ? ins.Modulator : null, r.Info);
+                SetControl(r.Carrier, ins, OpFor(true), r.Info);
+                SetControl(r.Modulator, ins, OpFor(false), r.Info);
             }
             var used = UsedList();
             int idx = ins != null ? used.IndexOf(ins) : -1;
@@ -184,6 +242,7 @@ internal sealed class InstrumentView : UserControl
         finally { binding = false; }
         Enabled = ins != null;
         ApplyPreview();
+        if (ModeChanged != null) ModeChanged();
     }
 
     private static void SetControl(Control c, AdlibInstrument ins, OplOperator op, ParameterInfo info)
@@ -287,8 +346,7 @@ internal sealed class InstrumentView : UserControl
     {
         if (key == Keys.PageUp || key == Keys.PageDown)
         {
-            baseNote = Math.Max(36, Math.Min(84, baseNote + (key == Keys.PageUp ? 12 : -12)));
-            RefreshKeyLabels();
+            TransposeKeyboard(key == Keys.PageUp ? 1 : -1);
             return true;
         }
         int offset;
@@ -316,6 +374,7 @@ internal sealed class InstrumentView : UserControl
     /// <summary>F1 = Carrier, F2 = Modulator 열로 포커스 이동.</summary>
     public void FocusColumn(bool carrier)
     {
+        if (SingleOperator) carrier = true;
         activeCarrier = carrier;
         UpdateHeaderHighlight();
         foreach (var r in rows)
@@ -349,6 +408,21 @@ internal sealed class InstrumentView : UserControl
             Place(r.Modulator, modX, y, colW);
         }
         keyboard.SetBounds(0, Height - KeyboardHeight, Width, KeyboardHeight);
+    }
+
+    /// <summary>모드에 맞춰 열을 보이고 숨긴다 (단일 오퍼레이터 = Carrier 열만).</summary>
+    private void ApplyLayout()
+    {
+        bool single = SingleOperator;
+        modulatorHeader.Visible = !single;
+        foreach (var r in rows)
+        {
+            if (r.Modulator != null) r.Modulator.Visible = !single;
+            // 모듈레이터 전용 행(Modulation Feedback)은 단일 오퍼레이터 모드에서 뜻이 없다
+            if (r.Info.ModulatorOnly) r.Label.Visible = !single;
+        }
+        if (single && !activeCarrier) { activeCarrier = true; UpdateHeaderHighlight(); }
+        Invalidate();
     }
 
     private static void Place(Control c, int x, int y, int w)

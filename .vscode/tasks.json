@@ -1,0 +1,45 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "close-running-app",
+      "detail": "이 저장소 bin에서 실행 중인 AdlibComposer를 닫는다 (DLL 잠금으로 빌드가 실패하지 않도록)",
+      "type": "process",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy", "Bypass",
+        "-Command",
+        "$bin = Join-Path '${workspaceFolder}' 'src\\AdlibComposer.App\\bin'; Get-Process AdlibComposer -ErrorAction SilentlyContinue | Where-Object { $_.Path -and $_.Path.StartsWith($bin, [StringComparison]::OrdinalIgnoreCase) } | ForEach-Object { Write-Host ('closing AdlibComposer pid ' + $_.Id); $_.CloseMainWindow() | Out-Null; if (-not $_.WaitForExit(15000)) { Write-Host 'AdlibComposer is still open (unsaved changes?). Close it, then press F5 again.' } }; exit 0"
+      ],
+      "presentation": { "reveal": "silent" },
+      "problemMatcher": []
+    },
+    {
+      "label": "build",
+      "detail": "솔루션 전체 Debug 빌드",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "build",
+        "${workspaceFolder}/AdlibComposer.sln",
+        "-c",
+        "Debug",
+        "/property:GenerateFullPaths=true",
+        "/consoleloggerparameters:NoSummary"
+      ],
+      "dependsOn": ["close-running-app"],
+      "problemMatcher": "$msCompile",
+      "group": { "kind": "build", "isDefault": true }
+    },
+    {
+      "label": "selftest",
+      "detail": "자체 테스트 실행",
+      "type": "process",
+      "command": "dotnet",
+      "args": ["run", "--project", "${workspaceFolder}/tests/AdlibComposer.SelfTest"],
+      "problemMatcher": "$msCompile",
+      "group": "test"
+    }
+  ]
+}

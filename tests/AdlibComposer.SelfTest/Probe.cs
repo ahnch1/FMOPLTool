@@ -12,10 +12,34 @@ public static class Probe
 {
     public static int Run(string[] args)
     {
+        if (args[0] == "--latency")
+        {
+            Song song; InstrumentBank bank;
+            using (var fs = File.OpenRead(args[1])) song = FormatRegistry.CreateDefault().FindSong(args[1]).Read(fs);
+            using (var fs = File.OpenRead(args[2])) bank = new BnkFormat().Read(fs);
+            var eng = new AdlibComposer.Audio.AudioEngine();
+            eng.MasterVolume = 0.05;
+            eng.OpenDevice();
+            System.Threading.Thread.Sleep(300);
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            eng.Play(song, bank, 0);
+            double tps = song.BasicTempo / 60.0 * song.TickBeat;
+            double firstMove = -1;
+            for (int i = 0; i < 40; i++)
+            {
+                System.Threading.Thread.Sleep(10);
+                double heard = eng.PositionTick;
+                if (heard > 0 && firstMove < 0) firstMove = sw.Elapsed.TotalMilliseconds;
+                if (i % 8 == 7) Console.WriteLine($"t={sw.Elapsed.TotalMilliseconds,6:0}ms heard={heard,7:0.00} ticks ({heard / tps * 1000,6:0}ms of song)");
+            }
+            Console.WriteLine($"cursor starts moving {firstMove:0}ms after Play (= audible start)");
+            eng.Stop(); eng.Dispose();
+            return 0;
+        }
         if (args[0] == "--render")
         {
             Song song; InstrumentBank bank;
-            using (var fs = File.OpenRead(args[1])) song = new RolFormat().Read(fs);
+            using (var fs = File.OpenRead(args[1])) song = FormatRegistry.CreateDefault().FindSong(args[1]).Read(fs);
             using (var fs = File.OpenRead(args[2])) bank = new BnkFormat().Read(fs);
             double sec = args.Length > 4 ? double.Parse(args[4]) : 20;
             var missing = new HashSet<string>();
@@ -35,7 +59,7 @@ public static class Probe
             try
             {
                 string ext = Path.GetExtension(p).ToLowerInvariant();
-                if (ext == ".rol") DumpRol(p);
+                if (ext == ".rol" || ext == ".ims") DumpRol(p);
                 else if (ext == ".bnk") DumpBnk(p);
                 else if (ext == ".ins") DumpIns(p);
             }
@@ -90,7 +114,8 @@ public static class Probe
     private static void DumpRol(string p)
     {
         Song song;
-        using (var fs = File.OpenRead(p)) { song = new RolFormat().Read(fs); Console.WriteLine($" consumed {fs.Position}/{fs.Length}"); }
+        var fmt0 = FormatRegistry.CreateDefault().FindSong(p);
+        using (var fs = File.OpenRead(p)) { song = fmt0.Read(fs); Console.WriteLine($" consumed {fs.Position}/{fs.Length}"); }
         Console.WriteLine($" ver={song.VersionMajor}.{song.VersionMinor} sig='{song.Signature}' tickBeat={song.TickBeat} bpm={song.BeatsPerMeasure} scale={song.ScaleX}x{song.ScaleY} melodic={song.IsMelodic} tempo={song.BasicTempo} tempoEv={song.TempoEvents.Count} len={song.LengthTicks}");
         foreach (var t in song.TempoEvents.Take(5)) Console.WriteLine($"   tempo @{t.Tick} x{t.Multiplier}");
         for (int v = 0; v < Song.MaxVoices; v++)
@@ -103,7 +128,7 @@ public static class Probe
             foreach (var e in vt.Pitches.Take(3)) Console.WriteLine($"    pitch @{e.Tick} {e.Pitch}");
         }
         var ms = new MemoryStream();
-        new RolFormat().Write(song, ms);
+        fmt0.Write(song, ms);
         var orig = File.ReadAllBytes(p); var neu = ms.ToArray();
         int diff = -1;
         for (int i = 0; i < Math.Min(orig.Length, neu.Length); i++) if (orig[i] != neu[i]) { diff = i; break; }

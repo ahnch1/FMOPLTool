@@ -14,6 +14,8 @@ public sealed class Opl2Emulator : IOplChip
     public int NativeRate { get { return Rate; } }
     /// <summary>출력 이득 (채널 합산 후 곱함).</summary>
     public double MasterGain { get; set; } = 1.0;
+    /// <summary>되먹임(feedback) 세기 배율. 1 = 칩 그대로, Jukebox '표준' 음색은 0.875 (feedback 6~7의 거친 잡음을 덜어 낸다).</summary>
+    public double FeedbackScale { get; set; } = 1.0;
 
     private const int StateOff = 0, StateAttack = 1, StateDecay = 2, StateSustain = 3, StateRelease = 4;
 
@@ -340,7 +342,7 @@ public sealed class Opl2Emulator : IOplChip
                 continue;
             }
             var m = c.Mod; var k = c.Car;
-            int fb = c.Fb > 0 ? (m.Prev0 + m.Prev1) >> (9 - c.Fb) : 0;
+            int fb = c.Fb > 0 ? (int)(((m.Prev0 + m.Prev1) >> (9 - c.Fb)) * FeedbackScale) : 0;
             int mo = SlotOut(m, fb, tremolo);
             m.Prev1 = m.Prev0; m.Prev0 = mo;
             if (rhythm && ch == 6)

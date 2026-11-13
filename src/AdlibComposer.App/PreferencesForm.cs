@@ -21,6 +21,7 @@ internal sealed class PreferencesForm : Form
     private readonly TextBox bankBox = new TextBox();
     private readonly CheckBox loadBankCheck = new CheckBox();
     private readonly CheckBox loadNowCheck = new CheckBox();
+    private readonly CheckBox nukedCheck = new CheckBox();
     private readonly Label bankStatus = new Label();
     private readonly Font titleFont = new Font("Segoe UI Semibold", 12f);
     private readonly Font headFont = new Font("Segoe UI Semibold", 9.5f);
@@ -77,6 +78,18 @@ internal sealed class PreferencesForm : Form
         loadNowCheck.AutoSize = true;
         loadNowCheck.Margin = new Padding(0, 2, 0, 12);
         root.Controls.Add(loadNowCheck);
+
+        root.Controls.Add(Section("Sound"));
+        nukedCheck.Text = "Use Nuked OPL3 emulator (cycle-accurate, closest to a real chip; uses more CPU)";
+        nukedCheck.AutoSize = true;
+        nukedCheck.Checked = settings.UseNukedOpl;
+        nukedCheck.Margin = new Padding(0, 2, 0, 2);
+        root.Controls.Add(nukedCheck);
+        root.Controls.Add(new Label
+        {
+            Text = "Applies everywhere: Composer, Instrument Maker preview, Jukebox (ROL / IMS / SOP) and S3M AdLib channels.\nOff = the built-in lightweight emulator. Switching while a song plays restarts the notes that are sounding.",
+            ForeColor = Subtle, AutoSize = true, MaximumSize = new Size(700, 0), Margin = new Padding(18, 0, 0, 12)
+        });
 
         // 버튼 줄
         var buttons = new TableLayoutPanel { AutoSize = true, ColumnCount = 4, Dock = DockStyle.Fill, Margin = new Padding(0, 8, 0, 0) };
@@ -185,6 +198,7 @@ internal sealed class PreferencesForm : Form
         bankFolderBox.Text = d.BankFolderPath;
         bankBox.Text = d.DefaultBankPath;
         loadBankCheck.Checked = true;
+        nukedCheck.Checked = false;
     }
 
     private void SaveAndClose()
@@ -198,6 +212,7 @@ internal sealed class PreferencesForm : Form
             settings.BankFolder = AppSettings.ToStored(SafeResolve(bankFolderBox.Text));
             settings.DefaultBank = bankBox.Text.Trim().Length == 0 ? "" : AppSettings.ToStored(SafeResolve(bankBox.Text));
             settings.LoadDefaultBank = loadBankCheck.Checked;
+            settings.UseNukedOpl = nukedCheck.Checked;
             settings.EnsureFolders();
             settings.Save();
         }

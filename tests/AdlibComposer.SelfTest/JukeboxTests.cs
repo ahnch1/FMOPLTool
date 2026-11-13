@@ -175,6 +175,35 @@ public static class JukeboxTests
                     check("Real ISS " + name + " mid-song has lit line", st.Line >= 0 && st.Lit.Any(x => x), st.Line + ": " + (st.Line >= 0 ? ly.Lines[st.Line].Text.Trim() : ""));
                 }
             }
+
+        TestToneAndSpeaker(check);
+    }
+
+    /// <summary>음색 표준/거칠게, 스피커 기본값/그 시절: 소리가 달라지고, 크기는 기본값과 비슷하게 (±4dB).</summary>
+    private static void TestToneAndSpeaker(Action<string, bool, string> check)
+    {
+        string dir = SopTests.FindDir("samples");
+        if (dir == null || !File.Exists(Path.Combine(dir, "demo.rol"))) { Console.WriteLine("SKIP  tone/speaker (samples/demo.rol not found)"); return; }
+        Song s; InstrumentBank b;
+        using (var fs = File.OpenRead(Path.Combine(dir, "demo.rol"))) s = new RolFormat().Read(fs);
+        using (var fs = File.OpenRead(Path.Combine(dir, "demo.bnk"))) b = new BnkFormat().Read(fs);
+
+        double Measure(bool standard, bool vintage, out short[] snap)
+        {
+            var e = new AudioEngine { ToneStandard = standard, VintageSpeaker = vintage };
+            var buf = new short[44100];
+            e.Play(s, b, 0, -1, -1, -1, new PlaybackOptions());
+            e.Render(buf, 4410);         // 앞 0.1초 건너뛰기 (스피커 페이드 포함)
+            double r = Rms(e, buf, 2);   // 2초 (demo.rol은 짧다)
+            snap = (short[])buf.Clone();
+            return r;
+        }
+        double raw = Measure(false, false, out var a), std = Measure(true, false, out var c), vin = Measure(false, true, out var d);
+        int diffStd = 0, diffVin = 0;
+        for (int i = 0; i < a.Length; i++) { if (Math.Abs(a[i] - c[i]) > 4) diffStd++; if (Math.Abs(a[i] - d[i]) > 4) diffVin++; }
+        double dbStd = 20 * Math.Log10(std / raw), dbVin = 20 * Math.Log10(vin / raw);
+        check("Tone standard changes sound, about same loudness", diffStd > a.Length / 10 && Math.Abs(dbStd) < 3, dbStd.ToString("0.0") + " dB, diff " + diffStd);
+        check("Vintage speaker changes sound, loudness within 4 dB", diffVin > a.Length / 2 && Math.Abs(dbVin) < 4, dbVin.ToString("0.0") + " dB, diff " + diffVin);
     }
 
     private static PlaybackOptions Voice0(int semis) { var o = new PlaybackOptions(); o.VoiceTranspose[0] = semis; return o; }

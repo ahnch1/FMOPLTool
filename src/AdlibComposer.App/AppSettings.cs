@@ -45,6 +45,12 @@ internal sealed class AppSettings
     /// <summary>프로그램 기본 뱅크 (시작할 때 불러오고, 새 곡 기본 악기를 찾는 뱅크).</summary>
     public string DefaultBank { get; set; } = DefaultBankFile;
     public bool LoadDefaultBank { get; set; } = true;
+    /// <summary>OPL 에뮬레이터: true = Nuked OPL3 (사이클 정밀, 실제 칩에 가까움), false = 내장 간이 에뮬레이터. 프로그램 전체에 적용.</summary>
+    public bool UseNukedOpl { get; set; }
+    /// <summary>Jukebox 음색: true = 거칠게 (칩 그대로), false = 표준 (되먹임 조금 줄이고 12kHz 위를 살짝 깎음).</summary>
+    public bool JukeboxRawTone { get; set; }
+    /// <summary>Jukebox 스피커: true = 그 시절 (작은 PC 스피커 흉내).</summary>
+    public bool JukeboxVintageSpeaker { get; set; }
 
     /// <summary>읽을 때 생긴 문제 (없으면 null). 화면에 알려 줄 때 쓴다.</summary>
     public string LoadWarning { get; private set; }
@@ -110,6 +116,9 @@ internal sealed class AppSettings
                         case "bankfolder": s.BankFolder = value; break;
                         case "defaultbank": s.DefaultBank = value; break;
                         case "loaddefaultbank": s.LoadDefaultBank = !(value == "0" || value.Equals("false", StringComparison.OrdinalIgnoreCase)); break;
+                        case "oplemulator": s.UseNukedOpl = value.Equals("nuked", StringComparison.OrdinalIgnoreCase); break;
+                        case "jukeboxtone": s.JukeboxRawTone = value.Equals("raw", StringComparison.OrdinalIgnoreCase); break;
+                        case "jukeboxspeaker": s.JukeboxVintageSpeaker = value.Equals("vintage", StringComparison.OrdinalIgnoreCase); break;
                     }
                 }
             }
@@ -133,6 +142,11 @@ internal sealed class AppSettings
         sb.AppendLine("BankFolder=" + BankFolder);
         sb.AppendLine("DefaultBank=" + DefaultBank);
         sb.AppendLine("LoadDefaultBank=" + (LoadDefaultBank ? "true" : "false"));
+        sb.AppendLine("; OplEmulator = builtin | nuked (Nuked OPL3, cycle-accurate)");
+        sb.AppendLine("OplEmulator=" + (UseNukedOpl ? "nuked" : "builtin"));
+        sb.AppendLine("; Jukebox: JukeboxTone = standard | raw, JukeboxSpeaker = default | vintage");
+        sb.AppendLine("JukeboxTone=" + (JukeboxRawTone ? "raw" : "standard"));
+        sb.AppendLine("JukeboxSpeaker=" + (JukeboxVintageSpeaker ? "vintage" : "default"));
         File.WriteAllText(FilePath, sb.ToString(), new UTF8Encoding(false));
     }
 

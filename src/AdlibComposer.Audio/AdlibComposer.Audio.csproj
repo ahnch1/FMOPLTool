@@ -7,5 +7,6 @@
   <ItemGroup>
     <ProjectReference Include="..\AdlibComposer.Core\AdlibComposer.Core.csproj" />
     <ProjectReference Include="..\AdlibComposer.Formats\AdlibComposer.Formats.csproj" />
+    <ProjectReference Include="..\AdlibComposer.Nuked\AdlibComposer.Nuked.csproj" />
   </ItemGroup>
 </Project>

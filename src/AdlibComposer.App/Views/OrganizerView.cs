@@ -433,6 +433,8 @@ internal sealed class OrganizerView : UserControl, IShellPage
         var targets = Checked();
         if (targets.Count == 0) return;
         bool simulate = chkSimulate.Checked;
+        if (!ConfirmWholeGroups(targets, move)) return;
+        if (targets.Count == 0) return;
         string dest = null;
         if (move)
         {
@@ -502,6 +504,41 @@ internal sealed class OrganizerView : UserControl, IShellPage
         groups = MusicDuplicateFinder.FindGroups(files);
         lblProgress.Text = "파일 " + files.Count + "개 · 같은 곡 그룹 " + groups.Count + "개";
         FillList();
+    }
+
+    /// <summary>
+    /// 같은 곡 그룹의 파일이 모두 체크돼 있으면(정리하면 그 곡이 하나도 남지 않음) 먼저 묻는다.
+    /// 예 = 각 그룹의 추천 파일(남김)을 대상에서 빼고 체크도 푼다 · 아니요 = 그대로 진행 · 취소 = 그만둔다(false).
+    /// </summary>
+    private bool ConfirmWholeGroups(List<MusicFileInfo> targets, bool move)
+    {
+        var set = new HashSet<MusicFileInfo>(targets);
+        var whole = groups.Where(g => g.Files.Count > 0 && g.Files.All(set.Contains)).ToList();
+        if (whole.Count == 0) return true;
+
+        var lines = whole.Take(10).Select(g => "  그룹 " + g.Id + ": " + string.Join(", ", g.Files.Select(f => f.FileName))).ToList();
+        if (whole.Count > 10) lines.Add("  … 외 " + (whole.Count - 10) + "개 그룹");
+        string msg = "같은 곡 그룹 " + whole.Count + "개는 파일이 모두 체크되어 있어 " + (move ? "옮기면 이 폴더에" : "삭제하면")
+            + " 그 곡이 하나도 남지 않습니다.\r\n\r\n" + string.Join("\r\n", lines)
+            + "\r\n\r\n예 — 각 그룹에서 추천 파일(남김)은 빼고 진행"
+            + "\r\n아니요 — 모두 그대로 " + (move ? "이동" : "삭제")
+            + "\r\n취소 — 그만두기";
+        var r = MessageBox.Show(FindForm(), msg, "Organizer — 그룹 전체가 " + (move ? "이동" : "삭제") + "됩니다",
+            MessageBoxButtons.YesNoCancel, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button1);
+        if (r == DialogResult.Cancel) return false;
+        if (r == DialogResult.No)
+        {
+            AppLog.Warn("정리", "그룹 전체 " + (move ? "이동" : "삭제") + " 진행 선택: 그룹 " + string.Join(", ", whole.Select(g => g.Id)));
+            return true;
+        }
+        var keepers = new HashSet<MusicFileInfo>(whole.Select(g => g.Keeper));
+        targets.RemoveAll(keepers.Contains);
+        filling = true;
+        foreach (ListViewItem it in list.Items)
+            if (keepers.Contains((MusicFileInfo)it.Tag)) it.Checked = false;
+        filling = false;
+        UpdateSummary();
+        return true;
     }
 
     /// <summary>옮길 곳에 같은 이름이 있으면 "이름 (2).ROL" 식으로.</summary>

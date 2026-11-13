@@ -84,7 +84,7 @@ public sealed class SopPlayer
         public int Serial;
     }
 
-    private readonly Opl3Emulator chip;
+    private readonly IOplChip chip;
     private readonly List<Ev> events = new List<Ev>();
     private SopSong song;
     private int next;
@@ -116,7 +116,7 @@ public sealed class SopPlayer
     /// <summary>C0 레지스터 사본 (드라이버 ymbuf 0x10~): [뱅크 × 9 + 채널].</summary>
     private readonly int[] c0 = new int[18];
 
-    public SopPlayer(Opl3Emulator chip) { this.chip = chip; }
+    public SopPlayer(IOplChip chip) { this.chip = chip; }
 
     public bool IsPlaying { get { return playing; } }
     /// <summary>시음 중 (곡 재생이 아님): <see cref="JamOn"/>.</summary>

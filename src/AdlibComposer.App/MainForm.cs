@@ -74,6 +74,7 @@ internal sealed class MainForm : Form
 
     public MainForm()
     {
+        ApplyOplCore();
         Text = "FMOPL Tool";
         AppIcon.Apply(this);
         ClientSize = new Size(1280, 820);
@@ -300,6 +301,15 @@ internal sealed class MainForm : Form
         AppLog.Info("곡", what + ": " + (s.FilePath ?? s.Title) + " — " + mode + " 보이스, 노트 " + notes + "개, " + s.BasicTempo + " BPM, 박당 " + s.TickBeat + "틱");
     }
 
+    /// <summary>설정의 OPL 에뮬레이터를 프로그램 전체(모든 OplChip)에 적용한다.</summary>
+    private void ApplyOplCore()
+    {
+        var want = settings.UseNukedOpl ? OplCore.Nuked : OplCore.Builtin;
+        if (OplChip.GlobalCore == want) return;
+        OplChip.GlobalCore = want;
+        AppLog.Info("설정", "OPL 에뮬레이터: " + (want == OplCore.Nuked ? "Nuked OPL3" : "내장"));
+    }
+
     /// <summary>File → Preferences: 폴더 / 기본 뱅크 설정 (FMOPLTool.cfg).</summary>
     private void ShowPreferences()
     {
@@ -307,6 +317,7 @@ internal sealed class MainForm : Form
         {
             if (f.ShowDialog(this) != DialogResult.OK || f.Result == null) return;
             settings = f.Result;
+            ApplyOplCore();
             jukebox.SettingsChanged();
             if (f.LoadBankNow && settings.DefaultBankPath != null && File.Exists(settings.DefaultBankPath) && ConfirmDiscardBank())
             {

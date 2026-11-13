@@ -66,7 +66,7 @@ public sealed class TrackerPlayer
 
     private TrackerModule mod;
     private readonly Chan[] ch = new Chan[TrackerModule.MaxChannels];
-    private readonly Opl2Emulator opl = new Opl2Emulator();
+    private readonly OplChip opl = new OplChip(false);
     private bool hasAdlib;
     private double oplPos, oplPrev, oplCur;
     private readonly int[] oplFnum = new int[9], oplBlock = new int[9];

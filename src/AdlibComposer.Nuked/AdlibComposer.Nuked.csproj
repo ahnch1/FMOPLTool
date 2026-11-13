@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Nuked OPL3 C# 포팅: LGPL-2.1 이상 (LICENSE). 나머지 프로그램과 따로 바꿔 끼울 수 있게 별도 어셈블리로 둔다. -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>AdlibComposer.Nuked</RootNamespace>
+    <AssemblyName>AdlibComposer.Nuked</AssemblyName>
+    <Copyright>Copyright (C) 2013-2020 Nuke.YKT · LGPL-2.1-or-later</Copyright>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="LICENSE" CopyToOutputDirectory="PreserveNewest" Link="LICENSE.Nuked-OPL3.txt" />
+  </ItemGroup>
+</Project>

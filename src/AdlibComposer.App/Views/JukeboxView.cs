@@ -42,6 +42,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
     private readonly ChannelMixer mixer = new ChannelMixer();
     private readonly Stepper speedStep = new Stepper(), keyStep = new Stepper(), volStep = new Stepper();
     private readonly CheckBox autoNext = new CheckBox();
+    private readonly CheckBox rawTone = new CheckBox(), vintageSpeaker = new CheckBox();
     private Button playButton;
     private readonly Timer timer = new Timer { Interval = 33 };
     private readonly ToolTip tips = new ToolTip();
@@ -334,6 +335,22 @@ internal sealed class JukeboxView : UserControl, IShellPage
         autoNext.AutoSize = true;
         autoNext.Margin = new Padding(18, 11, 0, 0);
         transport.Controls.Add(autoNext);
+        rawTone.Text = "거친 음색";
+        vintageSpeaker.Text = "그 시절 스피커";
+        foreach (var cb in new[] { rawTone, vintageSpeaker })
+        {
+            cb.ForeColor = DeckTheme.Text;
+            cb.Font = ShellTheme.Ui;
+            cb.AutoSize = true;
+            cb.Margin = new Padding(cb == rawTone ? 18 : 6, 11, 0, 0);
+            transport.Controls.Add(cb);
+        }
+        rawTone.Checked = settings().JukeboxRawTone;
+        vintageSpeaker.Checked = settings().JukeboxVintageSpeaker;
+        tips.SetToolTip(rawTone, "끔 = 표준: 오늘 FM 카드를 새로 설계했다면 냈을 소리 (되먹임을 조금 줄이고 12kHz 위를 살짝 깎음)\n켬 = 거칠게: 칩이 낸 소리 그대로 · ROL / IMS / SOP에만");
+        tips.SetToolTip(vintageSpeaker, "모니터 옆에 놓던 작은 PC 스피커로 듣는 소리 흉내 (저음이 빠지고 중고음이 튐)");
+        rawTone.CheckedChanged += delegate { settings().JukeboxRawTone = rawTone.Checked; ApplySound(); SaveSettings(); };
+        vintageSpeaker.CheckedChanged += delegate { settings().JukeboxVintageSpeaker = vintageSpeaker.Checked; ApplySound(); SaveSettings(); };
         table.Controls.Add(transport, 0, 3);
 
         // 속도 / 키 / 볼륨
@@ -970,6 +987,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
     public void OnShown()
     {
         if (tree.Nodes.Count == 0) BuildTree();
+        ApplySound();
         list.Focus();
     }
 
@@ -984,6 +1002,22 @@ internal sealed class JukeboxView : UserControl, IShellPage
             SyncPlayButton();
         }
         timer.Stop();
+        // 음색 · 스피커는 Jukebox에서만: 다른 페이지(Composer 재생 · 시음)는 칩 소리 그대로
+        ws.Audio.ToneStandard = false;
+        ws.Audio.VintageSpeaker = false;
+    }
+
+    /// <summary>음색 · 스피커 선택을 오디오 엔진에 (재생 중에도 바로 바뀐다).</summary>
+    private void ApplySound()
+    {
+        ws.Audio.ToneStandard = !rawTone.Checked;
+        ws.Audio.VintageSpeaker = vintageSpeaker.Checked;
+    }
+
+    private void SaveSettings()
+    {
+        try { settings().Save(); }
+        catch (Exception ex) { AppLog.Warn("Jukebox", "설정을 저장하지 못했습니다: " + ex.Message); }
     }
 
     /// <summary>설정(폴더/기본 뱅크)이 바뀌면 트리를 다시 만든다.</summary>

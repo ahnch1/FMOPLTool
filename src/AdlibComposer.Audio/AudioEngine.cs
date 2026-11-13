@@ -18,7 +18,7 @@ public sealed class AudioEngine : IDisposable
     private readonly OplSynth synth;
     private readonly Sequencer sequencer;
     /// <summary>SOP는 최대 20트랙이 함께 울려 OPL2 곡보다 크다: 칩 출력을 줄여 SoftClip에 덜 걸리게 한다.</summary>
-    private readonly Opl3Emulator opl3 = new Opl3Emulator { MasterGain = 0.6 };
+    private readonly OplChip opl3 = new OplChip(true) { MasterGain = 0.6 };
     private readonly SopPlayer sop;
     private readonly MusicBoxPlayer musicBox = new MusicBoxPlayer();
     private readonly TrackerPlayer tracker = new TrackerPlayer();
@@ -49,6 +49,48 @@ public sealed class AudioEngine : IDisposable
         this.synth = synth;
         sequencer = new Sequencer(synth);
         sop = new SopPlayer(opl3);
+        toneL = toneR = OnePoleLowPass.Create(StandardCutoffHz, synth.NativeRate);
+        spkL = spkR = SmallSpeaker.Create(OutputRate);
+    }
+
+    // ---------------------------------------------------------------- 음색 / 스피커 (Jukebox)
+
+    /// <summary>'표준' 음색에서 되먹임 배율과 로우패스 차단 주파수.</summary>
+    public const double StandardFeedback = 0.875, StandardCutoffHz = 12000;
+    private bool toneStandard;
+    private bool vintageSpeaker;
+    private OnePoleLowPass toneL, toneR;
+    private SmallSpeaker spkL, spkR;
+    /// <summary>스피커 소리 비율 (0 = 기본값, 1 = 그 시절). 바꿀 때 30ms에 걸쳐 옮겨 가 '딱' 소리를 막는다.</summary>
+    private double speakerMix;
+    private static readonly double SpeakerFade = 1 - Math.Exp(-1.0 / (0.03 * OutputRate));
+
+    /// <summary>
+    /// 음색 '표준' (true): 오늘 FM 카드를 새로 설계했다면 냈을 소리 — 되먹임을 1/8 줄이고 칩 출력의 12kHz 위를 살짝 깎는다.
+    /// false = '거칠게': 칩이 낸 소리 그대로. OPL(ROL/IMS/SOP)에만 해당하고 트래커 · 오르골은 그대로.
+    /// </summary>
+    public bool ToneStandard
+    {
+        get { return toneStandard; }
+        set
+        {
+            lock (sync)
+            {
+                if (toneStandard == value) return;
+                toneStandard = value;
+                double fb = value ? StandardFeedback : 1.0;
+                synth.Chip.FeedbackScale = fb;
+                opl3.FeedbackScale = fb;
+                toneL.Reset(); toneR.Reset();
+            }
+        }
+    }
+
+    /// <summary>스피커 '그 시절' (true): 모니터 옆 작은 PC 스피커로 듣는 소리 흉내 (모든 곡).</summary>
+    public bool VintageSpeaker
+    {
+        get { return vintageSpeaker; }
+        set { lock (sync) vintageSpeaker = value; }
     }
 
     public OplMapping Mapping { get { return synth.Mapping; } }
@@ -369,9 +411,24 @@ public sealed class AudioEngine : IDisposable
                     sequencer.Step();
                     curL = curR = synth.Generate();
                 }
+                if (toneStandard && (src == Source.Opl2 || useSop))
+                {
+                    curL = toneL.Process(curL);
+                    curR = toneR.Process(curR);
+                }
             }
-            double vl = SoftClip((prevL + (curL - prevL) * resamplePos) * gain);
-            double vr = SoftClip((prevR + (curR - prevR) * resamplePos) * gain);
+            double vl = (prevL + (curL - prevL) * resamplePos) * gain;
+            double vr = (prevR + (curR - prevR) * resamplePos) * gain;
+            // 스피커: 필터는 늘 돌려 두고(바꿀 때 상태가 이어지게) 비율만 옮긴다
+            double wl = spkL.Process(vl), wr = spkR.Process(vr);
+            speakerMix += ((vintageSpeaker ? 1.0 : 0.0) - speakerMix) * SpeakerFade;
+            if (speakerMix > 1e-4)
+            {
+                vl += (wl - vl) * speakerMix;
+                vr += (wr - vr) * speakerMix;
+            }
+            vl = SoftClip(vl);
+            vr = SoftClip(vr);
             if (stereo) { buffer[2 * i] = (short)vl; buffer[2 * i + 1] = (short)vr; }
             else buffer[i] = (short)((vl + vr) / 2);
         }

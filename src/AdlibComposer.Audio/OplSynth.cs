@@ -31,7 +31,7 @@ public sealed class OplSynth
     public bool DeepVibrato { get; set; }
     public IOplChip Chip { get { return chip; } }
 
-    public OplSynth() : this(new Opl2Emulator()) { }
+    public OplSynth() : this(new OplChip(false)) { }
 
     public OplSynth(IOplChip chip)
     {

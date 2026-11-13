@@ -67,7 +67,8 @@ internal static class Glyphs
     public const char Instrument = '';   // Equalizer
     public const char Jukebox = '';      // MusicAlbum
     public const char Note = '';
-    public const char Orgel = '';        // Audio (오르골)         // QuickNote
+    public const char Orgel = '';        // Audio (오르골)
+    public const char Tracker = '';      // TVMonitor (트래커 화면)         // QuickNote
     public const char NewFile = '';      // Add
     public const char Open = '';         // OpenFile
     public const char Save = '';         // Save

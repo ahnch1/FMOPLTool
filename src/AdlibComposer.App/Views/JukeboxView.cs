@@ -23,7 +23,7 @@ namespace AdlibComposer.App.Views;
 [System.ComponentModel.DesignerCategory("Code")]   // 코드로 만든 화면: 디자이너 대신 코드로 연다
 internal sealed class JukeboxView : UserControl, IShellPage
 {
-    private static readonly string[] SongExtensions = { ".rol", ".ims", ".sop" };
+    private static readonly string[] SongExtensions = { ".rol", ".ims", ".sop", ".s3m", ".stm" };
 
     private readonly Workspace ws;
     private readonly Func<AppSettings> settings;
@@ -54,6 +54,8 @@ internal sealed class JukeboxView : UserControl, IShellPage
     private Song song;
     /// <summary>SOP 곡이면 이것 (song은 null).</summary>
     private SopSong sopSong;
+    /// <summary>Scream Tracker 곡(STM/S3M)이면 이것. 위치 = ms.</summary>
+    private TrackerModule trackerSong;
     private InstrumentBank bank;
     private IssLyrics iss;
     private TempoMap tempoMap;
@@ -150,7 +152,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
         folderLabel.AutoEllipsis = true;
         folderLabel.Padding = new Padding(8, 3, 4, 0);
         inner.Panel2.Controls.Add(folderLabel);
-        inner.Panel2.Controls.Add(SectionHeader("곡 파일 (ROL · IMS · SOP)"));
+        inner.Panel2.Controls.Add(SectionHeader("곡 파일 (ROL · IMS · SOP · S3M · STM)"));
     }
 
     private static Control SectionHeader(string text)
@@ -171,6 +173,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
         AddRoot("ROL 폴더", s.SongFolderPath);
         AddRoot("IMS 폴더", s.ImsFolderPath);
         AddRoot("SOP 폴더", s.SopFolderPath);
+        AddRoot("S3M · STM 폴더", s.TrackerFolderPath);
         var pc = new TreeNode("내 PC");
         try
         {
@@ -394,6 +397,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
         if (path == null) return;
         try { path = Path.GetFullPath(path); } catch (Exception) { }
         if (SopFormat.IsSop(path)) { PlaySopFile(path, fromList); return; }
+        if (TrackerFiles.IsTracker(path)) { PlayTrackerFile(path, fromList); return; }
         Song s;
         try
         {
@@ -413,6 +417,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
         StopEngine();
         song = s;
         sopSong = null;
+        trackerSong = null;
         currentPath = path;
         if (fromList) playlist = CurrentListPaths();
         bool sameName;
@@ -475,6 +480,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
         StopEngine();
         song = null;
         sopSong = s;
+        trackerSong = null;
         currentPath = path;
         if (fromList) playlist = CurrentListPaths();
         bank = null;
@@ -516,18 +522,76 @@ internal sealed class JukeboxView : UserControl, IShellPage
         StartAt(0);
     }
 
-    private bool HasSong { get { return song != null || sopSong != null; } }
-    private int LengthTicks { get { return sopSong != null ? sopSong.LengthTicks : song != null ? song.LengthTicks : 0; } }
-    private int TrackCount { get { return sopSong != null ? sopSong.TrackCount : song != null ? song.VoiceCount : PlaybackOptions.Voices; } }
+    /// <summary>
+    /// Scream Tracker 곡: 악기는 곡 안에 있고(샘플 · AdLib), 가사 없음. 길이는 끝(또는 되돌아가는 곳)까지 빨리 돌려 잰다.
+    /// 위치 단위는 ms (SecondsAt / TickAt이 1000으로 나누고 곱한다).
+    /// </summary>
+    private void PlayTrackerFile(string path, bool fromList)
+    {
+        TrackerModule m;
+        try { m = TrackerFiles.Load(path); }
+        catch (Exception ex)
+        {
+            AppLog.Error("Jukebox", "곡을 열 수 없습니다: " + Path.GetFileName(path), ex);
+            return;
+        }
+        StopEngine();
+        song = null; sopSong = null;
+        trackerSong = m;
+        currentPath = path;
+        if (fromList) playlist = CurrentListPaths();
+        bank = null;
+        iss = null;
+        tempoMap = null;
+        totalSeconds = TrackerPlayer.MeasureSeconds(m);
+        pausedTick = 0;
+        int channels = m.UsedChannelCount;
+        for (int v = 0; v < PlaybackOptions.Voices; v++) { options.VoiceMute[v] = false; options.VoiceTranspose[v] = 0; levels[v] = 0; voiceUsed[v] = false; }
+        foreach (var p in m.Patterns)
+            for (int r = 0; r < TrackerPattern.Rows; r++)
+                for (int c = 0; c < Math.Min(channels, PlaybackOptions.Voices); c++)
+                    if (p[r, c].HasNote && m.IsChannelUsed(c)) voiceUsed[c] = true;
+        int samples = 0, adlib = 0;
+        foreach (var s in m.Samples) { if (s.IsSample) samples++; else if (s.IsAdlib) adlib++; }
+        string title = (m.Title ?? "").Trim();
+        if (title.Length == 0) title = Path.GetFileNameWithoutExtension(path);
+        bool stm = m.Kind == TrackerKind.Stm;
+
+        display.Title = title;
+        display.SongFile = Path.GetFileName(path);
+        display.Loaded = samples + adlib;
+        display.Total = samples + adlib;
+        display.BankFile = "곡 안 샘플 " + samples + "개" + (adlib > 0 ? " · AdLib " + adlib + "개" : "");
+        display.BankCount = samples + adlib;
+        display.BankSameName = false;
+        display.LyricFile = null;
+        display.TotalSeconds = totalSeconds;
+        display.Mode = (stm ? "STM · Scream Tracker 2 · 4채널" : "S3M · Scream Tracker 3 · " + voiceUsed.Count(u => u) + "/" + channels + "채널")
+            + " · 패턴 " + m.Patterns.Count + " · 주문 " + m.PlayOrders().Count;
+        lyrics.Lyrics = null;
+        lyrics.State = null;
+        lenLabel.Text = DeckTheme.Clock(totalSeconds);
+        seek.Enabled = true;
+        RebuildMixerRows();
+        MarkPlaying();
+        AppLog.Info("Jukebox", "재생: " + Path.GetFileName(path) + " — " + (stm ? "STM" : "S3M") + " " + channels + "채널, 샘플 " + samples + (adlib > 0 ? ", AdLib " + adlib : "") + ", " + DeckTheme.Clock(totalSeconds));
+        StartAt(0);
+    }
+
+    private bool HasSong { get { return song != null || sopSong != null || trackerSong != null; } }
+    private int LengthTicks { get { return trackerSong != null ? (int)(totalSeconds * 1000) : sopSong != null ? sopSong.LengthTicks : song != null ? song.LengthTicks : 0; } }
+    private int TrackCount { get { return trackerSong != null ? Math.Min(PlaybackOptions.Voices, trackerSong.UsedChannelCount) : sopSong != null ? sopSong.TrackCount : song != null ? song.VoiceCount : PlaybackOptions.Voices; } }
 
     private double SecondsAt(double tick)
     {
+        if (trackerSong != null) return tick / 1000.0;
         if (sopSong != null) return sopSong.SecondsAt(tick);
         return tempoMap != null ? tempoMap.SecondsAt((int)tick) : 0;
     }
 
     private double TickAt(double seconds)
     {
+        if (trackerSong != null) return seconds * 1000.0;
         if (sopSong != null) return sopSong.TickAt(seconds);
         return tempoMap != null ? tempoMap.TickAt(seconds) : 0;
     }
@@ -605,7 +669,8 @@ internal sealed class JukeboxView : UserControl, IShellPage
     private void StartAt(double tick)
     {
         if (!HasSong || !openAudio()) return;
-        if (sopSong != null) ws.Audio.PlaySop(sopSong, (int)Math.Max(0, tick), options);
+        if (trackerSong != null) ws.Audio.PlayTracker(trackerSong, 0, 0, -1, false, options, Math.Max(0, tick));
+        else if (sopSong != null) ws.Audio.PlaySop(sopSong, (int)Math.Max(0, tick), options);
         else ws.Audio.Play(song, bank, (int)Math.Max(0, tick), -1, -1, -1, options);
         state = PlayState.Playing;
         timer.Start();
@@ -776,7 +841,8 @@ internal sealed class JukeboxView : UserControl, IShellPage
         double tick = CurrentTick;
         double sec = SecondsAt(Math.Min(tick, LengthTicks));
         display.Seconds = sec;
-        double basic = sopSong != null ? sopSong.BasicTempo : song.BasicTempo;
+        double basic = trackerSong != null ? (trackerSong.Kind == TrackerKind.S3m ? trackerSong.Tempo : 125.0 * 6 / Math.Max(1, trackerSong.Tempo >> 4))
+            : sopSong != null ? sopSong.BasicTempo : song.BasicTempo;
         double mult = state == PlayState.Playing ? ws.Audio.TempoMultiplier : sopSong != null ? sopSong.TempoAt(tick) / (double)sopSong.BasicTempo : 1.0;
         display.Bpm = basic * mult * options.Speed;
         display.Invalidate();
@@ -809,6 +875,12 @@ internal sealed class JukeboxView : UserControl, IShellPage
     private void RebuildMixerRows()
     {
         mixer.Rows.Clear();
+        if (trackerSong != null)
+        {
+            for (int c = 0; c < TrackCount; c++) mixer.Rows.Add(new ChannelRow { Label = trackerSong.ChannelLabel(c) });
+            RefreshMixer();
+            return;
+        }
         if (sopSong != null)
         {
             for (int t = 0; t < sopSong.TrackCount; t++) mixer.Rows.Add(new ChannelRow { Label = sopSong.TrackLabel(t) });
@@ -833,7 +905,12 @@ internal sealed class JukeboxView : UserControl, IShellPage
             row.Muted = options.VoiceMute[v];
             row.Pitch = options.VoiceTranspose[v];
             row.Used = HasSong && voiceUsed[v];
-            if (sopSong != null)
+            if (trackerSong != null)
+            {
+                row.Instrument = playing && vs.Instrument != null ? vs.Instrument : FirstTrackerSample(v);
+                row.Found = true;
+            }
+            else if (sopSong != null)
             {
                 row.Instrument = playing && vs.Instrument != null ? vs.Instrument : FirstSopInstrument(v);
                 row.Found = true;   // 악기는 곡 안에 있다
@@ -852,6 +929,23 @@ internal sealed class JukeboxView : UserControl, IShellPage
             row.Level = levels[v];
         }
         mixer.Invalidate();
+    }
+
+    private string FirstTrackerSample(int c)
+    {
+        if (trackerSong == null) return null;
+        foreach (var p in trackerSong.Patterns)
+            for (int r = 0; r < TrackerPattern.Rows; r++)
+            {
+                if (c >= p.Channels) return null;
+                int i = p[r, c].Instrument;
+                if (i > 0 && i <= trackerSong.Samples.Count)
+                {
+                    var s = trackerSong.Samples[i - 1];
+                    return s.Name.Trim().Length > 0 ? s.Name.Trim() : s.FileName;
+                }
+            }
+        return null;
     }
 
     private string FirstSopInstrument(int t)

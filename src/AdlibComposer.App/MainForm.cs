@@ -42,6 +42,7 @@ internal sealed class MainForm : Form
     private readonly Splitter logSplitter = new Splitter();
     private readonly JukeboxView jukebox;
     private readonly OrgelView orgel;
+    private readonly TrackerView trackerView;
     private readonly NoteView note;
     private ToolStripButton tbPlay, tbStop;
 
@@ -84,6 +85,7 @@ internal sealed class MainForm : Form
         instrument = new InstrumentView(ws) { Dock = DockStyle.Fill, Visible = false };
         jukebox = new JukeboxView(ws, delegate { return settings; }, TryOpenAudio) { Dock = DockStyle.Fill, Visible = false };
         note = new NoteView(ws, delegate { return settings.FolderForSong(ws.Song.FilePath); }) { Dock = DockStyle.Fill, Visible = false };
+        trackerView = new TrackerView(ws, delegate { return settings; }, TryOpenAudio) { Dock = DockStyle.Fill, Visible = false };
         orgel = new OrgelView(ws, TryOpenAudio, delegate { return settings.FolderForSong(ws.Song.FilePath); }) { Dock = DockStyle.Fill, Visible = false };
         note.NoteActivated += delegate (int voice, int tick, int pitch) { ShowPage(AppPage.Composer); composer.GoTo(voice, tick, pitch); };
 
@@ -136,7 +138,7 @@ internal sealed class MainForm : Form
         sidebar.PageSelected += ShowPage;
 
         pageHost.Dock = DockStyle.Fill;
-        pageHost.Controls.AddRange(new Control[] { composer, instrument, jukebox, note, orgel });
+        pageHost.Controls.AddRange(new Control[] { composer, instrument, jukebox, note, orgel, trackerView });
 
         logPanel.Dock = DockStyle.Bottom;
         logPanel.Height = 140;
@@ -224,6 +226,7 @@ internal sealed class MainForm : Form
         jukebox.Visible = target == AppPage.Jukebox;
         note.Visible = target == AppPage.Note;
         orgel.Visible = target == AppPage.Orgel;
+        trackerView.Visible = target == AppPage.Tracker;
         if (target == AppPage.Instrument) instrument.ApplyPreview();
         var shown = PageControl(target) as IShellPage;
         if (shown != null) shown.OnShown();
@@ -242,6 +245,7 @@ internal sealed class MainForm : Form
             case AppPage.Jukebox: return jukebox;
             case AppPage.Note: return note;
             case AppPage.Orgel: return orgel;
+            case AppPage.Tracker: return trackerView;
         }
         return composer;
     }
@@ -520,6 +524,7 @@ internal sealed class MainForm : Form
         helpMenu.DropDownItems.Add(Item("About", delegate { About(); }));
 
         helpMenu.DropDownItems.Insert(0, new ToolStripSeparator());
+        helpMenu.DropDownItems.Insert(0, Item("Tracker", delegate { ShowPage(AppPage.Tracker); }, Keys.None, "Ctrl+6"));
         helpMenu.DropDownItems.Insert(0, Item("Orgel Note", delegate { ShowPage(AppPage.Orgel); }, Keys.None, "Ctrl+5"));
         helpMenu.DropDownItems.Insert(0, Item("Note", delegate { ShowPage(AppPage.Note); }, Keys.None, "Ctrl+4"));
         helpMenu.DropDownItems.Insert(0, Item("Jukebox", delegate { ShowPage(AppPage.Jukebox); }, Keys.None, "Ctrl+3"));
@@ -786,6 +791,7 @@ internal sealed class MainForm : Form
             case Keys.Control | Keys.D3: ShowPage(AppPage.Jukebox); return true;
             case Keys.Control | Keys.D4: ShowPage(AppPage.Note); return true;
             case Keys.Control | Keys.D5: ShowPage(AppPage.Orgel); return true;
+            case Keys.Control | Keys.D6: ShowPage(AppPage.Tracker); return true;
             case Keys.Space: if (composerMode && !text) { TogglePlay(); return true; } break;
             case Keys.Shift | Keys.Space:
                 if (composerMode && !text)
@@ -842,7 +848,7 @@ internal sealed class MainForm : Form
 
     private void OnClosing(object sender, FormClosingEventArgs e)
     {
-        if (!ConfirmDiscardSong() || !ConfirmDiscardBank()) e.Cancel = true;
+        if (!ConfirmDiscardSong() || !ConfirmDiscardBank() || !trackerView.ConfirmDiscard()) e.Cancel = true;
     }
 
     private void Fail(string what, Exception ex)

@@ -35,6 +35,7 @@ public static class Program
         JukeboxTests.Run(Check);
         SopTests.Run(Check);
         OrgelTests.Run(Check);
+        TrackerTests.Run(Check);
         TestRegistry();
         RealFileTests.Run(Check);
         Console.WriteLine();

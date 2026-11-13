@@ -388,7 +388,15 @@ internal sealed class ChannelMixer : DeckControl
     private const int HeaderH = 26;
     private const int MinRowH = 22;
     /// <summary>한 열이면 자리가 모자랄 때 두 열로 나눈다 (11채널이 다 보이게).</summary>
-    private int ColumnCount { get { return Rows.Count > 1 && (Height - HeaderH - 10) / Rows.Count < MinRowH && Width >= 640 ? 2 : 1; } }
+    private int ColumnCount
+    {
+        get
+        {
+            int fit = Math.Max(1, (Height - HeaderH - 10) / MinRowH);
+            if (Rows.Count <= 1 || Rows.Count <= fit || Width < 640) return 1;
+            return Rows.Count > fit * 2 && Width >= 960 ? 3 : 2;   // S3M 32채널은 세 열까지
+        }
+    }
     private int RowsPerColumn { get { return (Rows.Count + ColumnCount - 1) / ColumnCount; } }
     /// <summary>줄 높이: 자리에 맞춰 22~30 (그래도 모자라면 18까지).</summary>
     private int RowH { get { return Rows.Count == 0 ? 30 : Math.Max(18, Math.Min(30, (Height - HeaderH - 10) / RowsPerColumn)); } }

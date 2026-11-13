@@ -116,6 +116,51 @@ public static class DemoRender
     public static int Run(string[] args)
     {
         string wav = null, rol = null, bnk = null;
+        if (args[0] == "--trackertrace")
+        {
+            var tm = TrackerFiles.Load(args[1]);
+            var tp = new TrackerPlayer();
+            tp.Start(tm);
+            int lastO = -1, lastR = -1; double l, r;
+            for (long i = 0; i < 44100L * 120 && tp.IsSongPlaying; i++)
+            {
+                tp.Generate(out l, out r);
+                if (tp.CurrentOrder != lastO || (tp.CurrentRow == 0 && lastR != 0)) Console.Write(" [" + (i / 44100.0).ToString("0.0") + "s o" + tp.CurrentOrder + " p" + tp.CurrentPattern + " r" + tp.CurrentRow + "]");
+                lastO = tp.CurrentOrder; lastR = tp.CurrentRow;
+            }
+            Console.WriteLine();
+            return 0;
+        }
+        if (args[0] == "--tracker")
+        {
+            // --tracker 곡.S3M|STM 출력.wav [초]
+            var tm = TrackerFiles.Load(args[1]);
+            double len = TrackerPlayer.MeasureSeconds(tm);
+            double sec = args.Length > 3 ? double.Parse(args[3], System.Globalization.CultureInfo.InvariantCulture) : Math.Min(60, len + 1);
+            var eng = new AudioEngine();
+            eng.PlayTracker(tm);
+            int frames = (int)(sec * AudioEngine.OutputRate);
+            var pcm = new short[frames * 2];
+            var chunk = new short[2048];
+            for (int off = 0; off < frames; off += 1024)
+            {
+                int n = Math.Min(1024, frames - off);
+                eng.RenderStereo(chunk, n);
+                Array.Copy(chunk, 0, pcm, off * 2, n * 2);
+            }
+            if (args.Length > 2 && args[2] != "-") WriteWav(args[2], pcm, AudioEngine.OutputRate, 2);
+            int peak = 0, over = 0; double sl = 0, sr = 0;
+            for (int i = 0; i < pcm.Length; i += 2)
+            {
+                int a2 = Math.Max(Math.Abs((int)pcm[i]), Math.Abs((int)pcm[i + 1]));
+                peak = Math.Max(peak, a2); if (a2 > 24000) over++;
+                sl += (double)pcm[i] * pcm[i]; sr += (double)pcm[i + 1] * pcm[i + 1];
+            }
+            int nf = Math.Max(1, pcm.Length / 2);
+            Console.WriteLine(System.IO.Path.GetFileName(args[1]) + "  " + tm.Kind + " ch=" + tm.UsedChannelCount + " pat=" + tm.Patterns.Count + " ins=" + tm.Samples.Count
+                + "  len=" + len.ToString("0.0") + "s  peak=" + peak + " over=" + (100.0 * over / nf).ToString("0.00") + "%  rmsL=" + Math.Sqrt(sl / nf).ToString("0") + " rmsR=" + Math.Sqrt(sr / nf).ToString("0"));
+            return 0;
+        }
         if (args[0] == "--sop")
         {
             // --sop 곡.SOP 출력.wav [초]

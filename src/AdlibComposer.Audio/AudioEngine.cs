@@ -21,8 +21,9 @@ public sealed class AudioEngine : IDisposable
     private readonly Opl3Emulator opl3 = new Opl3Emulator { MasterGain = 0.6 };
     private readonly SopPlayer sop;
     private readonly MusicBoxPlayer musicBox = new MusicBoxPlayer();
+    private readonly TrackerPlayer tracker = new TrackerPlayer();
     /// <summary>소리를 내는 쪽. 시음이나 ROL/IMS 재생을 시작하면 Opl2.</summary>
-    private enum Source { Opl2, Sop, MusicBox }
+    private enum Source { Opl2, Sop, MusicBox, Tracker }
     private Source source = Source.Opl2;
     private bool sopMode { get { return source == Source.Sop; } }
     /// <summary>오르골 소리(−1~1)를 16bit 쪽 크기로.</summary>
@@ -57,12 +58,30 @@ public sealed class AudioEngine : IDisposable
 
     private bool SourcePlaying
     {
-        get { return source == Source.Sop ? sop.IsPlaying : source == Source.MusicBox ? musicBox.IsPlaying : sequencer.IsPlaying; }
+        get
+        {
+            switch (source)
+            {
+                case Source.Sop: return sop.IsPlaying;
+                case Source.MusicBox: return musicBox.IsPlaying;
+                case Source.Tracker: return tracker.IsSongPlaying;
+            }
+            return sequencer.IsPlaying;
+        }
     }
 
     private double SourceTick
     {
-        get { return source == Source.Sop ? sop.PositionTick : source == Source.MusicBox ? musicBox.PositionTick : sequencer.PositionTick; }
+        get
+        {
+            switch (source)
+            {
+                case Source.Sop: return sop.PositionTick;
+                case Source.MusicBox: return musicBox.PositionTick;
+                case Source.Tracker: return tracker.PositionMs;   // 트래커는 ms
+            }
+            return sequencer.PositionTick;
+        }
     }
 
     /// <summary>지금 스피커에서 들리는 위치(틱). 장치가 없으면 시퀀서 위치.</summary>
@@ -107,6 +126,7 @@ public sealed class AudioEngine : IDisposable
         {
             if (source == Source.Sop) sop.Stop();
             if (source == Source.MusicBox) musicBox.Stop();
+            if (source == Source.Tracker) tracker.Stop();
             source = Source.Opl2;
             Func<string, AdlibInstrument> resolver = name => bank != null ? bank.Find(name) : null;
             sequencer.Start(song, resolver, startTick, loopStart, loopEnd, onlyVoice, options);
@@ -143,12 +163,53 @@ public sealed class AudioEngine : IDisposable
         }
     }
 
+    /// <summary>
+    /// Scream Tracker 곡(STM/S3M) 재생. 위치(PositionTick)는 ms. singlePattern ≥ 0이면 그 패턴만, loop = 끝에서 처음으로(편집기).
+    /// skipMs만큼 앞으로 감아서 시작 (Jukebox 이동).
+    /// </summary>
+    public void PlayTracker(TrackerModule module, int startOrder = 0, int startRow = 0, int singlePattern = -1, bool loop = false, PlaybackOptions options = null, double skipMs = 0)
+    {
+        lock (sync)
+        {
+            if (sequencer.IsPlaying) sequencer.Stop();
+            sop.Stop(); musicBox.Stop();
+            source = Source.Tracker;
+            tracker.Start(module, startOrder, startRow, singlePattern, loop, options, skipMs);
+            generation++;
+            this.startTick = skipMs;
+        }
+    }
+
+    /// <summary>트래커 편집기 시음: 곡 재생 중이 아니면 악기 sampleNo(1부터)로 note를 한 채널에서 낸다.</summary>
+    public void TrackerJam(TrackerModule module, int sampleNo, int note, int channel)
+    {
+        lock (sync)
+        {
+            if (source == Source.Tracker && tracker.IsSongPlaying) return;
+            if (sequencer.IsPlaying) sequencer.Stop();
+            source = Source.Tracker;
+            tracker.Jam(module, sampleNo, note, channel);
+        }
+    }
+
+    public void TrackerJamOff(int channel) { lock (sync) { if (source == Source.Tracker) tracker.JamOff(channel); } }
+
+    /// <summary>트래커 재생 위치 (렌더 위치 기준, 출력 버퍼만큼 앞설 수 있다).</summary>
+    public bool GetTrackerPosition(out int order, out int pattern, out int row)
+    {
+        lock (sync)
+        {
+            order = tracker.CurrentOrder; pattern = tracker.CurrentPattern; row = tracker.CurrentRow;
+            return source == Source.Tracker && tracker.IsSongPlaying;
+        }
+    }
+
     /// <summary>오르골 시험 연주 속도 (틱/초)를 재생 중에 바꾼다.</summary>
     public void SetMusicBoxSpeed(double ticksPerSecond) { lock (sync) { musicBox.SetSpeed(ticksPerSecond); } }
 
     public void Stop()
     {
-        lock (sync) { sequencer.Stop(); sop.Stop(); musicBox.Stop(); }
+        lock (sync) { sequencer.Stop(); sop.Stop(); musicBox.Stop(); tracker.Stop(); }
     }
 
     // ---------------------------------------------------------------- 재생 조절 (Jukebox)
@@ -156,12 +217,12 @@ public sealed class AudioEngine : IDisposable
     /// <summary>지금 재생의 조절값 (Play에 넘긴 것). 값을 바꾼 뒤에는 아래 Set...을 부른다.</summary>
     public PlaybackOptions Options { get { lock (sync) { return CurrentOptions; } } }
 
-    private PlaybackOptions CurrentOptions { get { return sopMode ? sop.Options : sequencer.Options; } }
+    private PlaybackOptions CurrentOptions { get { return sopMode ? sop.Options : source == Source.Tracker ? tracker.Options : sequencer.Options; } }
 
-    public void SetSpeed(double speed) { lock (sync) { CurrentOptions.Speed = speed; if (sopMode) sop.ApplySpeed(); else sequencer.ApplySpeed(); } }
+    public void SetSpeed(double speed) { lock (sync) { CurrentOptions.Speed = speed; if (sopMode) sop.ApplySpeed(); else if (source == Source.Tracker) tracker.ApplySpeed(); else sequencer.ApplySpeed(); } }
     public void SetTranspose(int semitones) { lock (sync) { CurrentOptions.Transpose = semitones; } }
     public void SetVoiceTranspose(int voice, int semitones) { lock (sync) { CurrentOptions.VoiceTranspose[voice] = semitones; } }
-    public void SetVoiceMute(int voice, bool mute) { lock (sync) { CurrentOptions.VoiceMute[voice] = mute; if (sopMode) sop.ApplyMute(voice); else sequencer.ApplyMute(voice); } }
+    public void SetVoiceMute(int voice, bool mute) { lock (sync) { CurrentOptions.VoiceMute[voice] = mute; if (sopMode) sop.ApplyMute(voice); else if (source == Source.Tracker) tracker.ApplyMute(voice); else sequencer.ApplyMute(voice); } }
     public void SetGain(double gain) { lock (sync) { CurrentOptions.Gain = gain; } }
 
     /// <summary>지금 템포 배수 (곡의 템포 이벤트). SOP는 지금 템포 / 기본 템포.</summary>
@@ -172,13 +233,14 @@ public sealed class AudioEngine : IDisposable
             lock (sync)
             {
                 if (sopMode) return sop.Song != null && sop.Song.BasicTempo > 0 ? (double)sop.Tempo / sop.Song.BasicTempo : 1.0;
+                if (source == Source.Tracker) return tracker.Module != null && tracker.Module.Kind == TrackerKind.S3m && tracker.Module.Tempo > 0 ? (double)tracker.Tempo / tracker.Module.Tempo : 1.0;
                 return sequencer.TempoMultiplier;
             }
         }
     }
 
     /// <summary>보이스별 상태 (울리는 음, 볼륨, 악기). ROL/IMS는 11개, SOP는 트랙 20개.</summary>
-    public void GetVoiceStates(VoiceState[] dst) { lock (sync) { if (sopMode) sop.CopyStates(dst); else sequencer.CopyStates(dst); } }
+    public void GetVoiceStates(VoiceState[] dst) { lock (sync) { if (sopMode) sop.CopyStates(dst); else if (source == Source.Tracker) tracker.CopyStates(dst); else sequencer.CopyStates(dst); } }
 
     // ---------------------------------------------------------------- 시음 (Instrument Maker / 건반 클릭)
 
@@ -216,7 +278,7 @@ public sealed class AudioEngine : IDisposable
     {
         var src = source;
         bool useSop = src == Source.Sop;
-        double step = (double)(useSop ? opl3.NativeRate : src == Source.MusicBox ? MusicBoxPlayer.Rate : synth.NativeRate) / OutputRate;
+        double step = (double)(useSop ? opl3.NativeRate : src == Source.MusicBox ? MusicBoxPlayer.Rate : src == Source.Tracker ? TrackerPlayer.Rate : synth.NativeRate) / OutputRate;
         double gain = MasterVolume * CurrentOptions.Gain;
         for (int i = 0; i < count; i++)
         {
@@ -225,7 +287,13 @@ public sealed class AudioEngine : IDisposable
             {
                 resamplePos -= 1.0;
                 prevL = curL; prevR = curR;
-                if (src == Source.MusicBox)
+                if (src == Source.Tracker)
+                {
+                    double tl, tr;
+                    tracker.Generate(out tl, out tr);
+                    curL = tl; curR = tr;
+                }
+                else if (src == Source.MusicBox)
                 {
                     musicBox.Step();
                     curL = curR = musicBox.Generate() * MusicBoxScale;

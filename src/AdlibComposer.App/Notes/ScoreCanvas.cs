@@ -31,6 +31,7 @@ internal sealed class ScoreCanvas : Control
     {
         SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint | ControlStyles.ResizeRedraw, true);
         BackColor = Color.White;
+        Shell.VoiceColors.Changed += Invalidate;
     }
 
     public ScoreRenderer Renderer

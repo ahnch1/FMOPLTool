@@ -27,6 +27,32 @@ internal sealed class PianoKeyboardControl : Control
     public int HighNote { get; private set; } = 96;
     /// <summary>노트 번호 → 컴퓨터 키 글자 (건반에 작게 표시).</summary>
     public Dictionary<int, string> KeyLabels { get; } = new Dictionary<int, string>();
+    /// <summary>울리는 음 → 칠할 색 (Jukebox: 채널 색). 누른 건반보다 먼저 보인다.</summary>
+    public Dictionary<int, Color> Lit { get; } = new Dictionary<int, Color>();
+    /// <summary>false면 마우스로 치지 않는다 (보기 전용).</summary>
+    public bool Interactive { get; set; } = true;
+
+    // 색 (기본 = Instrument Maker의 현대식, Jukebox는 옛 DOS 플레이어 색으로 바꾼다)
+    public Color WhiteKeyColor { get; set; } = Color.White;
+    public Color BlackKeyColor { get; set; } = InstTheme.Ink;
+    public Color KeyLineColor { get; set; } = InstTheme.Line;
+    public Color KeyboardBack { get; set; } = InstTheme.Surface;
+    /// <summary>
+    /// 0보다 크면 이 음역(FitLow ~ FitHigh)을 넓이에 딱 맞게 보인다 (흰 건반 폭 = 넓이 / 흰 건반 수).
+    /// 높이는 바꾸지 않으므로 비율을 지키려면 쓰는 쪽이 높이 = PreferredHeight로 맞춘다.
+    /// </summary>
+    public int FitLow { get; set; }
+    public int FitHigh { get; set; }
+    /// <summary>FitLow ~ FitHigh를 넓이 w에 맞출 때 흰 건반 비율(KeyAspect)을 지키는 높이.</summary>
+    public int PreferredHeight(int w)
+    {
+        int whites = 0;
+        for (int n = FitLow; n <= FitHigh; n++) if (!NoteHelper.IsBlack(n)) whites++;
+        return whites == 0 ? Height : (int)Math.Round(w / (float)whites * KeyAspect);
+    }
+
+    /// <summary>true면 울리는 건반을 그 색으로 꽉 칠한다 (DOS 플레이어처럼), false면 흰 건반은 반투명 + 아래 띠.</summary>
+    public bool SolidLit { get; set; }
 
     public event Action<int> NoteDown;
     public event Action<int> NoteUp;
@@ -44,7 +70,19 @@ internal sealed class PianoKeyboardControl : Control
         set { focusNote = value; Arrange(); Invalidate(); }
     }
 
-    private float KeyWidth { get { return Math.Max(6f, Height / KeyAspect); } }
+    private float KeyWidth
+    {
+        get
+        {
+            if (FitLow > 0 && FitHigh > FitLow)
+            {
+                int whites = 0;
+                for (int n = FitLow; n <= FitHigh; n++) if (!NoteHelper.IsBlack(n)) whites++;
+                return Math.Max(3f, Width / (float)Math.Max(1, whites));
+            }
+            return Math.Max(6f, Height / KeyAspect);
+        }
+    }
 
     protected override void OnResize(EventArgs e)
     {
@@ -55,6 +93,7 @@ internal sealed class PianoKeyboardControl : Control
     /// <summary>넓이에 들어가는 흰 건반 수만큼, FocusNote가 가운데 오도록 LowNote / HighNote를 정한다.</summary>
     private void Arrange()
     {
+        if (FitLow > 0 && FitHigh > FitLow) { LowNote = FitLow; HighNote = FitHigh; return; }
         int whites = Math.Max(1, (int)Math.Ceiling(Width / KeyWidth));
         // FocusNote에서 왼쪽으로 흰 건반 whites/2개
         int low = focusNote;
@@ -104,13 +143,14 @@ internal sealed class PianoKeyboardControl : Control
     protected override void OnPaint(PaintEventArgs e)
     {
         var g = e.Graphics;
-        g.Clear(InstTheme.Surface);
+        g.Clear(KeyboardBack);
+        var narrowLabels = new List<int>();
         g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
-        using (var whiteUp = new SolidBrush(Color.White))
+        using (var whiteUp = new SolidBrush(WhiteKeyColor))
         using (var whiteDown = new SolidBrush(InstTheme.AccentSoft))
-        using (var blackUp = new SolidBrush(InstTheme.Ink))
+        using (var blackUp = new SolidBrush(BlackKeyColor))
         using (var accent = new SolidBrush(InstTheme.Accent))
-        using (var edge = new Pen(InstTheme.Line))
+        using (var edge = new Pen(KeyLineColor))
         using (var muted = new SolidBrush(InstTheme.Muted))
         using (var ink = new SolidBrush(InstTheme.Ink))
         using (var onBlack = new SolidBrush(Color.FromArgb(200, 255, 255, 255)))
@@ -124,22 +164,37 @@ internal sealed class PianoKeyboardControl : Control
                     if (black != (pass == 1)) continue;
                     if (r.X > Width) continue;
                     bool down = pressed.Contains(n);
+                    Color litColor;
+                    bool lit = Lit.TryGetValue(n, out litColor);
                     string label;
                     bool hasLabel = KeyLabels.TryGetValue(n, out label);
                     if (!black)
                     {
                         g.FillRectangle(down ? whiteDown : whiteUp, r);
-                        if (down) g.FillRectangle(accent, r.X + 1, r.Bottom - 5, r.Width - 1, 5);
+                        if (lit)
+                            using (var lb = new SolidBrush(SolidLit ? litColor : Color.FromArgb(150, litColor))) g.FillRectangle(lb, r.X + 1, r.Y, r.Width - 1, r.Height);
+                        if (down || (lit && !SolidLit))
+                            using (var band = new SolidBrush(lit ? litColor : InstTheme.Accent)) g.FillRectangle(band, r.X + 1, r.Bottom - 6, r.Width - 1, 6);
                         g.DrawLine(edge, r.X, 0, r.X, r.Bottom);
-                        if (n % 12 == 0) g.DrawString(NoteHelper.Name(n), Theme.SmallFont, muted, new RectangleF(r.X, r.Bottom - 22, r.Width, 14), sfCenter);
+                        if (n % 12 == 0)
+                        {
+                            if (r.Width >= 20) g.DrawString(NoteHelper.Name(n), Theme.SmallFont, muted, new RectangleF(r.X, r.Bottom - 22, r.Width, 14), sfCenter);
+                            else narrowLabels.Add(n);   // 좁은 건반: 다 그린 뒤 옆 건반까지 걸쳐서
+                        }
                         if (hasLabel) g.DrawString(label, Theme.SmallFont, ink, new RectangleF(r.X, r.Bottom - (n % 12 == 0 ? 38 : 22), r.Width, 14), sfCenter);
                     }
                     else
                     {
-                        g.FillRectangle(down ? accent : blackUp, r);
+                        if (lit) using (var lb = new SolidBrush(litColor)) g.FillRectangle(lb, r);
+                        else g.FillRectangle(down ? accent : blackUp, r);
                         if (hasLabel) g.DrawString(label, Theme.SmallFont, onBlack, new RectangleF(r.X - 2, r.Bottom - 16, r.Width + 4, 14), sfCenter);
                     }
                 }
+            }
+            foreach (int n in narrowLabels)
+            {
+                bool b; var r = NoteRect(n, out b);
+                g.DrawString(NoteHelper.Name(n), Theme.SmallFont, muted, r.X + 1, r.Bottom - 16);
             }
             g.DrawLine(edge, 0, 0, Width, 0);
         }
@@ -148,7 +203,7 @@ internal sealed class PianoKeyboardControl : Control
     protected override void OnMouseDown(MouseEventArgs e)
     {
         base.OnMouseDown(e);
-        if (e.Button != MouseButtons.Left) return;
+        if (!Interactive || e.Button != MouseButtons.Left) return;
         int n = HitTest(e.Location);
         if (n < 0) return;
         Capture = true;

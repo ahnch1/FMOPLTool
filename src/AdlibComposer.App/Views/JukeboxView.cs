@@ -38,6 +38,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
     private readonly SeekBar seek = new SeekBar();
     private readonly Label posLabel = new Label(), lenLabel = new Label();
     private readonly ChannelMixer mixer = new ChannelMixer();
+    private readonly Controls.PianoKeyboardControl keys = new Controls.PianoKeyboardControl { Interactive = false, FocusNote = 60 };
     private readonly Stepper speedStep = new Stepper(), keyStep = new Stepper(), volStep = new Stepper();
     private readonly CheckBox autoNext = new CheckBox();
     private readonly CheckBox rawTone = new CheckBox(), vintageSpeaker = new CheckBox();
@@ -87,6 +88,13 @@ internal sealed class JukeboxView : UserControl, IShellPage
         BuildDeck(deck);
 
         timer.Tick += delegate { Tick(); };
+        EnableDrop(this);
+        VoiceColors.Changed += delegate
+        {
+            for (int i = 0; i < mixer.Rows.Count; i++) mixer.Rows[i].Color = ChannelColor(i);
+            mixer.Invalidate();
+            RefreshKeys(state == PlayState.Playing);
+        };
         RebuildMixerRows();
         UpdateStepperTexts();
     }
@@ -108,6 +116,54 @@ internal sealed class JukeboxView : UserControl, IShellPage
         browser.MarkCurrent(currentPath);
     }
 
+    // ---------------------------------------------------------------- 끌어다 놓기
+
+    /// <summary>이 페이지와 안의 모든 컨트롤에 파일 끌어다 놓기를 켠다 (어디에 놓아도 재생).</summary>
+    private void EnableDrop(Control c)
+    {
+        c.AllowDrop = true;
+        c.DragEnter += OnDragEnter;
+        c.DragDrop += OnDragDrop;
+        foreach (Control child in c.Controls) EnableDrop(child);
+        c.ControlAdded += (s, e) => EnableDrop(e.Control);
+    }
+
+    private void OnDragEnter(object sender, DragEventArgs e)
+    {
+        e.Effect = DroppedSongs(e.Data).Count > 0 ? DragDropEffects.Copy : DragDropEffects.None;
+    }
+
+    /// <summary>놓은 곡을 재생한다. 여러 개(또는 폴더)면 그것들이 다음 곡 목록.</summary>
+    private void OnDragDrop(object sender, DragEventArgs e)
+    {
+        var songs = DroppedSongs(e.Data);
+        if (songs.Count == 0) return;
+        AppLog.Info("Jukebox", "끌어다 놓기: " + songs.Count + "곡" + (songs.Count > 1 ? " (다음 곡 목록)" : ""));
+        PlayFile(songs[0], false);
+        if (string.Equals(currentPath, songs[0], StringComparison.OrdinalIgnoreCase)) playlist = songs;   // 열었으면: 다음 곡 = 놓은 곡들
+    }
+
+    /// <summary>끌어 온 파일 중 재생할 수 있는 곡 (폴더면 그 안의 곡, 이름순).</summary>
+    private static List<string> DroppedSongs(IDataObject data)
+    {
+        var result = new List<string>();
+        if (data == null || !data.GetDataPresent(DataFormats.FileDrop)) return result;
+        var items = data.GetData(DataFormats.FileDrop) as string[];
+        if (items == null) return result;
+        foreach (var item in items)
+        {
+            try
+            {
+                if (Directory.Exists(item))
+                    result.AddRange(Directory.GetFiles(item).Where(CanPlay).OrderBy(f => Path.GetFileName(f), StringComparer.OrdinalIgnoreCase));
+                else if (File.Exists(item) && CanPlay(item))
+                    result.Add(Path.GetFullPath(item));
+            }
+            catch (Exception) { }
+        }
+        return result;
+    }
+
     /// <summary>공용 파일 목록에서 고른 곡을 재생한다 (다음 곡 목록 = 그 폴더).</summary>
     public void Play(string path)
     {
@@ -116,26 +172,44 @@ internal sealed class JukeboxView : UserControl, IShellPage
 
     // ================================================================ 오른쪽: 데크
 
+    /// <summary>
+    /// 배치 (위 → 아래):
+    ///   [왼쪽 1/3 채널 믹서 | 오른쪽 2/3: 곡 정보(곡을 고르세요) / 진행 막대 + 곡 전체 시간 / 재생 버튼 / 속도 · 키 · 볼륨 / 음색 · 스피커]
+    ///   [가사 (가로 전체)]
+    ///   [건반 120px: 채널마다 울리는 음을 채널 색으로]
+    /// </summary>
     private void BuildDeck(Control host)
     {
-        var table = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 6, Padding = new Padding(14, 12, 14, 12), BackColor = DeckTheme.Back };
-        table.RowStyles.Add(new RowStyle(SizeType.Absolute, 118));   // 정보
-        table.RowStyles.Add(new RowStyle(SizeType.Absolute, 112));   // 가사
-        table.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));    // 진행
-        table.RowStyles.Add(new RowStyle(SizeType.Absolute, 50));    // 재생 버튼
-        table.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));    // 속도 / 키 / 볼륨
-        table.RowStyles.Add(new RowStyle(SizeType.Percent, 100));    // 채널
-        host.Controls.Add(table);
+        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3, Padding = new Padding(0, 10, 0, 0), BackColor = DeckTheme.Back, Margin = new Padding(0) };
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));     // 믹서 | 조절
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 128));    // 가사
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 90));      // 건반 (넓이에 맞춰 SizeChanged에서)
+        host.Controls.Add(root);
 
+        // ---------------------------------------------------------------- 위: 믹서 | 조절
+        var top = Thirds();
+        top.Margin = new Padding(12, 0, 12, 0);
+        root.Controls.Add(top, 0, 0);
+
+        mixer.Dock = DockStyle.Fill;
+        mixer.Margin = new Padding(0, 0, 10, 8);
+        mixer.MuteToggled += v => SetMute(v, !options.VoiceMute[v]);
+        mixer.SoloRequested += Solo;
+        mixer.PitchStep += (v, d) => SetVoicePitch(v, options.VoiceTranspose[v] + d);
+        top.Controls.Add(mixer, 0, 0);
+
+        var right = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5, Margin = new Padding(0, 0, 0, 8), BackColor = DeckTheme.Back };
+        right.RowStyles.Add(new RowStyle(SizeType.Percent, 100));    // 곡 정보 (곡을 고르세요)
+        right.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));    // 진행 + 곡 전체 시간
+        right.RowStyles.Add(new RowStyle(SizeType.Absolute, 50));    // 재생 버튼
+        right.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));    // 속도 / 키 / 볼륨
+        right.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));    // 음색 / 스피커
+        top.Controls.Add(right, 1, 0);
         display.Dock = DockStyle.Fill;
         display.Margin = new Padding(0, 0, 0, 8);
-        table.Controls.Add(display, 0, 0);
+        right.Controls.Add(display, 0, 0);
 
-        lyrics.Dock = DockStyle.Fill;
-        lyrics.Margin = new Padding(0, 0, 0, 6);
-        table.Controls.Add(lyrics, 0, 1);
-
-        // 진행 막대 + 시간
+        // 진행 막대 + 시간 (지금 / 곡 전체)
         var seekRow = new Panel { Dock = DockStyle.Fill, Margin = new Padding(0), BackColor = DeckTheme.Back };
         foreach (var l in new[] { posLabel, lenLabel })
         {
@@ -143,6 +217,8 @@ internal sealed class JukeboxView : UserControl, IShellPage
             l.Width = 54;
             l.Font = DeckTheme.Mono;
             l.ForeColor = DeckTheme.Lcd;
+            l.BackColor = DeckTheme.Inset;
+            l.BorderStyle = BorderStyle.Fixed3D;
             l.TextAlign = ContentAlignment.MiddleCenter;
             l.Text = "00:00";
         }
@@ -153,7 +229,8 @@ internal sealed class JukeboxView : UserControl, IShellPage
         seekRow.Controls.Add(seek);
         seekRow.Controls.Add(posLabel);
         seekRow.Controls.Add(lenLabel);
-        table.Controls.Add(seekRow, 0, 2);
+        tips.SetToolTip(lenLabel, "곡 전체 시간");
+        right.Controls.Add(seekRow, 0, 1);
 
         // 재생 버튼
         var transport = new FlowLayoutPanel { Dock = DockStyle.Fill, Margin = new Padding(0), BackColor = DeckTheme.Back, WrapContents = false, Padding = new Padding(0, 4, 0, 0) };
@@ -166,20 +243,53 @@ internal sealed class JukeboxView : UserControl, IShellPage
         transport.Controls.Add(DeckButton('', "", "다음 곡 (PageDown)", delegate { PlayNeighbor(1); }));
         autoNext.Text = "다음 곡 자동 재생";
         autoNext.Checked = true;
-        autoNext.ForeColor = DeckTheme.Text;
+        autoNext.ForeColor = DeckTheme.TextDark;
         autoNext.Font = ShellTheme.Ui;
         autoNext.AutoSize = true;
-        autoNext.Margin = new Padding(18, 11, 0, 0);
+        autoNext.Margin = new Padding(14, 11, 0, 0);
         transport.Controls.Add(autoNext);
+        right.Controls.Add(transport, 0, 2);
+
+        // 속도 / 키 / 볼륨
+        var adjust = new FlowLayoutPanel { Dock = DockStyle.Fill, Margin = new Padding(0), BackColor = DeckTheme.Back, WrapContents = false };
+        speedStep.Caption = "속도";
+        speedStep.MinusText = "느리게";
+        speedStep.PlusText = "빠르게";
+        speedStep.Width = 210;
+        speedStep.ValueText = () => Math.Round(options.Speed * 100) + "%";
+        speedStep.Step += d => SetSpeed(Math.Round(options.Speed * 100) + d * 5);
+        keyStep.Caption = "키";
+        keyStep.MinusText = "♂ 남성";
+        keyStep.PlusText = "여성 ♀";
+        keyStep.Width = 172;
+        keyStep.ValueText = () => DeckTheme.KeyText(options.Transpose);
+        keyStep.Step += d => SetKey(options.Transpose + d);
+        volStep.Caption = "볼륨";
+        volStep.Width = 144;
+        volStep.ValueText = () => volumePercent + "%";
+        volStep.Step += d => SetVolume(volumePercent + d * 10);
+        tips.SetToolTip(speedStep, "재생 속도 50% ~ 200% (휠로도 조절) · 초기화 = 오른쪽 '초기화'");
+        tips.SetToolTip(keyStep, "키(피치): 남성(낮게) / 여성(높게), 반음 단위 · 드럼은 그대로");
+        tips.SetToolTip(volStep, "볼륨 0% ~ 150%");
+        foreach (var st in new[] { speedStep, keyStep, volStep }) { st.Margin = new Padding(0, 4, 10, 0); adjust.Controls.Add(st); }
+        var reset = DeckButton('\uE72C', "초기화", "속도 · 키 · 채널 켜기/음높이를 처음 상태로 (볼륨은 그대로)", delegate { ResetAdjustments(); });
+        reset.Height = 32;
+        reset.Width = 84;
+        reset.Margin = new Padding(0, 5, 0, 0);
+        adjust.Controls.Add(reset);
+        right.Controls.Add(adjust, 0, 3);
+
+        // 음색 / 스피커
+        var sound = new FlowLayoutPanel { Dock = DockStyle.Fill, Margin = new Padding(0), BackColor = DeckTheme.Back, WrapContents = false };
         rawTone.Text = "거친 음색";
         vintageSpeaker.Text = "그 시절 스피커";
         foreach (var cb in new[] { rawTone, vintageSpeaker })
         {
-            cb.ForeColor = DeckTheme.Text;
+            cb.ForeColor = DeckTheme.TextDark;
             cb.Font = ShellTheme.Ui;
             cb.AutoSize = true;
-            cb.Margin = new Padding(cb == rawTone ? 18 : 6, 11, 0, 0);
-            transport.Controls.Add(cb);
+            cb.Margin = new Padding(cb == rawTone ? 0 : 12, 6, 0, 0);
+            sound.Controls.Add(cb);
         }
         rawTone.Checked = settings().JukeboxRawTone;
         vintageSpeaker.Checked = settings().JukeboxVintageSpeaker;
@@ -187,60 +297,86 @@ internal sealed class JukeboxView : UserControl, IShellPage
         tips.SetToolTip(vintageSpeaker, "모니터 옆에 놓던 작은 PC 스피커로 듣는 소리 흉내 (저음이 빠지고 중고음이 튐)");
         rawTone.CheckedChanged += delegate { settings().JukeboxRawTone = rawTone.Checked; ApplySound(); SaveSettings(); };
         vintageSpeaker.CheckedChanged += delegate { settings().JukeboxVintageSpeaker = vintageSpeaker.Checked; ApplySound(); SaveSettings(); };
-        table.Controls.Add(transport, 0, 3);
+        right.Controls.Add(sound, 0, 4);
 
-        // 속도 / 키 / 볼륨
-        var adjust = new FlowLayoutPanel { Dock = DockStyle.Fill, Margin = new Padding(0), BackColor = DeckTheme.Back, WrapContents = false };
-        speedStep.Caption = "속도";
-        speedStep.MinusText = "느리게";
-        speedStep.PlusText = "빠르게";
-        speedStep.Width = 230;
-        speedStep.ValueText = () => Math.Round(options.Speed * 100) + "%";
-        speedStep.Step += d => SetSpeed(Math.Round(options.Speed * 100) + d * 5);
-        keyStep.Caption = "키";
-        keyStep.MinusText = "♂ 남성";
-        keyStep.PlusText = "여성 ♀";
-        keyStep.Width = 210;
-        keyStep.ValueText = () => DeckTheme.KeyText(options.Transpose);
-        keyStep.Step += d => SetKey(options.Transpose + d);
-        volStep.Caption = "볼륨";
-        volStep.Width = 150;
-        volStep.ValueText = () => volumePercent + "%";
-        volStep.Step += d => SetVolume(volumePercent + d * 10);
-        tips.SetToolTip(speedStep, "재생 속도 50% ~ 200% (휠로도 조절) · 더블클릭은 없음, 초기화는 채널 믹서의 '모두 초기화'");
-        tips.SetToolTip(keyStep, "키: 남성(낮게) / 여성(높게), 반음 단위 · 드럼은 그대로");
-        tips.SetToolTip(volStep, "볼륨 0% ~ 150%");
-        foreach (var st in new[] { speedStep, keyStep, volStep }) { st.Margin = new Padding(0, 4, 22, 0); adjust.Controls.Add(st); }
-        var reset = DeckButton('\uE72C', "초기화", "속도 · 키 · 채널 켜기/음높이를 처음 상태로 (볼륨은 그대로)", delegate { ResetAdjustments(); });
-        reset.Height = 32;
-        reset.Width = 84;
-        reset.Margin = new Padding(0, 5, 0, 0);
-        adjust.Controls.Add(reset);
-        table.Controls.Add(adjust, 0, 4);
+        // ---------------------------------------------------------------- 가운데: 가사 (가로 전체)
+        lyrics.Dock = DockStyle.Fill;
+        lyrics.Margin = new Padding(12, 0, 12, 8);
+        root.Controls.Add(lyrics, 0, 1);
 
-        mixer.Dock = DockStyle.Fill;
-        mixer.Margin = new Padding(0, 6, 0, 0);
-        mixer.MuteToggled += v => SetMute(v, !options.VoiceMute[v]);
-        mixer.SoloRequested += Solo;
-        mixer.PitchStep += (v, d) => SetVoicePitch(v, options.VoiceTranspose[v] + d);
-        table.Controls.Add(mixer, 0, 5);
+        // ---------------------------------------------------------------- 아래: 건반
+        // 옛 DOS 플레이어처럼: 오목한 상자 안에 회색 흰 건반 · 검은 건반, 울리는 건반은 채널 색으로 꽉 칠한다
+        var keyBox = new Panel { Dock = DockStyle.Fill, Margin = new Padding(12, 0, 12, 8), Padding = new Padding(8, 6, 8, 6), BackColor = DeckTheme.Panel };
+        keyBox.Paint += delegate (object o, PaintEventArgs e) { DeckTheme.Bevel(e.Graphics, new Rectangle(0, 0, keyBox.Width, keyBox.Height), false, keyBox.BackColor, 2); };
+        keys.Dock = DockStyle.Fill;
+        // Instrument Maker 건반 색, 울리는 건반은 채널 색으로 꽉 칠한다. C0 ~ B8 (9옥타브) 전체를 넓이에 맞추고 높이는 흰 건반 1:5 비율로
+        keys.SolidLit = true;
+        keys.FitLow = KeysLow;
+        keys.FitHigh = KeysHigh;
+        root.SizeChanged += delegate
+        {
+            int w = root.ClientSize.Width - 24 - 16;   // 상자 여백 · 안쪽 여백
+            if (w <= 0) return;
+            int h = keys.PreferredHeight(w) + 12 + 8;  // + 안쪽 위아래 · 아래 여백
+            if (Math.Abs(root.RowStyles[2].Height - h) > 0.5f) root.RowStyles[2].Height = h;
+        };
+        tips.SetToolTip(keys, "채널마다 지금 울리는 음 (색 = 믹서의 보이스 선택 칸 색, 키 · 채널 음높이 반영)");
+        keyBox.Controls.Add(keys);
+        root.Controls.Add(keyBox, 0, 2);
     }
 
+    /// <summary>Jukebox 건반 음역: C0 ~ B8 (9옥타브, OPL · MIDI 곡이 쓰는 음 거의 전부).</summary>
+    private const int KeysLow = 12, KeysHigh = 119;
+
+    /// <summary>1/3 | 2/3 두 칸.</summary>
+    private static TableLayoutPanel Thirds()
+    {
+        var t = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, Margin = new Padding(0), Padding = new Padding(0), BackColor = DeckTheme.Back };
+        t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f / 3));
+        t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 200f / 3));
+        t.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        return t;
+    }
+
+    /// <summary>돋움 버튼 (누르면 오목, 선 모양은 옛 DOS 버튼). primary(재생) = 청록 바탕 흰 글자.</summary>
     private Button DeckButton(char glyph, string text, string tip, EventHandler click, bool primary = false)
     {
+        Color fore = primary ? Color.White : DeckTheme.TextDark;
         var b = new Button
         {
-            FlatStyle = FlatStyle.Flat, Height = 38, Width = string.IsNullOrEmpty(text) ? 42 : primary ? 92 : 68,
-            BackColor = primary ? ShellTheme.Accent : Color.FromArgb(42, 47, 58), ForeColor = Color.White,
-            Font = ShellTheme.Ui, Text = string.IsNullOrEmpty(text) ? "" : " " + text, Image = GlyphImages.Get(glyph, 16, Color.White),
+            FlatStyle = FlatStyle.Flat, Height = 38, Width = string.IsNullOrEmpty(text) ? 42 : primary ? 96 : 68,
+            BackColor = primary ? InstTheme.Accent : DeckTheme.Panel, ForeColor = fore,
+            Font = DeckTheme.Info, Text = string.IsNullOrEmpty(text) ? "" : " " + text, Image = GlyphImages.Get(glyph, 16, fore),
             ImageAlign = string.IsNullOrEmpty(text) ? ContentAlignment.MiddleCenter : ContentAlignment.MiddleLeft,
             TextImageRelation = TextImageRelation.ImageBeforeText, Margin = new Padding(0, 0, 6, 0), TabStop = false, Cursor = Cursors.Hand,
         };
-        b.FlatAppearance.BorderColor = primary ? ShellTheme.AccentDark : DeckTheme.PanelLine;
-        b.FlatAppearance.MouseOverBackColor = primary ? ShellTheme.AccentDark : Color.FromArgb(58, 65, 80);
+        b.FlatAppearance.BorderSize = 0;
+        b.FlatAppearance.MouseOverBackColor = primary ? InstTheme.AccentDark : DeckTheme.Hover;
+        b.FlatAppearance.MouseDownBackColor = b.FlatAppearance.MouseOverBackColor;
+        bool down = false;
+        b.MouseDown += delegate { down = true; b.Invalidate(); };
+        b.MouseUp += delegate { down = false; b.Invalidate(); };
+        b.MouseLeave += delegate { if (down) { down = false; b.Invalidate(); } };
+        b.Paint += delegate (object o, PaintEventArgs e) { BevelEdge(e.Graphics, b.ClientRectangle, !down, primary); };
         b.Click += click;
         tips.SetToolTip(b, tip);
         return b;
+    }
+
+    /// <summary>버튼 둘레에 돋움/오목 테두리만 (안쪽은 버튼이 그린 그대로). primary는 초록 테두리.</summary>
+    private static void BevelEdge(Graphics g, Rectangle r, bool raised, bool primary)
+    {
+        Color lt = primary ? (raised ? Color.FromArgb(124, 208, 199) : InstTheme.AccentDark) : raised ? DeckTheme.PanelLight : DeckTheme.PanelDark;
+        Color dk = primary ? (raised ? InstTheme.AccentDark : Color.FromArgb(124, 208, 199)) : raised ? DeckTheme.PanelDark : DeckTheme.PanelLight;
+        using (var pl = new Pen(lt))
+        using (var pd = new Pen(dk))
+            for (int i = 0; i < 2; i++)
+            {
+                g.DrawLine(pl, r.Left + i, r.Top + i, r.Right - 1 - i, r.Top + i);
+                g.DrawLine(pl, r.Left + i, r.Top + i, r.Left + i, r.Bottom - 1 - i);
+                g.DrawLine(pd, r.Left + i, r.Bottom - 1 - i, r.Right - 1 - i, r.Bottom - 1 - i);
+                g.DrawLine(pd, r.Right - 1 - i, r.Top + i, r.Right - 1 - i, r.Bottom - 1 - i);
+            }
     }
 
     // ================================================================ 곡 불러오기
@@ -842,27 +978,30 @@ internal sealed class JukeboxView : UserControl, IShellPage
         mixer.Rows.Clear();
         if (trackerSong != null)
         {
-            for (int c = 0; c < TrackCount; c++) mixer.Rows.Add(new ChannelRow { Label = trackerSong.ChannelLabel(c) });
+            for (int c = 0; c < TrackCount; c++) mixer.Rows.Add(new ChannelRow { Label = trackerSong.ChannelLabel(c), Color = ChannelColor(c) });
             RefreshMixer();
             return;
         }
         if (sopSong != null)
         {
-            for (int t = 0; t < sopSong.TrackCount; t++) mixer.Rows.Add(new ChannelRow { Label = sopSong.TrackLabel(t) });
+            for (int t = 0; t < sopSong.TrackCount; t++) mixer.Rows.Add(new ChannelRow { Label = sopSong.TrackLabel(t), Color = ChannelColor(t) });
             RefreshMixer();
             return;
         }
         if (midiSong != null)
         {
-            for (int c = 0; c < MidiSong.Channels; c++) mixer.Rows.Add(new ChannelRow { Label = c == GeneralMidi.DrumChannel ? "D10" : (c + 1).ToString() });
+            for (int c = 0; c < MidiSong.Channels; c++) mixer.Rows.Add(new ChannelRow { Label = c == GeneralMidi.DrumChannel ? "D10" : (c + 1).ToString(), Color = ChannelColor(c) });
             RefreshMixer();
             return;
         }
         bool melodic = song == null || song.IsMelodic;
         var labels = Song.VoiceLabels(melodic);
-        for (int v = 0; v < labels.Length; v++) mixer.Rows.Add(new ChannelRow { Label = labels[v] });
+        for (int v = 0; v < labels.Length; v++) mixer.Rows.Add(new ChannelRow { Label = labels[v], Color = ChannelColor(v) });
         RefreshMixer();
     }
+
+    /// <summary>채널 색 = 설정의 보이스 색 (Composer · Note와 같다).</summary>
+    private static Color ChannelColor(int c) { return VoiceColors.Get(c); }
 
     /// <summary>엔진의 보이스 상태로 채널 줄을 채운다. 음량 막대는 노트온에 볼륨만큼 올라가고 천천히 내려온다.</summary>
     private void RefreshMixer()
@@ -905,6 +1044,23 @@ internal sealed class JukeboxView : UserControl, IShellPage
             row.Level = levels[v];
         }
         mixer.Invalidate();
+        RefreshKeys(playing);
+    }
+
+    /// <summary>아래 건반: 채널마다 울리는 음을 채널 색으로 (끈 채널은 빼고, 키 · 채널 음높이를 더한 실제 음). 같은 음이면 앞 채널 색.</summary>
+    private void RefreshKeys(bool playing)
+    {
+        keys.Lit.Clear();
+        if (playing)
+            for (int v = mixer.Rows.Count - 1; v >= 0; v--)
+            {
+                var row = mixer.Rows[v];
+                if (row.Note < 0 || row.Muted) continue;
+                bool drum = midiSong != null && v == GeneralMidi.DrumChannel;
+                int note = row.Note + (drum ? 0 : options.Transpose + options.VoiceTranspose[v]);
+                keys.Lit[note] = row.Color;
+            }
+        keys.Invalidate();
     }
 
     private string FirstTrackerSample(int c)
@@ -967,6 +1123,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
             SyncPlayButton();
         }
         timer.Stop();
+        RefreshKeys(false);
         // 음색 · 스피커는 Jukebox에서만: 다른 페이지(Composer 재생 · 시음)는 칩 소리 그대로
         ws.Audio.ToneStandard = false;
         ws.Audio.VintageSpeaker = false;

@@ -68,6 +68,8 @@ internal sealed class AppSettings
     public bool JukeboxRawTone { get; set; }
     /// <summary>Jukebox 스피커: true = 그 시절 (작은 PC 스피커 흉내).</summary>
     public bool JukeboxVintageSpeaker { get; set; }
+    /// <summary>보이스별 색 (Composer 노트 막대 · Note 음표 · Jukebox 채널). Shell.VoiceColors.Count개.</summary>
+    public System.Drawing.Color[] VoiceColors { get; set; } = (System.Drawing.Color[])Shell.VoiceColors.Defaults.Clone();
 
     /// <summary>읽을 때 생긴 문제 (없으면 null). 화면에 알려 줄 때 쓴다.</summary>
     public string LoadWarning { get; private set; }
@@ -144,6 +146,7 @@ internal sealed class AppSettings
                         case "oplemulator": s.UseNukedOpl = value.Equals("nuked", StringComparison.OrdinalIgnoreCase); break;
                         case "jukeboxtone": s.JukeboxRawTone = value.Equals("raw", StringComparison.OrdinalIgnoreCase); break;
                         case "jukeboxspeaker": s.JukeboxVintageSpeaker = value.Equals("vintage", StringComparison.OrdinalIgnoreCase); break;
+                        case "voicecolors": s.VoiceColors = Shell.VoiceColors.Parse(value); break;
                     }
                 }
             }
@@ -194,6 +197,8 @@ internal sealed class AppSettings
         sb.AppendLine("; Jukebox: JukeboxTone = standard | raw, JukeboxSpeaker = default | vintage");
         sb.AppendLine("JukeboxTone=" + (JukeboxRawTone ? "raw" : "standard"));
         sb.AppendLine("JukeboxSpeaker=" + (JukeboxVintageSpeaker ? "vintage" : "default"));
+        sb.AppendLine("; VoiceColors = voice 1..11 colors (rhythm mode 7..11 = BD SD TO CY HH): Composer note bars, Note heads, Jukebox channels");
+        sb.AppendLine("VoiceColors=" + Shell.VoiceColors.Format(VoiceColors));
         File.WriteAllText(FilePath, sb.ToString(), new UTF8Encoding(false));
     }
 
@@ -207,7 +212,12 @@ internal sealed class AppSettings
         }
     }
 
-    public AppSettings Clone() { return (AppSettings)MemberwiseClone(); }
+    public AppSettings Clone()
+    {
+        var c = (AppSettings)MemberwiseClone();
+        c.VoiceColors = (System.Drawing.Color[])(VoiceColors ?? Shell.VoiceColors.Defaults).Clone();
+        return c;
+    }
 
     /// <summary>폴더가 있으면 그 폴더, 없으면 null (파일 대화상자 InitialDirectory용).</summary>
     public static string ExistingOrNull(string dir)

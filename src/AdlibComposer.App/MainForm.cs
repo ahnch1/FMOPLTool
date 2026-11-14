@@ -78,6 +78,7 @@ internal sealed class MainForm : Form
     public MainForm()
     {
         ApplyOplCore();
+        VoiceColors.Set(settings.VoiceColors);
         Text = "FMOPL Tool";
         AppIcon.Apply(this);
         ClientSize = new Size(1280, 820);
@@ -349,6 +350,7 @@ internal sealed class MainForm : Form
             if (f.ShowDialog(this) != DialogResult.OK || f.Result == null) return;
             settings = f.Result;
             ApplyOplCore();
+            VoiceColors.Set(settings.VoiceColors);   // Composer · Note · Jukebox가 Changed로 다시 그린다
             jukebox.SettingsChanged();
             browser.SettingsChanged();
             if (f.LoadBankNow && settings.DefaultBankPath != null && File.Exists(settings.DefaultBankPath) && ConfirmDiscardBank())

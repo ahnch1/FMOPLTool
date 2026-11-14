@@ -85,6 +85,7 @@ internal sealed class PianoRollControl : Control
         SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.Selectable, true);
         TabStop = true;
         BackColor = Theme.Back;
+        Shell.VoiceColors.Changed += Invalidate;
     }
 
     public Song Song
@@ -213,34 +214,41 @@ internal sealed class PianoRollControl : Control
         return new Rectangle(x1, y + 1, Math.Max(2, x2 - x1 - 1), RowHeight - 2);
     }
 
+    /// <summary>
+    /// 노트 막대 = 보이스 색 (설정의 VoiceColors). 지금 보이스는 진하게 + 어두운 테두리, 다른 보이스는 옅게
+    /// (All이면 같은 굵기, 아니면 가는 선), 고른 노트는 짙은 회색.
+    /// </summary>
     private void DrawNotes(Graphics g)
     {
         int count = song.VoiceCount;
-        using (var thick = new SolidBrush(Color.FromArgb(90, 90, 90)))
-        using (var thin = new SolidBrush(Color.FromArgb(130, 130, 130)))
+        for (int v = 0; v < count; v++)
         {
-            for (int v = 0; v < count; v++)
-            {
-                if (v == CurrentVoice && !ShowAll) continue;
+            if (v == CurrentVoice) continue;
+            var c = Shell.VoiceColors.Get(v);
+            using (var b = new SolidBrush(ShowAll ? Shell.VoiceColors.Blend(c, Color.White, 0.25f) : Shell.VoiceColors.Blend(c, Color.White, 0.45f)))
                 foreach (var n in song.Voices[v].Notes)
                 {
                     var r = NoteRect(n, !ShowAll);
                     if (r.Right < KeyboardWidth || r.Left > Width || r.Bottom < BandHeight || r.Top > Height) continue;
-                    g.FillRectangle(ShowAll ? thick : thin, r);
+                    g.FillRectangle(b, r);
                 }
+        }
+        var cur = Shell.VoiceColors.Get(CurrentVoice);
+        using (var fill = new SolidBrush(cur))
+        using (var edge = new Pen(Shell.VoiceColors.Blend(cur, Color.Black, 0.45f)))
+        using (var sel = new SolidBrush(InstTheme.Ink))
+            foreach (var n in Voice.Notes)
+            {
+                var r = NoteRect(n, false);
+                if (r.Right < KeyboardWidth || r.Left > Width || r.Bottom < BandHeight || r.Top > Height) continue;
+                bool selected = Selection.Contains(n);
+                g.FillRectangle(selected ? sel : fill, r);
+                if (!selected && r.Width > 3 && r.Height > 3) g.DrawRectangle(edge, r.X, r.Y, r.Width - 1, r.Height - 1);
             }
-        }
-        foreach (var n in Voice.Notes)
-        {
-            var r = NoteRect(n, false);
-            if (r.Right < KeyboardWidth || r.Left > Width || r.Bottom < BandHeight || r.Top > Height) continue;
-            bool sel = Selection.Contains(n);
-            g.FillRectangle(sel ? SelectedBrush : Brushes.Black, r);
-        }
         if (drawing != null)
         {
             var r = NoteRect(drawing, false);
-            g.FillRectangle(Brushes.Gray, r);
+            using (var b = new SolidBrush(Shell.VoiceColors.Blend(cur, Color.White, 0.4f))) g.FillRectangle(b, r);
             g.DrawRectangle(Pens.Black, r);
         }
     }

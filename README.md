@@ -65,6 +65,7 @@ Mt32RomFolder=resource
 - `MidiSynth`: `fm`(OPL3 FM) / `windows`(Windows MIDI 신디사이저). `MidiBank`: FM용 GM 뱅크 (DMX `GENMIDI.OP2` 또는 BNK). 비우면 뱅크 폴더 또는 `resource` 폴더의 `GENMIDI.OP2`(Freedoom 프로젝트의 GM 뱅크를 함께 배포, BSD 3-Clause, `resource/GENMIDI.OP2.LICENSE.txt`), 없으면 기본 뱅크(STANDARD.BNK)에서 GM 번호마다 비슷한 이름의 악기를 골라 쓴다
 - `MidiModule`: `gm` / `mt32`. MT-32이면 Munt 에뮬레이터(`mt32emu.dll`, LGPL — `src/AdlibComposer.Mt32/build_mt32emu.bat`로 빌드)와 `Mt32RomFolder`의 Roland ROM(컨트롤 + PCM, 직접 준비)으로 재생하고 SysEx(사용자 음색)도 보낸다. DLL · ROM이 없으면 MT-32 음색 번호를 GM에 맞춰(`GeneralMidi.Mt32ToGm`) FM / Windows로 낸다
 - `OplEmulator`: `builtin`(내장 간이 에뮬레이터) / `nuked`(Nuked OPL3, 사이클 정밀). File → Preferences → Sound에서 바꾸며 프로그램 전체(Composer · Instrument Maker 시음 · Jukebox · S3M AdLib 채널)에 바로 적용된다
+- `VoiceColors`: 보이스 1~11의 색 (`#RRGGBB`를 쉼표로, 리듬 모드 7~11 = BD SD TO CY HH). Composer 노트 막대 · Note 음표 · Jukebox 채널(믹서 선택 칸 · 건반)이 같이 쓴다. File → Preferences → Voice colors에서 바꾸면 바로 적용, 채널이 더 많은 곡(SOP · MIDI · S3M)은 돌려 쓴다
 
 - 곡 열기/저장 대화상자는 곡 형식에 맞는 폴더(ROL → rol, IMS → ims)에서 시작하고 왼쪽 목록에 두 폴더 바로가기가 있다. 뱅크·INS 대화상자와 뱅크 브라우저는 뱅크 폴더에서 시작한다
 - 리소스 원본은 `src/AdlibComposer.App/Defaults/resource/` (STANDARD.BNK, GENMIDI.OP2). 예전 기본값(`bnk`, `bnk\STANDARD.BNK`, `mt32rom`)을 쓰던 설정 파일은 처음 실행할 때 `resource`로 바뀐다. 실행 폴더의 사본을 고쳐 저장하면 다시 빌드해도 덮어쓰지 않는다

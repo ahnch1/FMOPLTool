@@ -5,7 +5,7 @@ using System.Windows.Forms;
 
 namespace AdlibComposer.App;
 
-/// <summary>Preferences (현대식 UI): 곡 폴더, 뱅크 폴더, 기본 뱅크. 저장하면 실행 폴더의 FMOPLTool.cfg에 쓴다.</summary>
+/// <summary>Preferences (현대식 UI): 곡 폴더, 뱅크 폴더, 기본 뱅크, 소리, 보이스 색. 저장하면 실행 폴더의 FMOPLTool.cfg에 쓴다.</summary>
 [System.ComponentModel.DesignerCategory("Code")]   // 코드로 만든 화면: 디자이너 대신 코드로 연다
 internal sealed class PreferencesForm : Form
 {
@@ -28,6 +28,7 @@ internal sealed class PreferencesForm : Form
     private readonly CheckBox loadNowCheck = new CheckBox();
     private readonly CheckBox nukedCheck = new CheckBox();
     private readonly Label bankStatus = new Label();
+    private readonly Button[] colorButtons = new Button[Shell.VoiceColors.Count];
     private readonly Font titleFont = new Font("Segoe UI Semibold", 12f);
     private readonly Font headFont = new Font("Segoe UI Semibold", 9.5f);
 
@@ -122,6 +123,28 @@ internal sealed class PreferencesForm : Form
             ForeColor = Subtle, AutoSize = true, MaximumSize = new Size(700, 0), Margin = new Padding(0, 0, 0, 12)
         });
 
+        root.Controls.Add(Section("Voice colors"));
+        root.Controls.Add(new Label
+        {
+            Text = "Composer note bars, Note heads and Jukebox channels (mixer + keyboard) use the same color per voice. Click a color to change it.\nRhythm mode: 7 = BD, 8 = SD, 9 = TO, 10 = CY, 11 = HH. Songs with more channels (SOP, MIDI, S3M) repeat these colors.",
+            ForeColor = Subtle, AutoSize = true, MaximumSize = new Size(700, 0), Margin = new Padding(0, 0, 0, 4)
+        });
+        var colorRow = new FlowLayoutPanel { AutoSize = true, WrapContents = true, MaximumSize = new Size(720, 0), Margin = new Padding(0, 0, 0, 12) };
+        for (int i = 0; i < colorButtons.Length; i++)
+        {
+            int index = i;
+            var cell = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.TopDown, WrapContents = false, Margin = new Padding(0, 0, 8, 0) };
+            cell.Controls.Add(new Label { Text = Shell.VoiceColors.Labels[i], AutoSize = true, ForeColor = Subtle, Margin = new Padding(0, 0, 0, 2) });
+            var b = new Button { Width = 52, Height = 26, FlatStyle = FlatStyle.Flat, Cursor = Cursors.Hand, Margin = new Padding(0), Text = "" };
+            b.FlatAppearance.BorderColor = Color.FromArgb(200, 200, 200);
+            b.Click += delegate { PickColor(index); };
+            colorButtons[i] = b;
+            cell.Controls.Add(b);
+            colorRow.Controls.Add(cell);
+        }
+        root.Controls.Add(colorRow);
+        ShowColors(settings.VoiceColors);
+
         // 버튼 줄
         var buttons = new TableLayoutPanel { AutoSize = true, ColumnCount = 4, Dock = DockStyle.Fill, Margin = new Padding(0, 8, 0, 0) };
         buttons.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
@@ -143,6 +166,29 @@ internal sealed class PreferencesForm : Form
         CancelButton = cancel;
 
         UpdateBankStatus();
+
+        // 화면보다 길면: 저장 · 취소 줄은 아래에 고정하고 나머지는 스크롤
+        Load += delegate
+        {
+            var wa = Screen.FromControl(this).WorkingArea;
+            if (Height <= wa.Height - 20) return;
+            int w = Width;
+            AutoSize = false;
+            root.Controls.Remove(buttons);
+            var bottom = new Panel { Dock = DockStyle.Bottom, Height = buttons.PreferredSize.Height + 24, Padding = new Padding(20, 10, 20 + SystemInformation.VerticalScrollBarWidth, 12), BackColor = Color.White };
+            bottom.Paint += delegate (object o, PaintEventArgs e) { using (var p = new Pen(Color.FromArgb(225, 225, 225))) e.Graphics.DrawLine(p, 0, 0, bottom.Width, 0); };
+            buttons.Dock = DockStyle.Fill;
+            buttons.Margin = new Padding(0);
+            bottom.Controls.Add(buttons);
+            var scroller = new Panel { Dock = DockStyle.Fill, AutoScroll = true };
+            Controls.Remove(root);
+            root.Dock = DockStyle.Top;
+            scroller.Controls.Add(root);
+            Controls.Add(scroller);
+            Controls.Add(bottom);
+            Size = new Size(w + SystemInformation.VerticalScrollBarWidth, wa.Height - 20);
+            Location = new Point(Left, wa.Top + 10);
+        };
     }
 
     // ---------------------------------------------------------------- 구성 요소
@@ -215,6 +261,26 @@ internal sealed class PreferencesForm : Form
         }
     }
 
+    private void ShowColors(Color[] c)
+    {
+        for (int i = 0; i < colorButtons.Length; i++)
+        {
+            var x = c != null && i < c.Length ? c[i] : Shell.VoiceColors.Defaults[i];
+            colorButtons[i].BackColor = x;
+            colorButtons[i].FlatAppearance.MouseOverBackColor = x;
+        }
+    }
+
+    private void PickColor(int i)
+    {
+        using (var dlg = new ColorDialog { Color = colorButtons[i].BackColor, FullOpen = true, AnyColor = true })
+        {
+            if (dlg.ShowDialog(this) != DialogResult.OK) return;
+            colorButtons[i].BackColor = dlg.Color;
+            colorButtons[i].FlatAppearance.MouseOverBackColor = dlg.Color;
+        }
+    }
+
     private void UpdateBankStatus()
     {
         string p = bankBox.Text.Trim();
@@ -245,6 +311,7 @@ internal sealed class PreferencesForm : Form
         bankBox.Text = d.DefaultBankPath;
         loadBankCheck.Checked = true;
         nukedCheck.Checked = false;
+        ShowColors(Shell.VoiceColors.Defaults);
     }
 
     private void SaveAndClose()
@@ -264,6 +331,9 @@ internal sealed class PreferencesForm : Form
             settings.DefaultBank = bankBox.Text.Trim().Length == 0 ? "" : AppSettings.ToStored(SafeResolve(bankBox.Text));
             settings.LoadDefaultBank = loadBankCheck.Checked;
             settings.UseNukedOpl = nukedCheck.Checked;
+            var colors = new Color[colorButtons.Length];
+            for (int i = 0; i < colors.Length; i++) colors[i] = Color.FromArgb(colorButtons[i].BackColor.R, colorButtons[i].BackColor.G, colorButtons[i].BackColor.B);
+            settings.VoiceColors = colors;
             settings.EnsureFolders();
             settings.Save();
         }

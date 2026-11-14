@@ -438,7 +438,9 @@ internal sealed class ScoreRenderer
                         Label = (sv.Drum != DrumKind.None ? sv.Label : NoteHelper.Name(gl.Pitch)) + "  m" + (m + 1) + " beat " + (gl.Start / Math.Max(1, score.TickBeat) + 1) + "  " + NoteSpelling.TypeName(gl.Value) + (gl.Dots > 0 ? " dotted" : ""),
                     });
                 }
-                var color = hit >= 0 && hit == HoverIndex ? Color.FromArgb(0, 103, 192) : gl.Exact ? Color.Black : Color.FromArgb(170, 60, 40);
+                // 음표 = 보이스 색 (설정의 VoiceColors), 마우스를 올린 음표 = 검정, 정확히 못 나타낸 길이 = 보이스 색을 어둡게
+                var vc = Shell.VoiceColors.Get(score.Voices[v].VoiceIndex);
+                var color = hit >= 0 && hit == HoverIndex ? Color.Black : gl.Exact ? vc : Shell.VoiceColors.Blend(vc, Color.Black, 0.45f);
                 DrawNote(g, gl, x, y, up, StaffRules.XHead(drum), color);
 
                 // 붙임줄

@@ -137,6 +137,10 @@ internal sealed class PlayerDisplay : DeckControl
     public int SpeedPercent = 100;
     public int Key;
     public string Mode = "";
+    /// <summary>곡 파일 줄 오른쪽 칸 (null = "악기 불러옴/전체").</summary>
+    public string SongTag;
+    /// <summary>가사 줄 대신 보일 글 (null = 가사 파일).</summary>
+    public string InfoLine;
 
     protected override void OnPaint(PaintEventArgs e)
     {
@@ -159,11 +163,12 @@ internal sealed class PlayerDisplay : DeckControl
         y += rowH + gap;
         if (!string.IsNullOrEmpty(SongFile))
         {
-            TagRow(g, new Rectangle(pad, y, lw, rowH), SongFile, "악기 " + Loaded + "/" + Total, Loaded >= Total ? DeckTheme.Lcd : DeckTheme.Warn);
+            TagRow(g, new Rectangle(pad, y, lw, rowH), SongFile, SongTag ?? "악기 " + Loaded + "/" + Total, Loaded >= Total ? DeckTheme.Lcd : DeckTheme.Warn);
             y += rowH + gap;
             TagRow(g, new Rectangle(pad, y, lw, rowH), BankFile, BankCount + "개" + (BankSameName ? " · 같은 이름" : ""), DeckTheme.Text);
             y += rowH + gap;
-            DeckTheme.InsetText(g, new Rectangle(pad, y, lw, rowH), "가사  " + (LyricFile ?? "없음"), DeckTheme.Mono, LyricFile != null ? DeckTheme.Text : DeckTheme.Muted, left);
+            if (InfoLine != null) DeckTheme.InsetText(g, new Rectangle(pad, y, lw, rowH), InfoLine, DeckTheme.Mono, DeckTheme.Text, left | TextFormatFlags.EndEllipsis);
+            else DeckTheme.InsetText(g, new Rectangle(pad, y, lw, rowH), "가사  " + (LyricFile ?? "없음"), DeckTheme.Mono, LyricFile != null ? DeckTheme.Text : DeckTheme.Muted, left);
         }
         else
             DeckTheme.InsetText(g, new Rectangle(pad, y, lw, rowH), "왼쪽 목록에서 곡을 두 번 클릭하면 재생합니다", DeckTheme.Mono, DeckTheme.Muted, left);
@@ -174,7 +179,7 @@ internal sealed class PlayerDisplay : DeckControl
         int third = inner.Height / 3;
         TextRenderer.DrawText(g, DeckTheme.Clock(Seconds) + " / " + DeckTheme.Clock(TotalSeconds), DeckTheme.Time,
             new Rectangle(inner.X, inner.Y, inner.Width, third + 6), DeckTheme.Lcd, DeckTheme.Inset, center | TextFormatFlags.VerticalCenter);
-        TextRenderer.DrawText(g, "♩=" + Math.Round(Bpm) + "  " + SpeedPercent + "%  키 " + DeckTheme.KeyText(Key), DeckTheme.Mono,
+        TextRenderer.DrawText(g, (Bpm > 0 ? "♩=" + Math.Round(Bpm) + "  " : "") + SpeedPercent + "%  키 " + DeckTheme.KeyText(Key), DeckTheme.Mono,
             new Rectangle(inner.X, inner.Y + third + 4, inner.Width, third - 4), DeckTheme.Text, DeckTheme.Inset, center | TextFormatFlags.VerticalCenter);
         TextRenderer.DrawText(g, State + (string.IsNullOrEmpty(Mode) ? "" : "  " + Mode), DeckTheme.Small,
             new Rectangle(inner.X, inner.Y + third * 2, inner.Width, third), DeckTheme.Muted, DeckTheme.Inset, center | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);

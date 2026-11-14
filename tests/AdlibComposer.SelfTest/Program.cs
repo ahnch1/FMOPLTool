@@ -42,6 +42,8 @@ public static class Program
         FeatureTests.Run(Check);
         OrgelTests.Run(Check);
         TrackerTests.Run(Check);
+        ChipTests.Run(Check);
+        VgmTests.Run(Check);
         TestRegistry();
         RealFileTests.Run(Check);
         Console.WriteLine();

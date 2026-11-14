@@ -23,7 +23,7 @@ namespace AdlibComposer.App.Views;
 [System.ComponentModel.DesignerCategory("Code")]   // 코드로 만든 화면: 디자이너 대신 코드로 연다
 internal sealed class JukeboxView : UserControl, IShellPage
 {
-    private static readonly string[] SongExtensions = { ".rol", ".ims", ".sop", ".s3m", ".stm", ".mod", ".nst", ".mid", ".midi", ".wrk" };
+    private static readonly string[] SongExtensions = { ".rol", ".ims", ".sop", ".s3m", ".stm", ".mod", ".nst", ".mid", ".midi", ".wrk", ".vgm", ".vgz" };
 
     private readonly Workspace ws;
     private readonly Func<AppSettings> settings;
@@ -58,6 +58,9 @@ internal sealed class JukeboxView : UserControl, IShellPage
     private TrackerModule trackerSong;
     /// <summary>MIDI 곡(.mid / .wrk)이면 이것. 위치 = MIDI 틱.</summary>
     private MidiSong midiSong;
+    /// <summary>VGM 곡(.vgm / .vgz)이면 이것. 위치 = ms.</summary>
+    private VgmSong vgmSong;
+    private List<VgmPlayer.Channel> vgmChannels = new List<VgmPlayer.Channel>();
     private GmBank gmBank;
     private string gmBankKey;
     private InstrumentBank bank;
@@ -348,6 +351,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
         if (SopFormat.IsSop(path)) { PlaySopFile(path, fromList); return; }
         if (TrackerFiles.IsTracker(path)) { PlayTrackerFile(path, fromList); return; }
         if (MidiFiles.IsMidi(path)) { PlayMidiFile(path, fromList); return; }
+        if (VgmFormat.IsVgm(path)) { PlayVgmFile(path, fromList); return; }
         Song s;
         try
         {
@@ -369,6 +373,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
         sopSong = null;
         trackerSong = null;
         midiSong = null;
+        vgmSong = null;
         currentPath = path;
         if (fromList) playlist = CurrentListPaths();
         bool sameName;
@@ -393,6 +398,8 @@ internal sealed class JukeboxView : UserControl, IShellPage
 
         display.Title = song.Title;
         display.SongFile = Path.GetFileName(path);
+        display.SongTag = null;
+        display.InfoLine = null;
         display.Loaded = loaded;
         display.Total = used.Count;
         display.BankFile = bank != null && bank.FilePath != null ? Path.GetFileName(bank.FilePath) : "(뱅크 없음)";
@@ -433,6 +440,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
         sopSong = s;
         trackerSong = null;
         midiSong = null;
+        vgmSong = null;
         currentPath = path;
         if (fromList) playlist = CurrentListPaths();
         bank = null;
@@ -454,6 +462,8 @@ internal sealed class JukeboxView : UserControl, IShellPage
 
         display.Title = title;
         display.SongFile = Path.GetFileName(path);
+        display.SongTag = null;
+        display.InfoLine = null;
         display.Loaded = used.Count;
         display.Total = used.Count;
         display.BankFile = "곡 안 악기 " + s.Instruments.Count(i => !i.IsEmpty) + "개" + (fourOp > 0 ? " (4-op " + fourOp + ")" : "");
@@ -488,7 +498,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
             return;
         }
         StopEngine();
-        song = null; sopSong = null; midiSong = null;
+        song = null; sopSong = null; midiSong = null; vgmSong = null;
         trackerSong = m;
         currentPath = path;
         if (fromList) playlist = CurrentListPaths();
@@ -511,6 +521,8 @@ internal sealed class JukeboxView : UserControl, IShellPage
 
         display.Title = title;
         display.SongFile = Path.GetFileName(path);
+        display.SongTag = null;
+        display.InfoLine = null;
         display.Loaded = samples + adlib;
         display.Total = samples + adlib;
         display.BankFile = "곡 안 샘플 " + samples + "개" + (adlib > 0 ? " · AdLib " + adlib + "개" : "");
@@ -545,7 +557,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
             return;
         }
         StopEngine();
-        song = null; sopSong = null; trackerSong = null;
+        song = null; sopSong = null; trackerSong = null; vgmSong = null;
         midiSong = m;
         currentPath = path;
         if (fromList) playlist = CurrentListPaths();
@@ -569,6 +581,8 @@ internal sealed class JukeboxView : UserControl, IShellPage
 
         display.Title = m.Title;
         display.SongFile = Path.GetFileName(path);
+        display.SongTag = null;
+        display.InfoLine = null;
         display.Loaded = programs.Count;
         display.Total = programs.Count;
         display.BankFile = mt32Rom != null ? "MT-32 에뮬레이터 · " + mt32Rom
@@ -587,6 +601,65 @@ internal sealed class JukeboxView : UserControl, IShellPage
         AppLog.Info("Jukebox", "재생: " + Path.GetFileName(path) + " — " + m.FormatName + " " + channels + "채널, 프로그램 " + programs.Count + "개, " + DeckTheme.Clock(totalSeconds)
             + ", " + (mt32Rom != null ? "MT-32 에뮬레이터 (" + mt32Rom + ")" : windows ? "Windows 신디사이저" : "FM 뱅크 " + (gmBank != null ? gmBank.Source : "없음")) + (mt32 && mt32Rom == null ? ", MT-32 → GM" : ""),
             m.Comment.Length > 0 ? m.Comment : null);
+        StartAt(0);
+    }
+
+    /// <summary>
+    /// VGM 곡 (.vgm / .vgz): 칩 레지스터 기록. PSG(AY-3-8910 / YM2149) · SCC · OPL(OPL / OPL2 / Y8950 FM / OPL3)을 소리 낸다.
+    /// 채널 믹서 = 칩 채널 (A B C · S1~S5 · F1~F9/18). 위치 단위는 ms. 루프 곡은 한 번 더 돌고 끝을 줄여 끝낸다.
+    /// </summary>
+    private void PlayVgmFile(string path, bool fromList)
+    {
+        VgmSong v;
+        try { v = VgmFormat.Load(path); }
+        catch (Exception ex)
+        {
+            AppLog.Error("Jukebox", "곡을 열 수 없습니다: " + Path.GetFileName(path), ex);
+            return;
+        }
+        if (!v.IsPlayable)
+        {
+            AppLog.Warn("Jukebox", "소리 낼 수 있는 칩이 없는 VGM입니다: " + Path.GetFileName(path),
+                "이 곡의 칩: " + (v.UnsupportedChips.Count > 0 ? string.Join(", ", v.UnsupportedChips) : "알 수 없음") + " · 재생하는 칩: AY-3-8910 / YM2149, SCC, OPL / OPL2 / Y8950 / OPL3");
+            return;
+        }
+        StopEngine();
+        song = null; sopSong = null; trackerSong = null; midiSong = null;
+        vgmSong = v;
+        vgmChannels = VgmPlayer.ChannelsOf(v);
+        currentPath = path;
+        if (fromList) playlist = CurrentListPaths();
+        bank = null;
+        iss = null;
+        tempoMap = null;
+        totalSeconds = VgmPlayer.PlaySeconds(v);
+        pausedTick = 0;
+        var used = VgmPlayer.ScanUsed(v);
+        for (int c = 0; c < PlaybackOptions.Voices; c++) { options.VoiceMute[c] = false; options.VoiceTranspose[c] = 0; levels[c] = 0; voiceUsed[c] = c < vgmChannels.Count && used[c]; }
+        int active = voiceUsed.Count(u => u);
+
+        display.Title = v.Title;
+        display.SongFile = Path.GetFileName(path);
+        display.SongTag = "채널 " + active + "/" + vgmChannels.Count;
+        display.Loaded = display.Total = 0;
+        display.BankFile = v.ChipSummary + (v.UnsupportedChips.Count > 0 ? " (소리 없음: " + string.Join(", ", v.UnsupportedChips) + ")" : "");
+        display.BankCount = vgmChannels.Count;
+        display.BankSameName = false;
+        display.LyricFile = null;
+        var info = new List<string>();
+        foreach (var t in new[] { v.Game, v.SystemName, v.Author, v.ReleaseDate }) if (!string.IsNullOrEmpty(t)) info.Add(t);
+        display.InfoLine = info.Count > 0 ? string.Join(" · ", info) : "VGM " + v.VersionText;
+        display.TotalSeconds = totalSeconds;
+        display.Mode = "VGM " + v.VersionText + " · " + v.ChipSummary + (v.LoopOffset > 0 ? " · 루프" : "");
+        lyrics.Lyrics = null;
+        lyrics.State = null;
+        lenLabel.Text = DeckTheme.Clock(totalSeconds);
+        seek.Enabled = true;
+        RebuildMixerRows();
+        MarkPlaying();
+        AppLog.Info("Jukebox", "재생: " + Path.GetFileName(path) + " — VGM " + v.VersionText + ", " + v.ChipSummary + ", 채널 " + active + "/" + vgmChannels.Count + ", " + DeckTheme.Clock(totalSeconds)
+            + (v.LoopOffset > 0 ? " (루프 " + DeckTheme.Clock(v.LoopSamples / (double)VgmSong.Rate) + ")" : ""),
+            v.UnsupportedChips.Count > 0 ? "소리 내지 않는 칩: " + string.Join(", ", v.UnsupportedChips) : null);
         StartAt(0);
     }
 
@@ -627,13 +700,13 @@ internal sealed class JukeboxView : UserControl, IShellPage
         return b;
     }
 
-    private bool HasSong { get { return song != null || sopSong != null || trackerSong != null || midiSong != null; } }
-    private int LengthTicks { get { return midiSong != null ? midiSong.LengthTicks : trackerSong != null ? (int)(totalSeconds * 1000) : sopSong != null ? sopSong.LengthTicks : song != null ? song.LengthTicks : 0; } }
-    private int TrackCount { get { return midiSong != null ? MidiSong.Channels : trackerSong != null ? Math.Min(PlaybackOptions.Voices, trackerSong.UsedChannelCount) : sopSong != null ? sopSong.TrackCount : song != null ? song.VoiceCount : PlaybackOptions.Voices; } }
+    private bool HasSong { get { return song != null || sopSong != null || trackerSong != null || midiSong != null || vgmSong != null; } }
+    private int LengthTicks { get { return midiSong != null ? midiSong.LengthTicks : trackerSong != null || vgmSong != null ? (int)(totalSeconds * 1000) : sopSong != null ? sopSong.LengthTicks : song != null ? song.LengthTicks : 0; } }
+    private int TrackCount { get { return vgmSong != null ? vgmChannels.Count : midiSong != null ? MidiSong.Channels : trackerSong != null ? Math.Min(PlaybackOptions.Voices, trackerSong.UsedChannelCount) : sopSong != null ? sopSong.TrackCount : song != null ? song.VoiceCount : PlaybackOptions.Voices; } }
 
     private double SecondsAt(double tick)
     {
-        if (trackerSong != null) return tick / 1000.0;
+        if (trackerSong != null || vgmSong != null) return tick / 1000.0;
         if (sopSong != null) return sopSong.SecondsAt(tick);
         if (midiSong != null) return midiSong.TickToSeconds(tick);
         return tempoMap != null ? tempoMap.SecondsAt((int)tick) : 0;
@@ -641,7 +714,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
 
     private double TickAt(double seconds)
     {
-        if (trackerSong != null) return seconds * 1000.0;
+        if (trackerSong != null || vgmSong != null) return seconds * 1000.0;
         if (sopSong != null) return sopSong.TickAt(seconds);
         if (midiSong != null) return midiSong.SecondsToTick(seconds);
         return tempoMap != null ? tempoMap.TickAt(seconds) : 0;
@@ -720,7 +793,8 @@ internal sealed class JukeboxView : UserControl, IShellPage
     private void StartAt(double tick)
     {
         if (!HasSong || !openAudio()) return;
-        if (trackerSong != null) ws.Audio.PlayTracker(trackerSong, 0, 0, -1, false, options, Math.Max(0, tick));
+        if (vgmSong != null) ws.Audio.PlayVgm(vgmSong, Math.Max(0, tick), options);
+        else if (trackerSong != null) ws.Audio.PlayTracker(trackerSong, 0, 0, -1, false, options, Math.Max(0, tick));
         else if (sopSong != null) ws.Audio.PlaySop(sopSong, (int)Math.Max(0, tick), options);
         else if (midiSong != null)
         {
@@ -902,7 +976,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
         double tick = CurrentTick;
         double sec = SecondsAt(Math.Min(tick, LengthTicks));
         display.Seconds = sec;
-        double basic = midiSong != null ? midiSong.InitialBpm : trackerSong != null ? (trackerSong.Kind == TrackerKind.S3m ? trackerSong.Tempo : 125.0 * 6 / Math.Max(1, trackerSong.Tempo >> 4))
+        double basic = vgmSong != null ? 0 : midiSong != null ? midiSong.InitialBpm : trackerSong != null ? (trackerSong.Kind == TrackerKind.S3m ? trackerSong.Tempo : 125.0 * 6 / Math.Max(1, trackerSong.Tempo >> 4))
             : sopSong != null ? sopSong.BasicTempo : song.BasicTempo;
         double mult = state == PlayState.Playing ? ws.Audio.TempoMultiplier : midiSong != null ? 1.0 : sopSong != null ? sopSong.TempoAt(tick) / (double)sopSong.BasicTempo : 1.0;
         display.Bpm = basic * mult * options.Speed;
@@ -936,6 +1010,12 @@ internal sealed class JukeboxView : UserControl, IShellPage
     private void RebuildMixerRows()
     {
         mixer.Rows.Clear();
+        if (vgmSong != null)
+        {
+            for (int c = 0; c < vgmChannels.Count; c++) mixer.Rows.Add(new ChannelRow { Label = vgmChannels[c].Label, Color = ChannelColor(c) });
+            RefreshMixer();
+            return;
+        }
         if (trackerSong != null)
         {
             for (int c = 0; c < TrackCount; c++) mixer.Rows.Add(new ChannelRow { Label = trackerSong.ChannelLabel(c), Color = ChannelColor(c) });
@@ -975,7 +1055,13 @@ internal sealed class JukeboxView : UserControl, IShellPage
             row.Muted = options.VoiceMute[v];
             row.Pitch = options.VoiceTranspose[v];
             row.Used = HasSong && voiceUsed[v];
-            if (trackerSong != null)
+            if (vgmSong != null)
+            {
+                var ch = vgmChannels[v];
+                row.Instrument = playing && vs.Instrument != null ? vs.Instrument : ch.Chip == VgmPlayer.ChipKind.Psg ? "PSG" : ch.Chip == VgmPlayer.ChipKind.Scc ? "SCC" : "FM";
+                row.Found = true;
+            }
+            else if (trackerSong != null)
             {
                 row.Instrument = playing && vs.Instrument != null ? vs.Instrument : FirstTrackerSample(v);
                 row.Found = true;

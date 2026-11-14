@@ -9,7 +9,7 @@ using AdlibComposer.Formats;
 namespace AdlibComposer.App.Shell;
 
 /// <summary>곡 파일 종류 (어느 페이지가 여는지 정할 때).</summary>
-internal enum MusicFileKind { None, Adlib, Tracker, Midi, Audio }
+internal enum MusicFileKind { None, Adlib, Tracker, Midi, Vgm, Audio }
 
 /// <summary>
 /// 왼쪽 공용 폴더 / 곡 목록 (모든 페이지가 같이 쓴다).
@@ -23,6 +23,7 @@ internal sealed class FileBrowser : UserControl
     private static readonly string[] AdlibExt = { ".rol", ".ims", ".sop" };
     private static readonly string[] TrackerExt = { ".s3m", ".stm", ".mod", ".nst" };
     private static readonly string[] MidiExt = { ".mid", ".midi", ".wrk" };
+    private static readonly string[] VgmExt = { ".vgm", ".vgz" };
     private static readonly string[] AudioExt = { ".mp3", ".wav", ".wma", ".m4a", ".aac", ".flac" };
 
     /// <summary>목록 한 줄: 위 폴더(..) · 폴더 · 곡 파일.</summary>
@@ -163,6 +164,7 @@ internal sealed class FileBrowser : UserControl
         if (Array.IndexOf(AdlibExt, ext) >= 0) return MusicFileKind.Adlib;
         if (Array.IndexOf(TrackerExt, ext) >= 0) return MusicFileKind.Tracker;
         if (Array.IndexOf(MidiExt, ext) >= 0) return MusicFileKind.Midi;
+        if (Array.IndexOf(VgmExt, ext) >= 0) return MusicFileKind.Vgm;
         if (Array.IndexOf(AudioExt, ext) >= 0) return MusicFileKind.Audio;
         return MusicFileKind.None;
     }
@@ -438,6 +440,7 @@ internal sealed class FileBrowser : UserControl
         {
             string ext = Path.GetExtension(path).ToLowerInvariant();
             if (MidiFiles.IsMidi(path)) t = MidiFiles.Load(path).Title;
+            else if (VgmFormat.IsVgm(path)) { var v = VgmFormat.Load(path); t = v.TitleEn.Length > 0 ? v.TitleEn : v.TitleJp; }
             else if (SopFormat.IsSop(path)) t = SopFormat.Load(path).Title;
             else if (TrackerFiles.IsTracker(path)) t = TrackerFiles.Load(path).Title;
             else if (ext == ".ims")

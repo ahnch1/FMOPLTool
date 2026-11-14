@@ -3,7 +3,7 @@
 AdLib Visual Composer(작곡)와 Instrument Maker(악기 편집)를 **한 프로그램**으로 재현하는 C# 솔루션.
 BNK 악기를 보이스(채널)에 할당하고, 건반 악보에 노트를 배치하고, OPL2 에뮬레이션으로 재생한다.
 
-- 파일: ROL·IMS(곡) / BNK(악기 뱅크) / INS(악기 1개) 읽기·쓰기, SOP(OPL3 곡) 읽기·쓰기·재생 (Composer SOP 모드 작곡, Jukebox), STM · S3M(Scream Tracker 2/3) · MOD · NST(ProTracker / NoiseTracker) 만들기·읽기·쓰기·재생, 같은 곡 찾기 · 정리 (ROL / IMS / SOP)
+- 파일: ROL·IMS(곡) / BNK(악기 뱅크) / INS(악기 1개) 읽기·쓰기, SOP(OPL3 곡) 읽기·쓰기·재생 (Composer SOP 모드 작곡, Jukebox), STM · S3M(Scream Tracker 2/3) · MOD · NST(ProTracker / NoiseTracker) 만들기·읽기·쓰기·재생, VGM · VGZ(PSG · SCC · OPL 칩 기록) 재생, 같은 곡 찾기 · 정리 (ROL / IMS / SOP)
 - 화면: 원본 스크린샷(640x400 흑백 DOS 화면) 레이아웃을 따른 WinForms GUI
 - 확장: 곡 포맷, 악보(스코어) 변환, OPL 칩 교체를 위한 인터페이스 제공
 
@@ -72,7 +72,7 @@ Mt32RomFolder=resource
 |---|---|
 | 메뉴 / 툴바 | 원본 메뉴(F5~F10) + 툴바(새 곡 · 열기 · 저장 · 뱅크 브라우저 · 재생 · 현재 위치부터 재생 · 정지 · 설정). 재생 버튼 셋은 Composer · Note · Orgel Note · Transcribe가 같이 쓴다 (지금 페이지를 재생) |
 | 페이지 메뉴 (메뉴와 툴바 사이, 가로) | **Composer** · **Instrument Maker** · **Tracker** (CREATE), **Jukebox** (PLAY), **Note** · **Orgel Note** · **Transcribe** (SCORE), **Organizer** (TOOLS). Ctrl+1~8 (Tracker = Ctrl+6, Organizer = Ctrl+7, Transcribe = Ctrl+8) |
-| 왼쪽 폴더 / 곡 목록 | 모든 페이지가 같이 쓴다. **폴더 열기**로 고른 폴더와 그 아래 폴더만 오가는 목록 하나 (`..` · 폴더 · 곡: ROL · IMS · SOP · S3M · STM · MOD · NST · MID · WRK · MP3 · WAV …), **위로** / Backspace. 곡이 많으면 세로 스크롤바 + 아래 ◀ ▶로 한 쪽씩 (n / m 쪽). 곡 두 번 클릭 / Enter = 지금 페이지에서 열기: Composer · Note · Orgel Note = 작업 곡(ROL · IMS · SOP), Tracker = S3M · STM · MOD · NST, Jukebox = 재생(다음 곡 = 그 폴더), Transcribe = MP3 · WAV. 못 여는 형식이면 그 형식을 여는 페이지로 간다 |
+| 왼쪽 폴더 / 곡 목록 | 모든 페이지가 같이 쓴다. **폴더 열기**로 고른 폴더와 그 아래 폴더만 오가는 목록 하나 (`..` · 폴더 · 곡: ROL · IMS · SOP · S3M · STM · MOD · NST · MID · WRK · VGM · VGZ · MP3 · WAV …), **위로** / Backspace. 곡이 많으면 세로 스크롤바 + 아래 ◀ ▶로 한 쪽씩 (n / m 쪽). 곡 두 번 클릭 / Enter = 지금 페이지에서 열기: Composer · Note · Orgel Note = 작업 곡(ROL · IMS · SOP), Tracker = S3M · STM · MOD · NST, Jukebox = 재생(다음 곡 = 그 폴더), Transcribe = MP3 · WAV. 못 여는 형식이면 그 형식을 여는 페이지로 간다 |
 | 끌어다 놓기 (창 어디든) | 폴더 = 폴더 열기와 같다. 곡 파일 = 그 파일만 연다 (Composer · Note · Orgel Note = 작업 곡, Jukebox = 그 곡만 재생 · 여러 곡이면 그것들이 다음 곡 목록, 다른 형식은 여는 페이지로) |
 | 페이지 머리글 | 현재 페이지 이름과 설명 |
 | 진행 로그 | 시작 · 뱅크/곡 열기·저장 · 경고 · 오류 기록. 필터(전체/정보/경고/오류), 상세(예외 내용), 복사, 지우기. 위쪽 경계를 끌어 높이 조절 |
@@ -140,6 +140,7 @@ Mt32RomFolder=resource
 - 키: Space 재생/일시정지, Esc 정지, ← → 5초 (Ctrl+← → 어디서나), PageUp/PageDown 이전/다음 곡, + − 볼륨
 - 거친 음색: 끄면 '표준'(되먹임 1/8 줄임 + 칩 출력 12kHz 1-pole 로우패스, ROL/IMS/SOP), 켜면 칩 소리 그대로. 그 시절 스피커: 작은 PC 스피커 흉내 (하이패스 200Hz 4차 · 3.5kHz +12dB · 로우패스 9kHz). 재생 중에도 바뀌고 설정에 저장, Jukebox에서만 적용
 - MIDI (.mid / .midi, SMF 형식 0·1·2, RMID) · Cakewalk (.wrk, DOS 판 트랙 · 스트림 · 템포 · 주석, 트랙 채널이 이벤트 채널보다 앞섬, 꺼진 트랙은 뺌): 채널 믹서 = MIDI 채널 16개(10 = 드럼). FM이면 OPL3 2-op 18음(빈 채널 → 오래 꺼진 채널 → 오래 울린 음 뺏기), 볼륨 · 익스프레션 · 벨로시티 GM 곡선, 팬 3단계, 피치 벤드(RPN 범위), 서스테인 페달. 음색 · 스피커 · Nuked도 그대로 적용. Windows 신디사이저면 장치로 보내고 조옮김 · 채널 끄기 · 속도 · 볼륨만 적용
+- VGM (.vgm / .vgz, GD3 태그): 칩 레지스터 기록을 그대로 재생. 소리 내는 칩 = AY-3-8910 / YM2149 (PSG), K051649 / K052539 (SCC · SCC+), YM3526 · YM3812 · Y8950(FM 부분) · YMF262. 그 밖의 칩(SN76489 · YM2413 · OPN 계열 등)은 로그에 이름만 남기고 건너뛴다. 채널 믹서 = 칩 채널 (A B C · S1~S5 · F1~F9/18), 키 · 채널 음높이 = 분주 · F-number를 바꿔 씀, 채널 끄기 = PSG/SCC 음소거 · OPL 키온 지움, 속도 = 기다림만 바꿈. 루프 곡은 한 번 더 돌고 마지막 4초를 줄여 끝낸다
 - 다른 페이지로 가면 일시정지 (오디오 엔진을 Composer와 같이 쓴다). 돌아와서 Space로 이어 듣기
 - 엔진: `PlaybackOptions`(속도 · 키 · 채널 끄기 · 채널 음높이 · 출력 크기)를 `AudioEngine.Play(..., options)`로 넘기고 `SetSpeed / SetVoiceMute / ...`로 재생 중에 바꾼다. 채널 상태는 `AudioEngine.GetVoiceStates`
 
@@ -225,8 +226,8 @@ Mt32RomFolder=resource
 | 프로젝트 | 역할 |
 |---|---|
 | `AdlibComposer.Core` | 모델: `Song`(틱 기반 ROL 구조, SOP 모드 = 보이스 20 · 팬), `VoiceTrack`, `Note`, `AdlibInstrument`, `InstrumentBank`, `TempoMap` |
-| `AdlibComposer.Formats` | `RolFormat`, `ImsFormat`, `BnkFormat`, `InsFormat`, `IssLyrics`(ISS 가사), `KoreanText`(조합형/완성형 → 유니코드), `FormatRegistry`, `SopFormat` → `SopSong`(OPL3 곡 읽기 · 쓰기), `SopConvert`(SopSong ↔ Song SOP 모드 · 악기 레지스터), `TrackerModule` + `StmFormat` / `S3mFormat`(Scream Tracker 2/3 읽기·쓰기), `ModFormat`(MOD / NST ↔ S3M 모델), `MidiSong` + `MidiFileFormat` / `WrkFormat`(MIDI · Cakewalk 읽기), `GeneralMidi` · `GmBank`(GM 이름, GENMIDI.OP2 / BNK 이름 맞춤 FM 뱅크), `MusicDuplicateFinder`(같은 곡 찾기 · 남길 파일 점수) |
-| `AdlibComposer.Audio` | `OplChip`(코어를 바꿔 끼우는 칩: 내장 / Nuked, `OplChip.GlobalCore`), `Opl2Emulator`(내장 OPL2), `Opl3Emulator`(18채널 · 4-op · 웨이브폼 8종 · 스테레오), `ToneFilters`(Jukebox 음색 · 스피커 필터), `MidiPlayer`(MIDI → OPL3 FM · Windows MIDI 출력 · MT-32), `Mt32Emu`(Munt mt32emu.dll P/Invoke), `AudioFileReader`(WAV · Media Foundation → 모노), `MelodyAnalysis`(주 멜로디 채보), `MelodyToSong`(초 → 틱, 격자), `PcmPlayer`(원곡 + 멜로디 재생), `OplSynth`(보이스→레지스터, 리듬 모드), `Sequencer`, `SopPlayer`(SOP → OPL3), `MusicBoxPlayer`(오르골 시험 연주), `TrackerPlayer`(STM/S3M 샘플 믹서 + AdLib), `AudioEngine`(스테레오 출력), `PlaybackOptions`(속도 · 키 · 채널 조절), `WaveOutPlayer`, `OplMapping` |
+| `AdlibComposer.Formats` | `RolFormat`, `ImsFormat`, `BnkFormat`, `InsFormat`, `IssLyrics`(ISS 가사), `KoreanText`(조합형/완성형 → 유니코드), `FormatRegistry`, `SopFormat` → `SopSong`(OPL3 곡 읽기 · 쓰기), `SopConvert`(SopSong ↔ Song SOP 모드 · 악기 레지스터), `TrackerModule` + `StmFormat` / `S3mFormat`(Scream Tracker 2/3 읽기·쓰기), `ModFormat`(MOD / NST ↔ S3M 모델), `MidiSong` + `MidiFileFormat` / `WrkFormat`(MIDI · Cakewalk 읽기), `GeneralMidi` · `GmBank`(GM 이름, GENMIDI.OP2 / BNK 이름 맞춤 FM 뱅크), `MusicDuplicateFinder`(같은 곡 찾기 · 남길 파일 점수), `VgmFormat` → `VgmSong`(VGM · VGZ 머리말 · GD3) |
+| `AdlibComposer.Audio` | `OplChip`(코어를 바꿔 끼우는 칩: 내장 / Nuked, `OplChip.GlobalCore`), `Opl2Emulator`(내장 OPL2), `Opl3Emulator`(18채널 · 4-op · 웨이브폼 8종 · 스테레오), `ToneFilters`(Jukebox 음색 · 스피커 필터), `MidiPlayer`(MIDI → OPL3 FM · Windows MIDI 출력 · MT-32), `Mt32Emu`(Munt mt32emu.dll P/Invoke), `AudioFileReader`(WAV · Media Foundation → 모노), `MelodyAnalysis`(주 멜로디 채보), `MelodyToSong`(초 → 틱, 격자), `PcmPlayer`(원곡 + 멜로디 재생), `OplSynth`(보이스→레지스터, 리듬 모드), `Sequencer`, `SopPlayer`(SOP → OPL3), `MusicBoxPlayer`(오르골 시험 연주), `TrackerPlayer`(STM/S3M 샘플 믹서 + AdLib), `PsgEmulator`(AY-3-8910 / YM2149) · `SccEmulator`(K051649 / K052539) · `VgmPlayer`(VGM → PSG · SCC · OPL), `AudioEngine`(스테레오 출력), `PlaybackOptions`(속도 · 키 · 채널 조절), `WaveOutPlayer`, `OplMapping` |
 | `AdlibComposer.Nuked` | `NukedOpl3`: Nuked OPL3 1.8 (Nuke.YKT) C# 포팅. **LGPL-2.1 이상** (`src/AdlibComposer.Nuked/LICENSE`, 출력 폴더에 `LICENSE.Nuked-OPL3.txt`). 바꿔 끼울 수 있게 별도 어셈블리 |
 | `AdlibComposer.Notation` | `Score` 모델, `ScoreBuilder`(Song→마디/음표, 붙임줄), `NoteSpelling`(음표 나누기·셋잇단·음 이름), `MusicXmlExporter`, `MidiExporter`, 텍스트 내보내기, `OrgelComb` / `OrgelBuilder`(곡 → 30음 오르골 띠 구멍) |
 | `AdlibComposer.App` | WinForms GUI: `MainForm`, `Shell/`(가로 페이지 메뉴 · 공용 폴더/파일 목록 · 로그 · 셸 테마), `ComposerView`, `InstrumentView`, `JukeboxView`, `NoteView`, `OrganizerView`, `PianoRollControl`, `RetroSlider` 등 |

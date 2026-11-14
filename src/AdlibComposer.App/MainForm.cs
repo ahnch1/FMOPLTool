@@ -446,7 +446,8 @@ internal sealed class MainForm : Form
     {
         Activate();
         if (page == AppPage.Jukebox && files.Any(JukeboxView.CanPlay)) { jukebox.PlayFiles(files); return; }
-        if (FileBrowser.KindOf(files[0]) == MusicFileKind.Midi) { ShowPage(AppPage.Jukebox); jukebox.PlayFiles(files); return; }
+        var firstKind = FileBrowser.KindOf(files[0]);
+        if (firstKind == MusicFileKind.Midi || firstKind == MusicFileKind.Vgm) { ShowPage(AppPage.Jukebox); jukebox.PlayFiles(files); return; }
         OpenFromBrowser(files[0], true);
     }
 
@@ -1089,6 +1090,7 @@ internal sealed class MainForm : Form
                 browser.MarkCurrent(path);
                 break;
             case MusicFileKind.Midi:
+            case MusicFileKind.Vgm:
                 ShowPage(AppPage.Jukebox);
                 if (single) jukebox.PlayFiles(new List<string> { path }); else jukebox.Play(path);
                 break;

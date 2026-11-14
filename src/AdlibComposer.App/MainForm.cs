@@ -14,7 +14,7 @@ using AdlibComposer.Notation;
 namespace AdlibComposer.App;
 
 /// <summary>
-/// 메인 창: 메뉴 + 툴바 + 왼쪽 사이드바(Composer / Instrument Maker / Jukebox / Note) + 페이지 머리글 + 페이지 + 진행 로그 + 상태 표시줄.
+/// 메인 창: 메뉴 + 가로 페이지 메뉴(Composer / Instrument Maker / Tracker / Jukebox / Note …) + 툴바 + 왼쪽 공용 폴더/파일 목록 + 페이지 머리글 + 페이지 + 진행 로그 + 상태 표시줄.
 /// Composer와 Instrument Maker 페이지 안은 원본 화면 재현, 바깥 틀은 현대식.
 /// </summary>
 [System.ComponentModel.DesignerCategory("Code")]   // 코드로 만든 화면: 디자이너 대신 코드로 연다
@@ -34,7 +34,9 @@ internal sealed class MainForm : Form
     private readonly ToolStripStatusLabel linkFolder = new ToolStripStatusLabel();
 
     // 셸 (현대식 틀)
-    private readonly NavSidebar sidebar = new NavSidebar();
+    private readonly NavBar navBar = new NavBar();
+    private readonly FileBrowser browser;
+    private readonly Splitter browserSplitter = new Splitter();
     private readonly ToolStrip toolbar = new ToolStrip();
     private readonly Panel header = new Panel();
     private readonly Label headerTitle = new Label();
@@ -47,7 +49,7 @@ internal sealed class MainForm : Form
     private readonly OrganizerView organizer;
     private readonly TranscribeView transcribe;
     private readonly NoteView note;
-    private ToolStripButton tbPlay, tbStop;
+    private ToolStripButton tbPlay, tbPlayCursor, tbStop;
 
     private ToolStripMenuItem fileMenu, editMenu, playMenu, displayMenu, optionsMenu, instOptionMenu, helpMenu;
     private ToolStripMenuItem additiveItem, instMidiItem;
@@ -87,8 +89,10 @@ internal sealed class MainForm : Form
 
         composer = new ComposerView(ws) { Dock = DockStyle.Fill };
         instrument = new InstrumentView(ws) { Dock = DockStyle.Fill, Visible = false };
-        jukebox = new JukeboxView(ws, delegate { return settings; }, TryOpenAudio) { Dock = DockStyle.Fill, Visible = false };
-        note = new NoteView(ws, delegate { return settings.FolderForSong(ws.Song.FilePath); }) { Dock = DockStyle.Fill, Visible = false };
+        browser = new FileBrowser(ws, delegate { return settings; }) { Dock = DockStyle.Left, Width = 300 };
+        browser.FileActivated += OpenFromBrowser;
+        jukebox = new JukeboxView(ws, delegate { return settings; }, TryOpenAudio, browser) { Dock = DockStyle.Fill, Visible = false };
+        note = new NoteView(ws, TryOpenAudio, delegate { return settings.FolderForSong(ws.Song.FilePath); }) { Dock = DockStyle.Fill, Visible = false };
         trackerView = new TrackerView(ws, delegate { return settings; }, TryOpenAudio) { Dock = DockStyle.Fill, Visible = false };
         organizer = new OrganizerView(delegate { return settings; }) { Dock = DockStyle.Fill, Visible = false };
         transcribe = new TranscribeView(ws, TryOpenAudio, SendTranscribedSong) { Dock = DockStyle.Fill, Visible = false };
@@ -116,7 +120,7 @@ internal sealed class MainForm : Form
         timer.Tick += OnTimer;
         timer.Start();
 
-        Shown += delegate { TryOpenAudio(); composer.Focus(); };
+        Shown += delegate { browser.EnsureTree(); TryOpenAudio(); composer.Focus(); };
         FormClosing += OnClosing;
         FormClosed += delegate { timer.Stop(); ws.Dispose(); };
 
@@ -132,16 +136,19 @@ internal sealed class MainForm : Form
     // ================================================================ 셸 (현대식 틀)
 
     /// <summary>
-    /// 배치: 메뉴(위) · 툴바(위) · 상태 표시줄(아래) · 사이드바(왼쪽) · [머리글 / 페이지 / 로그].
+    /// 배치: 메뉴(위) · 페이지 메뉴(위, 가로) · 툴바(위) · 상태 표시줄(아래) · 공용 폴더/파일 목록(왼쪽) · [머리글 / 페이지 / 로그].
     /// WinForms 도킹은 나중에 추가한 컨트롤이 바깥쪽에 붙으므로 안쪽부터 추가한다.
     /// </summary>
     private void BuildShell()
     {
-        sidebar.Dock = DockStyle.Left;
-        sidebar.Version = VersionText;
-        sidebar.AppName = "FMOPL Tool";
-        sidebar.Subtitle = "AdLib Composer · OPL2";
-        sidebar.PageSelected += ShowPage;
+        navBar.Dock = DockStyle.Top;
+        navBar.PageSelected += ShowPage;
+
+        browserSplitter.Dock = DockStyle.Left;
+        browserSplitter.Width = 4;
+        browserSplitter.BackColor = Color.FromArgb(225, 228, 232);
+        browserSplitter.MinSize = 180;
+        browserSplitter.MinExtra = 600;
 
         pageHost.Dock = DockStyle.Fill;
         pageHost.Controls.AddRange(new Control[] { composer, instrument, jukebox, note, orgel, trackerView, organizer, transcribe });
@@ -172,33 +179,41 @@ internal sealed class MainForm : Form
         content.Controls.Add(header);
 
         Controls.Add(content);
-        Controls.Add(sidebar);
+        Controls.Add(browserSplitter);
+        Controls.Add(browser);
         Controls.Add(status);
         Controls.Add(toolbar);
+        Controls.Add(navBar);
         Controls.Add(menu);
     }
 
     private ToolStripButton ToolButton(string text, char glyph, string tip, EventHandler click)
     {
-        var b = new ToolStripButton(text, GlyphImages.Get(glyph, 16, Color.FromArgb(50, 54, 62)), click)
+        var b = new ToolStripButton(text, GlyphImages.Get(glyph, ToolIcon, Color.FromArgb(50, 54, 62)), click)
         {
             DisplayStyle = ToolStripItemDisplayStyle.ImageAndText,
             ToolTipText = tip,
-            Padding = new Padding(4, 1, 4, 1),
+            Padding = new Padding(8, 2, 8, 2),
         };
         return b;
     }
+
+    /// <summary>툴바 아이콘 크기 (예전 16의 2배).</summary>
+    private const int ToolIcon = 32;
+    private static readonly Font ToolFont = new Font("Segoe UI", 12f);
 
     private void BuildToolbar()
     {
         toolbar.GripStyle = ToolStripGripStyle.Hidden;
         toolbar.RenderMode = ToolStripRenderMode.System;
         toolbar.BackColor = Color.FromArgb(248, 249, 250);
-        toolbar.Padding = new Padding(8, 3, 8, 3);
-        toolbar.Font = ShellTheme.Ui;
-        toolbar.ImageScalingSize = new Size(16, 16);
-        tbPlay = ToolButton("재생", Glyphs.Play, "커서부터 재생 / 정지 (Space)", delegate { ShowPage(AppPage.Composer); TogglePlay(); });
-        tbStop = ToolButton("정지", Glyphs.Stop, "정지 (Esc)", delegate { StopPlayback(); });
+        toolbar.Padding = new Padding(16, 6, 16, 6);
+        toolbar.Font = ToolFont;
+        toolbar.ImageScalingSize = new Size(ToolIcon, ToolIcon);
+        // 공통 재생 버튼: Composer · Note · Orgel Note · Transcribe가 같이 쓴다 (지금 페이지에 보낸다)
+        tbPlay = ToolButton("재생", Glyphs.Play, "처음부터 재생 (Composer · Note · Orgel Note · Transcribe)", delegate { PagePlay(false); });
+        tbPlayCursor = ToolButton("현재 위치부터 재생", Glyphs.Play, "현재 위치(커서 · 클릭한 곳 · 멈춘 곳)부터 재생 (Space)", delegate { PagePlay(true); });
+        tbStop = ToolButton("정지", Glyphs.Stop, "정지 (Esc)", delegate { PageStop(); });
         var settingsButton = ToolButton("설정", Glyphs.Settings, "Preferences (Ctrl+,)", delegate { ShowPreferences(); });
         settingsButton.Alignment = ToolStripItemAlignment.Right;
         toolbar.Items.AddRange(new ToolStripItem[]
@@ -210,6 +225,7 @@ internal sealed class MainForm : Form
             ToolButton("뱅크 브라우저", Glyphs.Library, "BNK 목록 · 악기 목록 · 불러오기 (Ctrl+B)", delegate { OpenBankBrowser(); }),
             new ToolStripSeparator(),
             tbPlay,
+            tbPlayCursor,
             tbStop,
             settingsButton,
         });
@@ -226,7 +242,7 @@ internal sealed class MainForm : Form
         composer.ReleaseKeys();
 
         page = target;
-        sidebar.Selected = target;
+        navBar.Selected = target;
         composer.Visible = target == AppPage.Composer;
         instrument.Visible = target == AppPage.Instrument;
         jukebox.Visible = target == AppPage.Jukebox;
@@ -263,7 +279,7 @@ internal sealed class MainForm : Form
     private void UpdateHeader()
     {
         string name = page == AppPage.Instrument ? "Instrument Maker" : page == AppPage.Orgel ? "Orgel Note" : page.ToString();
-        headerTitle.Text = name + "  —  " + sidebar.HintFor(page);
+        headerTitle.Text = name + "  —  " + navBar.HintFor(page);
     }
 
     private static void OpenInExplorer(string path, bool select)
@@ -334,6 +350,7 @@ internal sealed class MainForm : Form
             settings = f.Result;
             ApplyOplCore();
             jukebox.SettingsChanged();
+            browser.SettingsChanged();
             if (f.LoadBankNow && settings.DefaultBankPath != null && File.Exists(settings.DefaultBankPath) && ConfirmDiscardBank())
             {
                 try { StopPlayback(); ws.OpenBank(settings.DefaultBankPath); LogBank("기본 뱅크"); }
@@ -706,7 +723,7 @@ internal sealed class MainForm : Form
         editMenu.Visible = playMenu.Visible = displayMenu.Visible = composerMode;
         optionsMenu.Visible = composerMode;
         instOptionMenu.Visible = instrumentMode;
-        if (tbPlay != null) tbPlay.Enabled = tbStop.Enabled = composerMode;
+        SyncPlayButtons();
         foreach (var it in previewItems) it.Checked = (int)it.Tag == instrument.PreviewVoice;
         additiveItem.Checked = instrument.Additive;
         additiveItem.Enabled = instrument.AdditiveAvailable;
@@ -780,6 +797,35 @@ internal sealed class MainForm : Form
         catch (Exception ex) { statusMain.Text = "오디오 장치를 열 수 없습니다: " + ex.Message; AppLog.Error("오디오", "오디오 장치를 열 수 없습니다", ex); return false; }
     }
 
+    /// <summary>툴바 재생 · 현재 위치부터 재생: 지금 페이지에.</summary>
+    private void PagePlay(bool fromCursor)
+    {
+        if (composerMode) { PlayFrom(fromCursor ? composer.Roll.CursorTick : 0); return; }
+        var p = PageControl(page) as IPlaybackPage;
+        if (p == null || !p.CanPlay) return;
+        if (fromCursor) p.PlayFromCursor(); else p.PlayFromStart();
+        SyncPlayButtons();
+    }
+
+    private void PageStop()
+    {
+        if (composerMode) { StopPlayback(); return; }
+        var p = PageControl(page) as IPlaybackPage;
+        if (p != null) p.StopPlay();
+        SyncPlayButtons();
+    }
+
+    /// <summary>공통 재생 버튼 켜기/끄기: Composer · 재생할 것이 있는 Note / Orgel Note / Transcribe만. Jukebox · Tracker는 자기 버튼.</summary>
+    private void SyncPlayButtons()
+    {
+        if (tbPlay == null) return;
+        var p = PageControl(page) as IPlaybackPage;
+        bool can = composerMode || (p != null && p.CanPlay);
+        bool playing = composerMode ? ws.Audio.IsPlaying : p != null && p.IsPlaying;
+        if (tbPlay.Enabled != can) tbPlay.Enabled = tbPlayCursor.Enabled = can;
+        if (tbStop.Enabled != (can && playing)) tbStop.Enabled = can && playing;
+    }
+
     private void TogglePlay()
     {
         if (!composerMode) return;
@@ -822,6 +868,7 @@ internal sealed class MainForm : Form
 
     private void OnTimer(object sender, EventArgs e)
     {
+        SyncPlayButtons();
         if (!composerMode) return;
         bool playing = ws.Audio.IsPlaying;
         if (!playing && wasPlaying && sopLoop && ws.Song.IsSop) { PlayFrom(0, sopOnlyVoice); playing = ws.Audio.IsPlaying; }
@@ -844,7 +891,9 @@ internal sealed class MainForm : Form
 
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
     {
-        bool text = FocusedControl() is TextBoxBase;
+        bool inBrowser = browser.ContainsFocus;
+        bool text = FocusedControl() is TextBoxBase || inBrowser;   // 왼쪽 파일 목록: 화살표 · Enter는 목록이 쓴다
+        if (inBrowser && page == AppPage.Jukebox && jukebox.HandleKey(keyData)) return true;
         switch (keyData)
         {
             case Keys.F5: fileMenu.ShowDropDown(); return true;
@@ -940,6 +989,44 @@ internal sealed class MainForm : Form
         LogSong("새 곡");
     }
 
+    /// <summary>
+    /// 왼쪽 공용 파일 목록에서 고른 파일: 지금 페이지가 그 형식을 열 수 있으면 여기서, 아니면 그 형식을 여는 페이지로 가서 연다.
+    /// ROL · IMS · SOP = Composer / Note / Orgel Note (작업 곡), S3M · STM · MOD · NST = Tracker, MID · WRK = Jukebox, MP3 · WAV … = Transcribe.
+    /// Jukebox는 MP3 · WAV 말고 모두 재생한다.
+    /// </summary>
+    private void OpenFromBrowser(string path)
+    {
+        if (string.IsNullOrEmpty(path) || !File.Exists(path)) return;
+        if (page == AppPage.Jukebox && JukeboxView.CanPlay(path)) { jukebox.Play(path); return; }
+        switch (FileBrowser.KindOf(path))
+        {
+            case MusicFileKind.Adlib:
+                {
+                    var target = page == AppPage.Note || page == AppPage.Orgel ? page : AppPage.Composer;
+                    if (!OpenSongPath(path)) return;
+                    browser.MarkCurrent(path);
+                    if (page != target) ShowPage(target);
+                    else { var p = PageControl(page) as IShellPage; if (p != null) p.OnShown(); }   // Note / Orgel: 새 곡으로 다시 그리기
+                    break;
+                }
+            case MusicFileKind.Tracker:
+                if (!trackerView.ConfirmDiscard()) return;
+                ShowPage(AppPage.Tracker);
+                trackerView.Open(path);
+                browser.MarkCurrent(path);
+                break;
+            case MusicFileKind.Midi:
+                ShowPage(AppPage.Jukebox);
+                jukebox.Play(path);
+                break;
+            case MusicFileKind.Audio:
+                ShowPage(AppPage.Transcribe);
+                transcribe.Open(path);
+                browser.MarkCurrent(path);
+                break;
+        }
+    }
+
     private void OpenSong()
     {
         if (!ConfirmDiscardSong()) return;
@@ -950,24 +1037,45 @@ internal sealed class MainForm : Form
         {
             AddSongPlaces(dlg);
             if (dlg.ShowDialog(this) != DialogResult.OK) return;
-            bool sop = SopFormat.IsSop(dlg.FileName);
-            if (sop && !ConfirmDiscardBank()) return;   // SOP는 곡 안 악기로 작업 뱅크를 바꾼다
-            try
-            {
-                StopPlayback();
-                ws.OpenSong(dlg.FileName);
-                LogSong("열기");
-                if (sop) LogBank("SOP 곡 안 악기");
-                if (ws.Bank.UsedCount <= 1) OfferBankFor(dlg.FileName);
-                var missing = ws.MissingInstruments();
-                if (missing.Count > 0) AppLog.Warn("곡", "뱅크에 없는 악기 " + missing.Count + "개 (기본 악기로 재생): " + string.Join(", ", missing.ToArray()));
-                if (page != AppPage.Composer) ShowPage(AppPage.Composer);
-                if (missing.Count > 0)
-                    MessageBox.Show(this, "뱅크에 없는 악기가 " + missing.Count + "개 있습니다 (기본 악기로 재생됩니다):\n" +
-                        string.Join(", ", missing.GetRange(0, Math.Min(8, missing.Count)).ToArray()), "Missing instruments");
-            }
-            catch (Exception ex) { Fail("곡을 열 수 없습니다.", ex); }
+            if (!LoadSongFile(dlg.FileName)) return;
+            browser.MarkCurrent(dlg.FileName);
+            if (page != AppPage.Composer) ShowPage(AppPage.Composer);
+            WarnMissingInstruments();
         }
+    }
+
+    /// <summary>공용 파일 목록에서: 저장할지 묻고 작업 곡으로 연다. 뱅크에 없는 악기는 페이지를 바꾼 뒤 알린다.</summary>
+    private bool OpenSongPath(string path)
+    {
+        if (!ConfirmDiscardSong() || !LoadSongFile(path)) return false;
+        BeginInvoke((Action)WarnMissingInstruments);
+        return true;
+    }
+
+    /// <summary>곡 파일을 작업 곡으로 연다 (SOP는 곡 안 악기로 작업 뱅크를 바꾸므로 뱅크도 묻는다).</summary>
+    private bool LoadSongFile(string path)
+    {
+        bool sop = SopFormat.IsSop(path);
+        if (sop && !ConfirmDiscardBank()) return false;
+        try
+        {
+            StopPlayback();
+            ws.OpenSong(path);
+            LogSong("열기");
+            if (sop) LogBank("SOP 곡 안 악기");
+            if (ws.Bank.UsedCount <= 1) OfferBankFor(path);
+            return true;
+        }
+        catch (Exception ex) { Fail("곡을 열 수 없습니다.", ex); return false; }
+    }
+
+    private void WarnMissingInstruments()
+    {
+        var missing = ws.MissingInstruments();
+        if (missing.Count == 0) return;
+        AppLog.Warn("곡", "뱅크에 없는 악기 " + missing.Count + "개 (기본 악기로 재생): " + string.Join(", ", missing.ToArray()));
+        MessageBox.Show(this, "뱅크에 없는 악기가 " + missing.Count + "개 있습니다 (기본 악기로 재생됩니다):\n" +
+            string.Join(", ", missing.GetRange(0, Math.Min(8, missing.Count)).ToArray()), "Missing instruments");
     }
 
     /// <summary>곡과 같은 폴더의 BNK 중 곡이 쓰는 악기를 가장 많이 가진 뱅크를 불러올지 묻는다.</summary>

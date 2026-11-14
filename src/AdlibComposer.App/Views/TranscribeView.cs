@@ -24,13 +24,13 @@ namespace AdlibComposer.App.Views;
 /// 분석(<see cref="MelodyAnalysis.Analyze"/>)은 파일마다 한 번, 조절값을 바꾸면 <see cref="MelodyAnalysis.Track"/>만 다시 한다.
 /// </summary>
 [System.ComponentModel.DesignerCategory("Code")]
-internal sealed class TranscribeView : UserControl, IShellPage
+internal sealed class TranscribeView : UserControl, IShellPage, IPlaybackPage
 {
     private readonly Workspace ws;
     private readonly Func<bool> openAudio;
     private readonly Func<Song, AppPage, bool> sendSong;
 
-    private readonly Button btnOpen = new Button(), btnPlay = new Button(), btnNote = new Button(), btnComposer = new Button(), btnAutoTempo = new Button();
+    private readonly Button btnOpen = new Button(), btnNote = new Button(), btnComposer = new Button(), btnAutoTempo = new Button();
     private readonly Label lblFile = new Label(), lblStatus = new Label(), lblInfo = new Label();
     private readonly ComboBox cbLow = new ComboBox(), cbHigh = new ComboBox(), cbGrid = new ComboBox();
     private readonly TrackBar tbVoicing = new TrackBar();
@@ -162,15 +162,12 @@ internal sealed class TranscribeView : UserControl, IShellPage
 
     private void BuildBottom(Panel host)
     {
-        btnPlay.Text = "▶ 재생";
-        btnPlay.SetBounds(12, 9, 90, 28);
-        btnPlay.Click += delegate { if (playing) StopPlay(); else StartPlay(canvas.Cursor0); };
-        tips.SetToolTip(btnPlay, "재생 / 정지 (Space). 화면을 클릭하면 그 위치부터");
-        chkOriginal.Text = "원곡"; chkOriginal.Checked = true; chkOriginal.SetBounds(112, 13, 56, 22);
-        chkMelody.Text = "채보한 멜로디"; chkMelody.Checked = true; chkMelody.SetBounds(170, 13, 110, 22);
+        // 재생 · 현재 위치부터 재생 · 정지 = 툴바의 공통 버튼 (Space = 재생 / 정지, 화면을 클릭하면 그 위치가 현재 위치)
+        chkOriginal.Text = "원곡"; chkOriginal.Checked = true; chkOriginal.SetBounds(12, 13, 56, 22);
+        chkMelody.Text = "채보한 멜로디"; chkMelody.Checked = true; chkMelody.SetBounds(70, 13, 110, 22);
         foreach (var c in new[] { chkOriginal, chkMelody }) c.CheckedChanged += delegate { if (playing) ws.Audio.SetPcmMix(chkOriginal.Checked, chkMelody.Checked); };
         tips.SetToolTip(chkMelody, "채보한 음을 간단한 소리로 겹쳐 들려준다 (원곡과 견주기)");
-        lblInfo.AutoSize = false; lblInfo.SetBounds(290, 15, 420, 20); lblInfo.ForeColor = ShellTheme.Muted;
+        lblInfo.AutoSize = false; lblInfo.SetBounds(190, 15, 520, 20); lblInfo.ForeColor = ShellTheme.Muted;
         btnComposer.Text = "Composer에서 편집";
         btnComposer.SetBounds(0, 9, 140, 28);
         btnComposer.Anchor = AnchorStyles.Top | AnchorStyles.Right;
@@ -181,7 +178,7 @@ internal sealed class TranscribeView : UserControl, IShellPage
         btnNote.Anchor = AnchorStyles.Top | AnchorStyles.Right;
         btnNote.Click += delegate { Send(AppPage.Note); };
         tips.SetToolTip(btnNote, "채보한 멜로디를 새 곡(보이스 1)으로 만들어 오선 악보로 본다. MusicXML · MIDI · PNG로 내보내거나 ROL로 저장할 수 있다");
-        host.Controls.AddRange(new Control[] { btnPlay, chkOriginal, chkMelody, lblInfo, btnComposer, btnNote });
+        host.Controls.AddRange(new Control[] { chkOriginal, chkMelody, lblInfo, btnComposer, btnNote });
         host.Resize += delegate
         {
             btnNote.Left = host.Width - btnNote.Width - 12;
@@ -219,10 +216,8 @@ internal sealed class TranscribeView : UserControl, IShellPage
     {
         bool has = analysis != null && !busy;
         btnOpen.Enabled = !busy;
-        btnPlay.Enabled = samples != null && !busy;
         btnNote.Enabled = btnComposer.Enabled = has && result != null && result.Notes.Count > 0;
         btnAutoTempo.Enabled = has;
-        btnPlay.Text = playing ? "■ 정지" : "▶ 재생";
     }
 
     // ------------------------------------------------------------ 열기 / 분석
@@ -240,6 +235,13 @@ internal sealed class TranscribeView : UserControl, IShellPage
             lastDir = Path.GetDirectoryName(dlg.FileName);
             LoadFile(dlg.FileName);
         }
+    }
+
+    /// <summary>공용 파일 목록에서 고른 음악 파일을 분석한다.</summary>
+    public void Open(string file)
+    {
+        lastDir = Path.GetDirectoryName(file);
+        LoadFile(file);
     }
 
     private async void LoadFile(string file)
@@ -358,8 +360,16 @@ internal sealed class TranscribeView : UserControl, IShellPage
         UpdateButtons();
     }
 
-    private void StopPlay()
+    // IPlaybackPage: 툴바의 공통 재생 버튼
+    public bool CanPlay { get { return samples != null && !busy; } }
+    public bool IsPlaying { get { return playing; } }
+    public void PlayFromStart() { canvas.Cursor0 = 0; StartPlay(0); }
+    public void PlayFromCursor() { StartPlay(canvas.Cursor0); }
+
+    /// <summary>멈추고, 현재 위치를 멈춘 곳으로.</summary>
+    public void StopPlay()
     {
+        if (!playing) return;
         canvas.Cursor0 = ws.Audio.PositionTick / 1000.0;
         canvas.PlayPosition = -1;
         ws.Audio.Stop();

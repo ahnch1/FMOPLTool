@@ -31,11 +31,12 @@ internal sealed class InstrumentView : UserControl
     private const int OptionHeight = 36;
     private const int TopHeight = InfoHeight + OptionHeight;
     private const int ListWidth = 230;
-    private const int KeyboardHeight = 84;
+    /// <summary>건반 높이 고정 (흰 건반 폭 = 높이 / 5, PianoKeyboardControl.KeyAspect).</summary>
+    private const int KeyboardHeight = 120;
 
-    private static readonly Color Line = Color.FromArgb(200, 200, 200);
-    private static readonly Color Muted = Color.FromArgb(110, 110, 110);
-    private static readonly Color InfoBack = Color.FromArgb(244, 244, 244);
+    private static readonly Color Line = InstTheme.Line;
+    private static readonly Color Muted = InstTheme.Muted;
+    private static readonly Color InfoBack = InstTheme.Surface;
     private static readonly Font ButtonFont = new Font("Arial", 8.5f, FontStyle.Bold);
 
     private sealed class RowControls
@@ -77,6 +78,8 @@ internal sealed class InstrumentView : UserControl
     private readonly Label lblRange = new Label();
     private readonly Button btnVolume = new Button();
     private static readonly string[] ModeNames = { "Melodic", "Bass Drum", "Snare", "Tom", "Cymbal", "Hi-hat" };
+    /// <summary>모드 버튼 글자 (Bass Drum은 줄여서 Bass). 풍선 도움말은 ModeNames 그대로.</summary>
+    private static readonly string[] ModeButtonNames = { "Melodic", "Bass", "Snare", "Tom", "Cymbal", "Hi-hat" };
     private static readonly int[] ModeVoices = { 0, 6, 7, 8, 9, 10 };
     // 왼쪽: 뱅크 악기 목록
     private readonly Label listHeader = new Label();
@@ -222,7 +225,8 @@ internal sealed class InstrumentView : UserControl
     public InstrumentView(Workspace ws)
     {
         this.ws = ws;
-        BackColor = Theme.Back;
+        BackColor = InstTheme.Back;
+        ForeColor = InstTheme.Ink;
         DoubleBuffered = true;
         BuildKeyMap();
         BuildInfoBar();
@@ -275,11 +279,11 @@ internal sealed class InstrumentView : UserControl
     private void BuildOptionBar()
     {
         int y = OptionTop + 6, h = 24, x = 10;
-        int[] widths = { 64, 78, 54, 44, 60, 54 };
+        int[] widths = { 64, 50, 54, 44, 60, 54 };
         for (int i = 0; i < ModeNames.Length; i++)
         {
             int voice = ModeVoices[i];
-            var b = OptionButton(ModeNames[i], x, y, widths[i], h);
+            var b = OptionButton(ModeButtonNames[i], x, y, widths[i], h);
             b.Click += delegate { SetMode(voice); };
             tips.SetToolTip(b, ModeNames[i] + " Mode (F6)");
             modeButtons.Add(b);
@@ -343,21 +347,22 @@ internal sealed class InstrumentView : UserControl
         b.Text = text;
         b.Font = ButtonFont;
         b.FlatStyle = FlatStyle.Flat;
-        b.FlatAppearance.BorderColor = Color.Black;
+        b.FlatAppearance.BorderColor = InstTheme.Line;
         b.BackColor = Color.White;
-        b.ForeColor = Color.Black;
+        b.ForeColor = InstTheme.Ink;
         b.TabStop = false;
         b.Cursor = Cursors.Hand;
         b.SetBounds(x, y, w, h);
         Controls.Add(b);
     }
 
-    /// <summary>켜진 버튼은 원본처럼 검은 바탕 흰 글자.</summary>
+    /// <summary>켜진 버튼 = 강조색 바탕 흰 글자, 꺼진 버튼 = 흰 바탕 회색 테두리.</summary>
     private static void SetOn(Button b, bool on)
     {
-        b.BackColor = on ? Color.Black : Color.White;
-        b.ForeColor = on ? Color.White : Color.Black;
-        b.FlatAppearance.MouseOverBackColor = on ? Color.FromArgb(50, 50, 50) : Color.FromArgb(235, 235, 235);
+        b.BackColor = on ? InstTheme.Accent : Color.White;
+        b.ForeColor = on ? Color.White : InstTheme.Ink;
+        b.FlatAppearance.BorderColor = on ? InstTheme.Accent : InstTheme.Line;
+        b.FlatAppearance.MouseOverBackColor = on ? InstTheme.AccentDark : InstTheme.Hover;
     }
 
     private void UpdateOptionButtons()
@@ -550,7 +555,7 @@ internal sealed class InstrumentView : UserControl
         foreach (var info in ParameterInfo.All)
         {
             var row = new RowControls { Info = info };
-            row.Label = new Label { Text = info.Label, Font = Theme.UiFont, AutoSize = false, TextAlign = ContentAlignment.MiddleLeft, Height = 22 };
+            row.Label = new Label { Text = info.Label, Font = Theme.UiFont, ForeColor = InstTheme.Ink, AutoSize = false, TextAlign = ContentAlignment.MiddleLeft, Height = 22 };
             Controls.Add(row.Label);
             if (!info.ModulatorOnly) row.Carrier = MakeControl(info, true);
             row.Modulator = MakeControl(info, false);
@@ -599,10 +604,11 @@ internal sealed class InstrumentView : UserControl
 
     private void UpdateHeaderHighlight()
     {
-        carrierHeader.BackColor = activeCarrier ? Color.Black : Color.White;
-        carrierHeader.ForeColor = activeCarrier ? Color.White : Color.Black;
-        modulatorHeader.BackColor = activeCarrier ? Color.White : Color.Black;
-        modulatorHeader.ForeColor = activeCarrier ? Color.Black : Color.White;
+        // 편집 중인 열 = 강조색, 다른 열 = 회색 면
+        carrierHeader.BackColor = activeCarrier ? InstTheme.Accent : InstTheme.Surface;
+        carrierHeader.ForeColor = activeCarrier ? Color.White : InstTheme.Muted;
+        modulatorHeader.BackColor = activeCarrier ? InstTheme.Surface : InstTheme.Accent;
+        modulatorHeader.ForeColor = activeCarrier ? InstTheme.Muted : Color.White;
     }
 
     // ------------------------------------------------------------ 바인딩
@@ -723,7 +729,9 @@ internal sealed class InstrumentView : UserControl
     private void RefreshKeyLabels()
     {
         keyboard.KeyLabels.Clear();
-        foreach (var kv in keyMap) keyboard.KeyLabels[baseNote + kv.Value] = KeyLabel(kv.Key);
+        int top = baseNote;
+        foreach (var kv in keyMap) { keyboard.KeyLabels[baseNote + kv.Value] = KeyLabel(kv.Key); top = Math.Max(top, baseNote + kv.Value); }
+        keyboard.FocusNote = (baseNote + top) / 2;   // 컴퓨터 키가 닿는 음역을 가운데로
         keyboard.Invalidate();
         lblRange.Text = "from " + NoteHelper.Name(baseNote);
     }

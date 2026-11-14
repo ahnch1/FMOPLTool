@@ -76,8 +76,9 @@ Mt32RomFolder=resource
 
 | 영역 | 내용 |
 |---|---|
-| 메뉴 / 툴바 | 원본 메뉴(F5~F10) + 툴바(새 곡 · 열기 · 저장 · 뱅크 브라우저 · 재생 · 정지 · 설정) |
-| 왼쪽 사이드바 | **Composer** · **Instrument Maker** · **Tracker** (CREATE), **Jukebox** (PLAY), **Note** · **Orgel Note** · **Transcribe** (SCORE), **Organizer** (TOOLS). Ctrl+1~8 (Tracker = Ctrl+6, Organizer = Ctrl+7, Transcribe = Ctrl+8) |
+| 메뉴 / 툴바 | 원본 메뉴(F5~F10) + 툴바(새 곡 · 열기 · 저장 · 뱅크 브라우저 · 재생 · 현재 위치부터 재생 · 정지 · 설정). 재생 버튼 셋은 Composer · Note · Orgel Note · Transcribe가 같이 쓴다 (지금 페이지를 재생) |
+| 페이지 메뉴 (메뉴와 툴바 사이, 가로) | **Composer** · **Instrument Maker** · **Tracker** (CREATE), **Jukebox** (PLAY), **Note** · **Orgel Note** · **Transcribe** (SCORE), **Organizer** (TOOLS). Ctrl+1~8 (Tracker = Ctrl+6, Organizer = Ctrl+7, Transcribe = Ctrl+8) |
+| 왼쪽 폴더 / 파일 | 모든 페이지가 같이 쓰는 폴더 트리 + 곡 파일 목록 (ROL · IMS · SOP · S3M · STM · MOD · NST · MID · WRK · MP3 · WAV …). 두 번 클릭 / Enter = 지금 페이지에서 열기: Composer · Note · Orgel Note = 작업 곡(ROL · IMS · SOP), Tracker = S3M · STM · MOD · NST, Jukebox = 재생, Transcribe = MP3 · WAV. 지금 페이지가 못 여는 형식이면 그 형식을 여는 페이지로 간다 |
 | 페이지 머리글 | 현재 페이지 이름과 설명 |
 | 진행 로그 | 시작 · 뱅크/곡 열기·저장 · 경고 · 오류 기록. 필터(전체/정보/경고/오류), 상세(예외 내용), 복사, 지우기. 위쪽 경계를 끌어 높이 조절 |
 | 상태 표시줄 | 곡 · 템포 · 커서 · 뱅크, `FMOPLTool.cfg` / 실행 폴더 바로 열기 |
@@ -86,8 +87,10 @@ Mt32RomFolder=resource
 - 보이스마다 오선: 평균 음높이로 높은음/낮은음자리표, 리듬 모드 드럼(BD SD TO CY HH)은 한 줄 타악기 보표 (CY/HH는 X 머리)
 - 음 길이를 그릴 수 있는 음표로 나눠 붙임줄로 잇는다 (점음표, 박을 넘는 음, 마디를 넘는 음). 보통 음표로 안 되면 셋잇단음표 (예: 박당 3틱 곡)
 - 올림표(#)와 마디 안 제자리표, 덧줄, 쉼표, 박자표, 마디 번호. 같은 박은 모든 보이스에서 같은 위치
-- 툴바: 보이스 고르기, 양자화(끄기 / 1/4 ~ 1/32), 확대(− + 또는 Ctrl+휠), MusicXML · MIDI · PNG 내보내기, 인쇄 미리보기
-- 음표에 마우스를 올리면 음 이름·마디·박, 클릭하면 Composer의 그 보이스·위치로 가서 그 노트를 선택
+- 악보 오른쪽: 보이스 체크 목록 (모두 켜기 / 모두 끄기)
+- 툴바: 양자화(끄기 / 1/4 ~ 1/32), 확대(− + 또는 Ctrl+휠), MusicXML · MIDI · PNG 내보내기, 인쇄 미리보기
+- 음표에 마우스를 올리면 음 이름·마디·박. 클릭 = 현재 위치(파란 선), 음표 두 번 클릭 = Composer의 그 보이스·위치로 가서 그 노트를 선택
+- 재생 = 툴바의 재생(처음부터) · 현재 위치부터 재생 · 정지 (Space = 재생 / 정지, Esc = 정지). 보이는 보이스만 소리 낸다. 재생 위치(초록 선)를 따라 스크롤, 멈추면 멈춘 곳이 현재 위치
 - MusicXML: 보이스 = 파트, divisions = 박당 틱, 셋잇단·붙임줄·타악기 보표 포함 (MuseScore 등에서 열기)
 - MIDI: 곡에서 바로 (틱 그대로), PPQ = 박당 틱, 템포 변화, 볼륨 → 세기, 피치 → 피치벤드, 드럼은 채널 10 GM 음(BD 36 SD 38 TO 45 CY 49 HH 42). 숨긴 보이스는 빠진다
 - 아직 없음: 빔(꼬리를 묶는 가로줄), 화음(한 보이스는 한 음뿐이라 필요 없음), 오른쪽 끝 맞춤
@@ -115,7 +118,7 @@ Mt32RomFolder=resource
 - MP3 · WAV (그 밖에 WMA · M4A · AAC · FLAC은 Windows Media Foundation 코덱으로)를 열면 이 PC에서 주 멜로디만 찾는다 (화음 · 반주는 보지 않음, 인터넷 · 외부 라이브러리 없음)
 - 방식 (`MelodyAnalysis`, Melodia 방식): 22050Hz 모노 · 2048 Hann · 4096 FFT · 홉 11.6ms → 스펙트럼 봉우리 → 배음 합 살리언스(20센트 칸, A1~A6) → 비터비 추적(음역 안 + '멜로디 없음' 상태) → 음 나누기(반음 넘게 벗어나면 새 음, 같은 음은 어택에서 나눔, 짧은 음 버림) → 옥타브 오류 고치기(앞뒤 3초 · 곡 전체 음역에서 8반음 넘게 떨어진 음을 배음이 있는 쪽 옥타브로) → 뚜렷함 거르기(이 곡 음들의 가운데 값 대비, 감도로 조절). 템포 · 첫 박은 스펙트럼 플럭스의 자기상관으로
 - 조절 (바꾸면 분석은 그대로 두고 곧바로 다시 뽑음): 음역(베이스 · 반주가 잡히면 아래쪽을 올림), 감도, 최소 길이, 템포(자동 / 직접), 격자(4분 · 8분 · 16분 · 없음)
-- 피아노 롤: 멜로디 곡선(점) + 음(막대, 뚜렷할수록 진하게) + 박 격자. 클릭 = 그 위치, 휠 = 이동, Ctrl+휠 = 확대. 재생은 원곡 / 채보한 멜로디(간단한 소리)를 섞어 견줄 수 있다 (Space)
+- 피아노 롤: 멜로디 곡선(점) + 음(막대, 뚜렷할수록 진하게) + 박 격자. 클릭 = 그 위치, 휠 = 이동, Ctrl+휠 = 확대. 재생(툴바의 재생 · 현재 위치부터 재생 · 정지, Space)은 원곡 / 채보한 멜로디(간단한 소리)를 섞어 견줄 수 있다
 - **악보 보기 (Note)** / **Composer에서 편집**: 채보한 멜로디를 새 곡의 보이스 1로 (템포 · 첫 박에 맞춰 격자에 붙임) → 오선 악보, MusicXML · MIDI · PNG, ROL 저장
 - 한계: 한 음씩 뚜렷한 멜로디(노래 · 독주 악기)가 반주보다 클 때 잘 맞는다. 반주가 크거나 여러 악기가 같은 음역에서 겹치면 반주 음이 섞이고, 빠른 꾸밈음 · 미끄러지는 음은 줄어든다. 템포는 반이나 두 배로 잡힐 수 있다
 
@@ -125,8 +128,8 @@ Mt32RomFolder=resource
 - 구멍은 음의 시작점에만 (길이 · 쉼표는 구멍 없음). 템포 변화는 무시하고 틱 간격만 맞춘다 (손으로 돌리므로). 같은 시점 같은 음은 구멍 하나
 - 조옮김 −/+ · 자동(옮기지 않고 들어가는 음이 가장 많은 값, 곡을 열면 자동), 옥타브 옮기기(빗살에 없는 음을 가까운 옥타브 줄로 = 파란 구멍, 끄면 띠 아래 빨간 ×), 빗살 C = C3/C4/C5(기준 음 · 시험 연주 음높이)
 - 격자 1/4 · 1/8 · 1/16 (격자 한 칸 = 세로선 간격), 격자에 맞추기, 같은 줄 구멍이 한 칸보다 가까우면 주황 고리 (빗살이 다시 울릴 시간이 모자랄 수 있음)
-- 보이스 고르기, 리듬 모드 드럼은 기본으로 뺀다. 구멍에 마우스 = 줄 이름 · 원래 음 · 마디/박
-- 시험 연주 (Space): 오르골 소리(빗살을 튕긴 소리, 저절로 사라짐)로 구멍만 연주. ♩ −/+ = 돌리는 속도. 띠를 클릭하면 그 위치부터
+- 보이스 고르기 = 띠 오른쪽 체크 목록 (모두 켜기 / 모두 끄기, 리듬 곡은 아래 `드럼도 넣기`, 드럼은 기본으로 뺀다). 구멍에 마우스 = 줄 이름 · 원래 음 · 마디/박
+- 시험 연주 = 툴바의 재생 · 현재 위치부터 재생 · 정지 (Space = 재생 / 정지): 오르골 소리(빗살을 튕긴 소리, 저절로 사라짐)로 구멍만 연주. ♩ −/+ = 돌리는 속도. 띠를 클릭하면 현재 위치, 멈추면 멈춘 곳이 현재 위치
 - PNG, 인쇄(실제 크기): 줄 간격 2mm · 격자 8mm로 가로 용지에 띠를 구간별로 싣고 "구간 n → n+1에 이어 붙이기" 표시. 실제 띠와 크기가 다르면 `OrgelView`의 `PrintRowPitchMm` / `PrintGridMm`
 
 **Jukebox** (곡 재생기, 옛 IMPLAY / OCPLAY 화면을 참고한 현대식 데크)
@@ -229,7 +232,7 @@ Mt32RomFolder=resource
 | `AdlibComposer.Audio` | `OplChip`(코어를 바꿔 끼우는 칩: 내장 / Nuked, `OplChip.GlobalCore`), `Opl2Emulator`(내장 OPL2), `Opl3Emulator`(18채널 · 4-op · 웨이브폼 8종 · 스테레오), `ToneFilters`(Jukebox 음색 · 스피커 필터), `MidiPlayer`(MIDI → OPL3 FM · Windows MIDI 출력 · MT-32), `Mt32Emu`(Munt mt32emu.dll P/Invoke), `AudioFileReader`(WAV · Media Foundation → 모노), `MelodyAnalysis`(주 멜로디 채보), `MelodyToSong`(초 → 틱, 격자), `PcmPlayer`(원곡 + 멜로디 재생), `OplSynth`(보이스→레지스터, 리듬 모드), `Sequencer`, `SopPlayer`(SOP → OPL3), `MusicBoxPlayer`(오르골 시험 연주), `TrackerPlayer`(STM/S3M 샘플 믹서 + AdLib), `AudioEngine`(스테레오 출력), `PlaybackOptions`(속도 · 키 · 채널 조절), `WaveOutPlayer`, `OplMapping` |
 | `AdlibComposer.Nuked` | `NukedOpl3`: Nuked OPL3 1.8 (Nuke.YKT) C# 포팅. **LGPL-2.1 이상** (`src/AdlibComposer.Nuked/LICENSE`, 출력 폴더에 `LICENSE.Nuked-OPL3.txt`). 바꿔 끼울 수 있게 별도 어셈블리 |
 | `AdlibComposer.Notation` | `Score` 모델, `ScoreBuilder`(Song→마디/음표, 붙임줄), `NoteSpelling`(음표 나누기·셋잇단·음 이름), `MusicXmlExporter`, `MidiExporter`, 텍스트 내보내기, `OrgelComb` / `OrgelBuilder`(곡 → 30음 오르골 띠 구멍) |
-| `AdlibComposer.App` | WinForms GUI: `MainForm`, `Shell/`(사이드바 · 로그 · 셸 테마), `ComposerView`, `InstrumentView`, `JukeboxView`, `NoteView`, `OrganizerView`, `PianoRollControl`, `RetroSlider` 등 |
+| `AdlibComposer.App` | WinForms GUI: `MainForm`, `Shell/`(가로 페이지 메뉴 · 공용 폴더/파일 목록 · 로그 · 셸 테마), `ComposerView`, `InstrumentView`, `JukeboxView`, `NoteView`, `OrganizerView`, `PianoRollControl`, `RetroSlider` 등 |
 | `tests/AdlibComposer.SelfTest` | 의존성 없는 자체 테스트 + 데모 WAV 렌더러 |
 
 ## 확장 방법

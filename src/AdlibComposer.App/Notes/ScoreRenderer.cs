@@ -180,6 +180,70 @@ internal sealed class ScoreRenderer
         return x + 0.6f * Sp;
     }
 
+    private int MeasureLength { get { return Math.Max(1, score.TickBeat * score.BeatsPerMeasure); } }
+
+    /// <summary>곡 틱이 놓이는 줄과 x (마디 안 시간 열 사이를 직선으로 나눔). 악보 밖이면 false.</summary>
+    public bool Locate(List<ScoreSystem> systems, double tick, out ScoreSystem sys, out float x)
+    {
+        sys = null; x = 0;
+        if (systems == null || systems.Count == 0 || tick < 0) return false;
+        int len = MeasureLength;
+        int m = (int)(tick / len);
+        foreach (var s in systems)
+        {
+            if (m < s.FirstMeasure || m > s.LastMeasure) continue;
+            int mi = m - s.FirstMeasure;
+            double t = tick - (double)m * len;
+            var ticks = s.ColumnTicks[mi];
+            var xs = s.ColumnX[mi];
+            int i = Array.BinarySearch(ticks, (int)Math.Floor(t));
+            if (i < 0) i = Math.Max(0, ~i - 1);
+            if (i >= ticks.Length - 1) { x = xs[ticks.Length - 1]; }
+            else
+            {
+                double f = (t - ticks[i]) / Math.Max(1, ticks[i + 1] - ticks[i]);
+                x = (float)(xs[i] + (xs[i + 1] - xs[i]) * Math.Max(0, Math.Min(1, f)));
+            }
+            sys = s;
+            return true;
+        }
+        return false;
+    }
+
+    /// <summary>화면 점 → 곡 틱 (그 줄의 마디 · 시간 열 사이를 직선으로). 줄 밖이면 -1.</summary>
+    public double TickAt(List<ScoreSystem> systems, PointF p)
+    {
+        if (systems == null) return -1;
+        int len = MeasureLength;
+        foreach (var s in systems)
+        {
+            if (p.Y < s.Y || p.Y > s.Y + s.Height) continue;
+            int last = s.MeasureX.Count - 1;
+            if (p.X < s.MeasureX[0]) return (double)s.FirstMeasure * len;
+            if (p.X >= s.MeasureX[last]) return (double)(s.LastMeasure + 1) * len - 1;
+            for (int mi = 0; mi < last; mi++)
+            {
+                if (p.X >= s.MeasureX[mi + 1]) continue;
+                var ticks = s.ColumnTicks[mi];
+                var xs = s.ColumnX[mi];
+                double t = 0;
+                if (p.X >= xs[ticks.Length - 1]) t = ticks[ticks.Length - 1];
+                else if (p.X > xs[0])
+                    for (int i = 0; i < ticks.Length - 1; i++)
+                        if (p.X < xs[i + 1]) { t = ticks[i] + (ticks[i + 1] - ticks[i]) * (p.X - xs[i]) / Math.Max(0.01f, xs[i + 1] - xs[i]); break; }
+                return (double)(s.FirstMeasure + mi) * len + Math.Max(0, Math.Min(len - 1, t));
+            }
+        }
+        return -1;
+    }
+
+    /// <summary>줄 위에 세로선 (재생 위치 · 현재 위치).</summary>
+    public void DrawMarker(Graphics g, ScoreSystem s, float x, Color color, float width)
+    {
+        using (var pen = new Pen(color, Math.Max(1f, width * Zoom)))
+            g.DrawLine(pen, x, s.Y + SystemTopPad * 0.5f, x, s.Y + s.Height);
+    }
+
     private static float XAt(ScoreSystem s, int measureInSystem, int tick)
     {
         var ticks = s.ColumnTicks[measureInSystem];

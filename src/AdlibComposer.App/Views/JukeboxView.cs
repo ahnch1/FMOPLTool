@@ -13,7 +13,7 @@ using AdlibComposer.Formats;
 namespace AdlibComposer.App.Views;
 
 /// <summary>
-/// Jukebox 페이지: 왼쪽 위 폴더 트리, 왼쪽 아래 곡 파일(ROL / IMS / SOP) 목록, 오른쪽 플레이어 데크.
+/// Jukebox 페이지: 플레이어 데크. 곡은 창 왼쪽의 공용 폴더 / 파일 목록(<see cref="FileBrowser"/>)에서 고른다.
 /// SOP(OPL3, 최대 20트랙 · 4-op · 스테레오)는 곡 안의 악기로 AudioEngine.PlaySop이 재생한다 (뱅크 필요 없음).
 /// 데크: 곡 정보(곡 파일 · 불러온 악기 수/전체, 뱅크 · 악기 수, 가사 파일), 가사(같은 이름 ISS, 조합형 → 유니코드),
 /// 진행 막대(끌어서 이동), 재생 · 정지 · ±5초 · 이전/다음 곡, 속도 · 키(남성/여성) · 볼륨, 채널 믹서(악기 유무 · 연주 표시 · 음량 · 켜기/끄기 · 음높이).
@@ -29,10 +29,8 @@ internal sealed class JukeboxView : UserControl, IShellPage
     private readonly Func<AppSettings> settings;
     private readonly Func<bool> openAudio;
 
-    // 왼쪽
-    private readonly TreeView tree = new TreeView();
-    private readonly ListView list = new ListView();
-    private readonly Label folderLabel = new Label();
+    // 왼쪽 공용 폴더 / 파일 목록 (MainForm)
+    private readonly FileBrowser browser;
 
     // 오른쪽 데크
     private readonly PlayerDisplay display = new PlayerDisplay();
@@ -75,290 +73,45 @@ internal sealed class JukeboxView : UserControl, IShellPage
     private InstrumentBank defaultBank;
     private string defaultBankPath;
 
-    public JukeboxView(Workspace ws, Func<AppSettings> settings, Func<bool> openAudio)
+    public JukeboxView(Workspace ws, Func<AppSettings> settings, Func<bool> openAudio, FileBrowser browser)
     {
         this.ws = ws;
+        this.browser = browser;
         this.settings = settings;
         this.openAudio = openAudio;
         BackColor = DeckTheme.Back;
         DoubleBuffered = true;
 
-        var split = new SplitContainer
-        {
-            Dock = DockStyle.Fill, FixedPanel = FixedPanel.Panel1, SplitterWidth = 4,
-            BackColor = Color.FromArgb(225, 228, 232),
-        };
-        split.Panel1.BackColor = Color.White;
-        split.Panel2.BackColor = DeckTheme.Back;
-        Controls.Add(split);
-        BuildBrowser(split.Panel1);
-        BuildDeck(split.Panel2);
-        bool outerSized = false;
-        split.SizeChanged += delegate
-        {
-            if (outerSized || split.Width < 700) return;
-            outerSized = true;
-            try { split.Panel1MinSize = 220; split.SplitterDistance = 280; } catch (Exception) { }
-        };
+        var deck = new Panel { Dock = DockStyle.Fill, BackColor = DeckTheme.Back };
+        Controls.Add(deck);
+        BuildDeck(deck);
 
         timer.Tick += delegate { Tick(); };
         RebuildMixerRows();
         UpdateStepperTexts();
     }
 
-    // ================================================================ 왼쪽: 폴더 트리 + 파일 목록
-
-    private void BuildBrowser(Control host)
+    /// <summary>Jukebox가 재생하는 형식인가 (MP3 · WAV는 Transcribe).</summary>
+    public static bool CanPlay(string path)
     {
-        var inner = new SplitContainer { Dock = DockStyle.Fill, Orientation = Orientation.Horizontal, SplitterWidth = 4, BackColor = Color.FromArgb(225, 228, 232) };
-        inner.Panel1.BackColor = Color.White;
-        inner.Panel2.BackColor = Color.White;
-        host.Controls.Add(inner);
-        // 처음 크기가 정해진 뒤 폴더 트리 40% / 파일 목록 60%
-        bool sized = false;
-        inner.SizeChanged += delegate
-        {
-            if (sized || inner.Height < 200) return;
-            sized = true;
-            try { inner.SplitterDistance = inner.Height * 2 / 5; } catch (Exception) { }
-        };
-
-        tree.Dock = DockStyle.Fill;
-        tree.BorderStyle = BorderStyle.None;
-        tree.HideSelection = false;
-        tree.ShowLines = false;
-        tree.FullRowSelect = true;
-        tree.ItemHeight = 22;
-        tree.Font = ShellTheme.Ui;
-        tree.BeforeExpand += (s, e) => FillChildren(e.Node);
-        tree.AfterSelect += (s, e) => ShowFolder(e.Node.Tag as string);
-        inner.Panel1.Controls.Add(tree);
-        inner.Panel1.Controls.Add(SectionHeader("폴더"));
-
-        list.Dock = DockStyle.Fill;
-        list.BorderStyle = BorderStyle.None;
-        list.View = View.Details;
-        list.FullRowSelect = true;
-        list.HideSelection = false;
-        list.MultiSelect = false;
-        list.HeaderStyle = ColumnHeaderStyle.Nonclickable;
-        list.Font = ShellTheme.Ui;
-        list.Columns.Add("파일", 150);
-        list.Columns.Add("제목", 170);
-        list.Columns.Add("형식", 44);
-        list.Columns.Add("가사", 40, HorizontalAlignment.Center);
-        list.Columns.Add("뱅크", 40, HorizontalAlignment.Center);
-        list.ItemActivate += delegate { if (list.SelectedItems.Count > 0) PlayFile(list.SelectedItems[0].Tag as string, true); };
-        tips.SetToolTip(list, "두 번 클릭 또는 Enter: 재생 · 제목 = 곡 안의 제목 (IMS · SOP · S3M · STM · MOD · MIDI · WRK) · 가사 = 같은 이름 .ISS · 뱅크 = 같은 이름 .BNK");
-        inner.Panel2.Controls.Add(list);
-        folderLabel.Dock = DockStyle.Top;
-        folderLabel.Height = 22;
-        folderLabel.Font = ShellTheme.Ui;
-        folderLabel.ForeColor = ShellTheme.Muted;
-        folderLabel.AutoEllipsis = true;
-        folderLabel.Padding = new Padding(8, 3, 4, 0);
-        inner.Panel2.Controls.Add(folderLabel);
-        inner.Panel2.Controls.Add(SectionHeader("곡 파일 (ROL · IMS · SOP · S3M · STM · MOD · MID · WRK)"));
+        return Array.IndexOf(SongExtensions, (Path.GetExtension(path) ?? "").ToLowerInvariant()) >= 0;
     }
 
-    private static Control SectionHeader(string text)
-    {
-        return new Label
-        {
-            Text = text.ToUpperInvariant(), Dock = DockStyle.Top, Height = 26, Font = ShellTheme.Section,
-            ForeColor = ShellTheme.Muted, BackColor = Color.FromArgb(246, 247, 249), Padding = new Padding(8, 7, 0, 0),
-        };
-    }
-
-    /// <summary>트리 뿌리: ROL 폴더, IMS 폴더, 실행 폴더, 드라이브.</summary>
-    private void BuildTree()
-    {
-        tree.BeginUpdate();
-        tree.Nodes.Clear();
-        var s = settings();
-        AddRoot("ROL 폴더", s.SongFolderPath);
-        AddRoot("IMS 폴더", s.ImsFolderPath);
-        AddRoot("SOP 폴더", s.SopFolderPath);
-        AddRoot("S3M · STM · MOD 폴더", s.TrackerFolderPath);
-        AddRoot("MIDI · WRK 폴더", s.MidiFolderPath);
-        var pc = new TreeNode("내 PC");
-        try
-        {
-            foreach (var d in DriveInfo.GetDrives())
-            {
-                if (!d.IsReady) continue;
-                string label = d.Name.TrimEnd('\\');
-                try { if (!string.IsNullOrEmpty(d.VolumeLabel)) label = d.VolumeLabel + " (" + label + ")"; } catch (Exception) { }
-                pc.Nodes.Add(FolderNode(label, d.RootDirectory.FullName));
-            }
-        }
-        catch (Exception) { }
-        tree.Nodes.Add(pc);
-        pc.Expand();
-        tree.EndUpdate();
-        if (tree.Nodes.Count > 0 && tree.SelectedNode == null) tree.SelectedNode = tree.Nodes[0];
-    }
-
-    private void AddRoot(string label, string path)
-    {
-        if (string.IsNullOrEmpty(path)) return;
-        var n = FolderNode(label + "  ·  " + Path.GetFileName(path.TrimEnd('\\', '/')), path);
-        n.NodeFont = new Font(ShellTheme.Ui, FontStyle.Bold);
-        tree.Nodes.Add(n);
-    }
-
-    private static TreeNode FolderNode(string text, string path)
-    {
-        var n = new TreeNode(text) { Tag = path, ToolTipText = path };
-        if (HasSubdirectories(path)) n.Nodes.Add(new TreeNode("…"));
-        return n;
-    }
-
-    private static bool HasSubdirectories(string path)
-    {
-        try { return Directory.Exists(path) && Directory.EnumerateDirectories(path).Any(); }
-        catch (Exception) { return false; }
-    }
-
-    private void FillChildren(TreeNode node)
-    {
-        string path = node.Tag as string;
-        if (path == null || node.Nodes.Count != 1 || node.Nodes[0].Tag != null) return;
-        node.Nodes.Clear();
-        try
-        {
-            foreach (var d in Directory.GetDirectories(path).OrderBy(x => x, StringComparer.OrdinalIgnoreCase))
-            {
-                var info = new DirectoryInfo(d);
-                if ((info.Attributes & (FileAttributes.Hidden | FileAttributes.System)) != 0) continue;
-                node.Nodes.Add(FolderNode(info.Name, d));
-            }
-        }
-        catch (Exception) { }
-    }
-
-    private void ShowFolder(string dir)
-    {
-        list.BeginUpdate();
-        list.Items.Clear();
-        folderLabel.Text = dir ?? "";
-        try { if (dir != null) dir = Path.GetFullPath(dir); } catch (Exception) { }
-        if (dir != null && Directory.Exists(dir))
-        {
-            try
-            {
-                var names = new HashSet<string>(Directory.GetFiles(dir).Select(f => Path.GetFileName(f).ToUpperInvariant()));
-                foreach (var f in Directory.GetFiles(dir).OrderBy(x => Path.GetFileName(x), StringComparer.OrdinalIgnoreCase))
-                {
-                    string ext = Path.GetExtension(f).ToLowerInvariant();
-                    if (Array.IndexOf(SongExtensions, ext) < 0) continue;
-                    string stem = Path.GetFileNameWithoutExtension(f).ToUpperInvariant();
-                    var it = new ListViewItem(Path.GetFileName(f)) { Tag = f, ToolTipText = f };
-                    it.SubItems.Add(CachedTitle(f) ?? "");
-                    it.SubItems.Add(ext.TrimStart('.').ToUpperInvariant());
-                    it.SubItems.Add(names.Contains(stem + ".ISS") ? "●" : "");
-                    it.SubItems.Add(names.Contains(stem + ".BNK") ? "●" : "");
-                    if (string.Equals(f, currentPath, StringComparison.OrdinalIgnoreCase)) it.Font = new Font(list.Font, FontStyle.Bold);
-                    list.Items.Add(it);
-                }
-            }
-            catch (Exception ex) { AppLog.Warn("Jukebox", "폴더를 읽을 수 없습니다: " + dir, ex.Message); }
-        }
-        list.EndUpdate();
-        folderLabel.Text = (dir ?? "") + "   (" + list.Items.Count + "곡)";
-        LoadTitles();
-    }
-
-    // ---------------------------------------------------------------- 목록의 곡 제목 (뒤에서 읽기)
-
-    private readonly Dictionary<string, (DateTime Time, string Title)> titleCache = new Dictionary<string, (DateTime, string)>(StringComparer.OrdinalIgnoreCase);
-    private int titleGeneration;
-
-    /// <summary>캐시에 있고 파일이 그대로면 제목, 아니면 null (아직 안 읽음).</summary>
-    private string CachedTitle(string path)
-    {
-        try
-        {
-            lock (titleCache)
-                if (titleCache.TryGetValue(path, out var c) && c.Time == File.GetLastWriteTimeUtc(path)) return c.Title;
-        }
-        catch (Exception) { }
-        return null;
-    }
-
-    /// <summary>목록 파일의 곡 안 제목을 다른 스레드에서 읽어 '제목' 칸을 채운다. 폴더가 바뀌면 그만둔다.</summary>
-    private void LoadTitles()
-    {
-        int gen = ++titleGeneration;
-        var todo = new List<string>();
-        foreach (ListViewItem it in list.Items)
-            if (CachedTitle((string)it.Tag) == null) todo.Add((string)it.Tag);
-        if (todo.Count == 0) return;
-        System.Threading.Tasks.Task.Run(() =>
-        {
-            var batch = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            for (int i = 0; i < todo.Count && gen == titleGeneration; i++)
-            {
-                string t = ReadSongTitle(todo[i]);
-                try { lock (titleCache) titleCache[todo[i]] = (File.GetLastWriteTimeUtc(todo[i]), t); } catch (Exception) { }
-                batch[todo[i]] = t;
-                if (batch.Count >= 25 || i == todo.Count - 1)
-                {
-                    var done = batch;
-                    batch = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                    try { BeginInvoke((Action)(() => ApplyTitles(done, gen))); } catch (Exception) { return; }
-                }
-            }
-        });
-    }
-
-    private void ApplyTitles(Dictionary<string, string> titles, int gen)
-    {
-        if (gen != titleGeneration) return;
-        list.BeginUpdate();
-        foreach (ListViewItem it in list.Items)
-            if (titles.TryGetValue((string)it.Tag, out var t)) it.SubItems[1].Text = t;
-        list.EndUpdate();
-    }
-
-    /// <summary>곡 파일 안의 제목 (ROL은 제목 칸이 없어 빈 값). 파일 이름과 같거나 'untitled'면 빈 값.</summary>
-    private string ReadSongTitle(string path)
-    {
-        string t = "";
-        try
-        {
-            string ext = Path.GetExtension(path).ToLowerInvariant();
-            if (MidiFiles.IsMidi(path)) t = MidiFiles.Load(path).Title;
-            else if (SopFormat.IsSop(path)) t = SopFormat.Load(path).Title;
-            else if (TrackerFiles.IsTracker(path)) t = TrackerFiles.Load(path).Title;
-            else if (ext == ".ims")
-            {
-                var fmt = ws.Formats.FindSong(path);
-                if (fmt != null && fmt.CanRead) using (var fs = File.OpenRead(path)) t = fmt.Read(fs).Title;
-            }
-        }
-        catch (Exception) { return ""; }
-        t = System.Text.RegularExpressions.Regex.Replace(t ?? "", @"\s+", " ").Trim();
-        if (t.Equals(Path.GetFileNameWithoutExtension(path), StringComparison.OrdinalIgnoreCase)
-            || t.Equals("untitled", StringComparison.OrdinalIgnoreCase)) return "";
-        return t;
-    }
-
+    /// <summary>공용 파일 목록에서 재생할 수 있는 곡만 (보이는 순서).</summary>
     private List<string> CurrentListPaths()
     {
-        var l = new List<string>();
-        foreach (ListViewItem it in list.Items) l.Add((string)it.Tag);
-        return l;
+        return browser.Paths.Where(CanPlay).ToList();
     }
 
     private void MarkPlaying()
     {
-        foreach (ListViewItem it in list.Items)
-        {
-            bool cur = string.Equals((string)it.Tag, currentPath, StringComparison.OrdinalIgnoreCase);
-            it.Font = cur ? new Font(list.Font, FontStyle.Bold) : list.Font;
-            if (cur) { it.Selected = true; it.Focused = true; it.EnsureVisible(); }
-        }
+        browser.MarkCurrent(currentPath);
+    }
+
+    /// <summary>공용 파일 목록에서 고른 곡을 재생한다 (다음 곡 목록 = 그 폴더).</summary>
+    public void Play(string path)
+    {
+        PlayFile(path, true);
     }
 
     // ================================================================ 오른쪽: 데크
@@ -905,8 +658,11 @@ internal sealed class JukeboxView : UserControl, IShellPage
                 StartAt(pausedTick);
                 break;
             case PlayState.Empty:
-                if (list.SelectedItems.Count > 0) PlayFile(list.SelectedItems[0].Tag as string, true);
-                else if (list.Items.Count > 0) PlayFile(list.Items[0].Tag as string, true);
+                {
+                    string sel = browser.SelectedPath;
+                    if (sel != null && CanPlay(sel)) PlayFile(sel, true);
+                    else { var all = CurrentListPaths(); if (all.Count > 0) PlayFile(all[0], true); }
+                }
                 return;
         }
         SyncPlayButton();
@@ -1196,9 +952,8 @@ internal sealed class JukeboxView : UserControl, IShellPage
 
     public void OnShown()
     {
-        if (tree.Nodes.Count == 0) BuildTree();
         ApplySound();
-        list.Focus();
+        browser.FocusList();
     }
 
     /// <summary>다른 페이지로 가면 멈춘다 (오디오 엔진을 Composer와 같이 쓰므로). 위치는 남겨 둔다.</summary>
@@ -1230,24 +985,29 @@ internal sealed class JukeboxView : UserControl, IShellPage
         catch (Exception ex) { AppLog.Warn("Jukebox", "설정을 저장하지 못했습니다: " + ex.Message); }
     }
 
-    /// <summary>설정(폴더/기본 뱅크)이 바뀌면 트리를 다시 만든다.</summary>
+    /// <summary>설정(기본 뱅크)이 바뀌면 다시 읽도록.</summary>
     public void SettingsChanged()
     {
         defaultBank = null;
-        if (tree.Nodes.Count > 0) BuildTree();
     }
 
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
     {
-        bool inTree = tree.Focused;
+        return HandleKey(keyData) || base.ProcessCmdKey(ref msg, keyData);
+    }
+
+    /// <summary>Jukebox 키 (이 페이지 안 또는 왼쪽 공용 파일 목록에 포커스가 있을 때). 처리했으면 true.</summary>
+    public bool HandleKey(Keys keyData)
+    {
+        bool inTree = browser.TreeFocused;
         switch (keyData)
         {
             case Keys.Space: TogglePlay(); return true;
             case Keys.Escape: StopPlay(); return true;
             case Keys.Left: if (!inTree) { SeekSeconds(-5); return true; } break;
             case Keys.Right: if (!inTree) { SeekSeconds(5); return true; } break;
-            case Keys.PageUp: if (!list.Focused) { PlayNeighbor(-1); return true; } break;
-            case Keys.PageDown: if (!list.Focused) { PlayNeighbor(1); return true; } break;
+            case Keys.PageUp: if (!browser.ListFocused) { PlayNeighbor(-1); return true; } break;
+            case Keys.PageDown: if (!browser.ListFocused) { PlayNeighbor(1); return true; } break;
             case Keys.Control | Keys.Left: SeekSeconds(-5); return true;
             case Keys.Control | Keys.Right: SeekSeconds(5); return true;
             case Keys.Control | Keys.PageUp: PlayNeighbor(-1); return true;
@@ -1255,7 +1015,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
             case Keys.Add: case Keys.Oemplus: SetVolume(volumePercent + 10); return true;
             case Keys.Subtract: case Keys.OemMinus: SetVolume(volumePercent - 10); return true;
         }
-        return base.ProcessCmdKey(ref msg, keyData);
+        return false;
     }
 
     protected override void Dispose(bool disposing)

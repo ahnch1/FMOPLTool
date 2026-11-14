@@ -17,6 +17,23 @@ internal static class Theme
     public static readonly Font SmallFont = new Font("Arial", 7.5f, FontStyle.Bold);
 }
 
+/// <summary>
+/// Instrument Maker 현대식 색: 흰 바탕 + 회색 단계(면 · 선 · 글자) + 강조색 하나(셸의 청록).
+/// 켜짐 · 고른 것 · 누른 건반 · 슬라이더 값 = 강조색, 나머지는 무채색.
+/// </summary>
+internal static class InstTheme
+{
+    public static readonly Color Back = Color.White;
+    public static readonly Color Surface = Color.FromArgb(246, 247, 249);     // 정보 줄 · 꺼진 머리글 · 슬라이더 홈
+    public static readonly Color Hover = Color.FromArgb(236, 239, 242);
+    public static readonly Color Line = Color.FromArgb(218, 222, 228);        // 테두리 · 구분선
+    public static readonly Color Ink = Color.FromArgb(44, 48, 56);            // 글자 · 검은 건반
+    public static readonly Color Muted = Color.FromArgb(118, 124, 134);       // 보조 글자
+    public static readonly Color Accent = Shell.ShellTheme.Accent;            // 청록
+    public static readonly Color AccentDark = Shell.ShellTheme.AccentDark;
+    public static readonly Color AccentSoft = Color.FromArgb(214, 238, 235);  // 슬라이더 채움 · 누른 흰 건반
+}
+
 /// <summary>프로그램 아이콘 (실행 파일과 같은 AdlibComposer.ico, 리소스에서 한 번만 읽는다).</summary>
 internal static class AppIcon
 {

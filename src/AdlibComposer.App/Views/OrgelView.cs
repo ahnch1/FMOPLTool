@@ -15,10 +15,11 @@ namespace AdlibComposer.App.Views;
 /// <summary>
 /// Orgel Note 페이지: 현재 곡을 30음 오르골 종이 띠의 구멍 위치로 보여 준다.
 /// 음의 시작점에만 구멍, 길이 · 쉼표 · 템포 변화는 무시 (손으로 돌리므로 간격만 맞춘다).
-/// 조옮김(자동 맞춤), 빗살에 없는 음의 옥타브 옮기기, 격자(구멍 간격) · 격자에 맞추기, 시험 연주(오르골 소리), PNG, 실제 크기 인쇄.
+/// 조옮김(자동 맞춤), 빗살에 없는 음의 옥타브 옮기기, 격자(구멍 간격) · 격자에 맞추기, PNG, 실제 크기 인쇄.
+/// 띠에 넣을 보이스 = 오른쪽 체크 목록(모두 켜기/끄기, 리듬 곡은 드럼도 넣기). 시험 연주(오르골 소리) = 툴바의 공통 재생 · 현재 위치부터 재생 · 정지.
 /// </summary>
 [System.ComponentModel.DesignerCategory("Code")]
-internal sealed class OrgelView : UserControl, IShellPage
+internal sealed class OrgelView : UserControl, IShellPage, IPlaybackPage
 {
     private static readonly string[] GridNames = { "격자 1/4", "격자 1/8", "격자 1/16" };
     private static readonly double[] GridBeats = { 1, 0.5, 0.25 };
@@ -33,14 +34,13 @@ internal sealed class OrgelView : UserControl, IShellPage
     private readonly Func<bool> openAudio;
     private readonly Func<string> exportFolder;
     private readonly ToolStrip bar = new ToolStrip();
-    private readonly ToolStripDropDownButton voicesButton = new ToolStripDropDownButton("보이스");
+    private readonly VoicePanel voicePanel = new VoicePanel("보이스");
     private readonly ToolStripLabel transposeLabel = new ToolStripLabel();
     private readonly ToolStripButton foldButton = new ToolStripButton("옥타브 옮기기") { CheckOnClick = true, Checked = true };
     private readonly ToolStripComboBox gridBox = new ToolStripComboBox();
     private readonly ToolStripButton snapButton = new ToolStripButton("격자에 맞추기") { CheckOnClick = true, Checked = true };
     private readonly ToolStripComboBox baseBox = new ToolStripComboBox();
     private readonly ToolStripLabel zoomLabel = new ToolStripLabel("100%");
-    private readonly ToolStripButton playButton;
     private readonly ToolStripLabel speedLabel = new ToolStripLabel();
     private readonly OrgelCanvas canvas = new OrgelCanvas();
     private readonly Label summary = new Label();
@@ -71,8 +71,6 @@ internal sealed class OrgelView : UserControl, IShellPage
         bar.Font = ShellTheme.Ui;
         bar.Dock = DockStyle.Top;
 
-        voicesButton.ToolTipText = "띠에 넣을 보이스";
-        voicesButton.Image = GlyphImages.Get(Glyphs.Composer, 16, Color.FromArgb(50, 54, 62));
         foldButton.ToolTipText = "빗살에 없는 음(범위 밖 · 낮은 옥타브의 반음)을 옥타브를 옮겨 넣는다 (파란 구멍)";
         foldButton.CheckedChanged += delegate { Rebuild(); };
         gridBox.DropDownStyle = ComboBoxStyle.DropDownList;
@@ -91,13 +89,10 @@ internal sealed class OrgelView : UserControl, IShellPage
         baseBox.Width = 104;
         baseBox.ToolTipText = "띠의 가장 낮은 줄 C가 어느 음인지 (곡의 음을 줄에 맞추는 기준, 시험 연주 음높이)";
         baseBox.SelectedIndexChanged += delegate { transposeSet = false; Rebuild(); };
-        playButton = Button("시험 연주", Glyphs.Play, "오르골 소리로 들어 보기 (Space) · 띠를 클릭하면 그 위치부터", delegate { TogglePlay(); });
 
         bar.Items.AddRange(new ToolStripItem[]
         {
-            voicesButton,
-            new ToolStripSeparator(),
-            playButton,
+            new ToolStripLabel("돌리는 빠르기"),
             new ToolStripButton("−", null, delegate { SetBpm(bpm - 10); }) { ToolTipText = "느리게 돌리기" },
             speedLabel,
             new ToolStripButton("+", null, delegate { SetBpm(bpm + 10); }) { ToolTipText = "빠르게 돌리기" },
@@ -135,7 +130,19 @@ internal sealed class OrgelView : UserControl, IShellPage
         summary.Padding = new Padding(12, 0, 0, 0);
         summary.TextAlign = ContentAlignment.MiddleLeft;
 
+        voicePanel.VoiceToggled += (v, on) => { if (on) hiddenVoices.Remove(v); else hiddenVoices.Add(v); Rebuild(); };
+        voicePanel.AllToggled += on => { hiddenVoices.Clear(); if (!on) hiddenVoices.UnionWith(voicePanel.Voices); RebuildVoiceMenu(); Rebuild(); };
+        voicePanel.Extra.Text = "드럼(BD SD TO CY HH)도 넣기";
+        voicePanel.Extra.CheckedChanged += delegate
+        {
+            if (includeDrums == voicePanel.Extra.Checked) return;
+            includeDrums = voicePanel.Extra.Checked;
+            RebuildVoiceMenu();
+            Rebuild();
+        };
+
         Controls.Add(canvas);
+        Controls.Add(voicePanel);
         Controls.Add(summary);
         Controls.Add(bar);
 
@@ -203,35 +210,24 @@ internal sealed class OrgelView : UserControl, IShellPage
         if (playing) StartPlay(ws.Audio.PositionTick);
     }
 
+    /// <summary>오른쪽 보이스 목록을 곡에 맞춰 다시 채운다 (노트가 있는 보이스, 드럼은 '드럼도 넣기'일 때만).</summary>
     private void RebuildVoiceMenu()
     {
-        voicesButton.DropDownItems.Clear();
         var song = ws.Song;
         string[] labels = song.Labels;
-        voicesButton.DropDownItems.Add(new ToolStripMenuItem("모두 넣기", null, delegate { hiddenVoices.Clear(); RebuildVoiceMenu(); Rebuild(); }));
-        voicesButton.DropDownItems.Add(new ToolStripSeparator());
+        var items = new List<(int, string, bool)>();
         for (int v = 0; v < song.VoiceCount; v++)
         {
             if (song.Voices[v].Notes.Count == 0) continue;
-            int voice = v;
             bool drum = song.IsDrumVoice(v);
+            if (drum && !includeDrums) continue;
             var t = song.Voices[v].TimbreAt(0);
             string text = (drum ? "드럼 " : "Voice ") + labels[v] + (t != null ? "  (" + t.InstrumentName + ")" : "") + "  " + song.Voices[v].Notes.Count + "음";
-            var it = new ToolStripMenuItem(text) { Checked = !hiddenVoices.Contains(v) && (!drum || includeDrums), CheckOnClick = true, Enabled = !drum || includeDrums };
-            it.CheckedChanged += delegate
-            {
-                if (it.Checked) hiddenVoices.Remove(voice); else hiddenVoices.Add(voice);
-                Rebuild();
-            };
-            voicesButton.DropDownItems.Add(it);
+            items.Add((v, text, !hiddenVoices.Contains(v)));
         }
-        if (!song.IsMelodic)
-        {
-            voicesButton.DropDownItems.Add(new ToolStripSeparator());
-            var d = new ToolStripMenuItem("드럼(BD SD TO CY HH)도 넣기") { Checked = includeDrums, CheckOnClick = true };
-            d.CheckedChanged += delegate { includeDrums = d.Checked; RebuildVoiceMenu(); Rebuild(); };
-            voicesButton.DropDownItems.Add(d);
-        }
+        voicePanel.SetVoices(items);
+        voicePanel.Extra.Visible = !song.IsMelodic;
+        voicePanel.Extra.Checked = includeDrums;
     }
 
     private void SetTranspose(int t)
@@ -268,17 +264,7 @@ internal sealed class OrgelView : UserControl, IShellPage
         transposeLabel.Text = Signed(transpose);
         zoomLabel.Text = Math.Round(Zooms[zoomIndex] * 100) + "%";
         speedLabel.Text = "♩ " + bpm;
-        int shown = 0, total = 0;
-        if (ws.Song != null)
-            for (int v = 0; v < ws.Song.VoiceCount; v++)
-            {
-                if (ws.Song.Voices[v].Notes.Count == 0) continue;
-                bool drum = ws.Song.IsDrumVoice(v);
-                if (drum && !includeDrums) continue;
-                total++;
-                if (!hiddenVoices.Contains(v)) shown++;
-            }
-        voicesButton.Text = "보이스 " + shown + (shown != total ? " / " + total : "");
+        voicePanel.UpdateTitle();
         if (strip == null) { summary.Text = ""; return; }
         int measures = strip.LengthTicks / Math.Max(1, strip.TickBeat * strip.BeatsPerMeasure) + 1;
         double gridCount = Math.Ceiling(strip.LengthTicks / (double)GridTicks);
@@ -325,6 +311,12 @@ internal sealed class OrgelView : UserControl, IShellPage
         if (playing) StopPlay(); else StartPlay(canvas.CursorTick);
     }
 
+    // IPlaybackPage: 툴바의 공통 재생 버튼
+    public bool CanPlay { get { return strip != null && strip.Punches.Count > 0; } }
+    public bool IsPlaying { get { return playing; } }
+    public void PlayFromStart() { canvas.SetCursor(0); StartPlay(0); }
+    public void PlayFromCursor() { StartPlay(canvas.CursorTick); }
+
     private void StartPlay(double from)
     {
         if (strip == null || strip.Punches.Count == 0 || !openAudio()) return;
@@ -332,27 +324,25 @@ internal sealed class OrgelView : UserControl, IShellPage
         foreach (var p in strip.Punches) hits.Add(new KeyValuePair<int, int>(p.Tick, OrgelComb.NoteOf(p.Row, options.LowestC)));
         ws.Audio.PlayMusicBox(hits, TicksPerSecond, (int)Math.Max(0, from), strip.LengthTicks);
         playing = true;
-        playButton.Text = "정지";
-        playButton.Image = GlyphImages.Get(Glyphs.Stop, 16, Color.FromArgb(50, 54, 62));
         timer.Start();
     }
 
-    private void StopPlay()
+    /// <summary>멈추고, 현재 위치를 멈춘 곳으로 (현재 위치부터 재생 = 이어 듣기).</summary>
+    public void StopPlay()
     {
         if (!playing) return;
+        if (ws.Audio.IsPlaying) canvas.SetCursor(ws.Audio.PositionTick);
         ws.Audio.Stop();
         playing = false;
         timer.Stop();
         canvas.PlayTick = -1;
         canvas.Invalidate();
-        playButton.Text = "시험 연주";
-        playButton.Image = GlyphImages.Get(Glyphs.Play, 16, Color.FromArgb(50, 54, 62));
     }
 
     private void OnTimer()
     {
         if (!playing) return;
-        if (!ws.Audio.IsPlaying) { StopPlay(); return; }
+        if (!ws.Audio.IsPlaying) { StopPlay(); canvas.SetCursor(0); return; }
         double t = ws.Audio.PositionTick;
         canvas.PlayTick = t;
         canvas.Follow(t);

@@ -25,7 +25,7 @@ internal sealed class RetroSlider : Control
         SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
         TabStop = true;
         Height = 20;
-        BackColor = Theme.Back;
+        BackColor = InstTheme.Back;
     }
 
     public int Minimum { get { return min; } set { min = value; Invalidate(); } }
@@ -67,38 +67,38 @@ internal sealed class RetroSlider : Control
         }
     }
 
+    /// <summary>현대식: 회색 홈 + 값까지 옅은 강조색 채움 + 강조색 손잡이, 화살표는 테두리만 있는 작은 버튼.</summary>
     protected override void OnPaint(PaintEventArgs e)
     {
         var g = e.Graphics;
-        g.Clear(Theme.Back);
+        g.Clear(InstTheme.Back);
         var left = LeftButton; var right = RightButton; var track = TrackRect;
+        var thumb = ThumbRect;
 
-        using (var hatch = new HatchBrush(HatchStyle.Percent50, Color.Black, Color.White))
-            g.FillRectangle(hatch, track);
-        g.DrawRectangle(Pens.Black, track);
+        using (var surface = new SolidBrush(InstTheme.Surface)) g.FillRectangle(surface, track);
+        using (var fill = new SolidBrush(InstTheme.AccentSoft)) g.FillRectangle(fill, track.X, track.Y, thumb.X + thumb.Width / 2 - track.X, track.Height);
+        using (var line = new Pen(InstTheme.Line)) g.DrawRectangle(line, track);
 
         DrawButton(g, left, true);
         DrawButton(g, right, false);
 
-        var thumb = ThumbRect;
-        g.FillRectangle(Brushes.White, thumb);
-        g.DrawRectangle(Pens.Black, thumb);
-        if (Focused) g.DrawRectangle(Pens.Black, new Rectangle(thumb.X + 3, thumb.Y + 3, thumb.Width - 6, thumb.Height - 6));
+        using (var tb = new SolidBrush(Focused ? InstTheme.AccentDark : InstTheme.Accent)) g.FillRectangle(tb, thumb.X, thumb.Y + 1, thumb.Width, thumb.Height - 1);
+        if (Focused) using (var w = new Pen(Color.White)) g.DrawRectangle(w, new Rectangle(thumb.X + 3, thumb.Y + 4, thumb.Width - 7, thumb.Height - 8));
 
         int vx = right.Right + 6;
         if (ShowWaveGlyph) DrawWave(g, new Rectangle(vx, 3, ValueW - 8, Height - 7), value);
-        else g.DrawString(value.ToString(), Theme.UiFont, Brushes.Black, vx, 1);
+        else using (var ink = new SolidBrush(InstTheme.Ink)) g.DrawString(value.ToString(), Theme.UiFont, ink, vx, 1);
     }
 
     private static void DrawButton(Graphics g, Rectangle r, bool leftArrow)
     {
         g.FillRectangle(Brushes.White, r);
-        g.DrawRectangle(Pens.Black, r);
+        using (var line = new Pen(InstTheme.Line)) g.DrawRectangle(line, r);
         int cx = r.X + r.Width / 2, cy = r.Y + r.Height / 2;
         Point[] tri = leftArrow
             ? new[] { new Point(cx + 3, cy - 4), new Point(cx + 3, cy + 4), new Point(cx - 3, cy) }
             : new[] { new Point(cx - 3, cy - 4), new Point(cx - 3, cy + 4), new Point(cx + 3, cy) };
-        g.FillPolygon(Brushes.Black, tri);
+        using (var muted = new SolidBrush(InstTheme.Muted)) g.FillPolygon(muted, tri);
     }
 
     /// <summary>OPL 웨이브폼 0~3 (사인, 반파, 절대값, 펄스형), OPL3 4~7 (반주기 2배 사인, 반주기 2배 절대값, 사각, 로그 톱니)의 작은 그림.</summary>
@@ -127,7 +127,7 @@ internal sealed class RetroSlider : Control
                                 : (float)(r.Bottom - v * r.Height);
             pts[i] = new PointF(r.X + i, y);
         }
-        g.DrawLines(Pens.Black, pts);
+        using (var pen = new Pen(InstTheme.Ink, 1.3f)) { g.SmoothingMode = SmoothingMode.AntiAlias; g.DrawLines(pen, pts); g.SmoothingMode = SmoothingMode.Default; }
     }
 
     private void SetFromX(int x)

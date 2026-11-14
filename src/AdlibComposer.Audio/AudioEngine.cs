@@ -260,6 +260,8 @@ public sealed class AudioEngine : IDisposable
     public GmBank MidiBank { get { lock (sync) return midi.Bank; } set { lock (sync) midi.Bank = value; } }
     /// <summary>MIDI를 FM으로 낼지 Windows 신디사이저로 낼지 (다음 재생부터).</summary>
     public MidiSynth MidiSynth { get { lock (sync) return midi.Synth; } set { lock (sync) midi.Synth = value; } }
+    /// <summary>8-bit 신디의 칩 (다음 재생부터): PSG + SCC / PSG만.</summary>
+    public ChipSound MidiChipSound { get { lock (sync) return midi.ChipSound; } set { lock (sync) midi.ChipSound = value; } }
     /// <summary>지금 MIDI 재생이 실제로 쓰는 신디사이저 (Windows 장치를 못 열면 FM).</summary>
     public MidiSynth ActiveMidiSynth { get { lock (sync) return midi.ActiveSynth; } }
 

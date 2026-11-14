@@ -41,7 +41,10 @@ internal sealed class JukeboxView : UserControl, IShellPage
     private readonly Controls.PianoKeyboardControl keys = new Controls.PianoKeyboardControl { Interactive = false, FocusNote = 60 };
     private readonly Stepper speedStep = new Stepper(), keyStep = new Stepper(), volStep = new Stepper();
     private readonly CheckBox autoNext = new CheckBox();
-    private readonly CheckBox rawTone = new CheckBox(), vintageSpeaker = new CheckBox(), chipMidi = new CheckBox();
+    private readonly CheckBox rawTone = new CheckBox(), vintageSpeaker = new CheckBox();
+    /// <summary>소리: 원래 소리 / 8-bit PSG / 8-bit PSG + SCC (MIDI · ROL · IMS).</summary>
+    private readonly ComboBox chipBox = new ComboBox();
+    private bool syncingChip;
     private Button playButton;
     private readonly Timer timer = new Timer { Interval = 33 };
     private readonly ToolTip tips = new ToolTip();
@@ -252,8 +255,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
         var sound = new FlowLayoutPanel { Dock = DockStyle.Fill, Margin = new Padding(0), BackColor = DeckTheme.Back, WrapContents = false };
         rawTone.Text = "거친 음색";
         vintageSpeaker.Text = "그 시절 스피커";
-        chipMidi.Text = "8-bit";
-        foreach (var cb in new[] { rawTone, vintageSpeaker, chipMidi })
+        foreach (var cb in new[] { rawTone, vintageSpeaker })
         {
             cb.ForeColor = DeckTheme.TextDark;
             cb.Font = ShellTheme.Ui;
@@ -261,10 +263,23 @@ internal sealed class JukeboxView : UserControl, IShellPage
             cb.Margin = new Padding(cb == rawTone ? 0 : 12, 6, 0, 0);
             sound.Controls.Add(cb);
         }
+        chipBox.DropDownStyle = ComboBoxStyle.DropDownList;
+        chipBox.Items.AddRange(new object[] { "원래 소리", "8-bit PSG", "8-bit PSG + SCC" });
+        chipBox.Font = ShellTheme.Ui;
+        chipBox.Width = 130;
+        chipBox.Margin = new Padding(12, 3, 0, 0);
+        sound.Controls.Add(chipBox);
         rawTone.Checked = settings().JukeboxRawTone;
-        chipMidi.Checked = settings().MidiChipSynth;
-        tips.SetToolTip(chipMidi, "MIDI · ROL · IMS 곡을 GXSCC처럼 MSX 칩 소리로: SCC+ 파형 15음 + PSG 드럼\nROL · IMS는 BNK 악기 이름으로 GM 악기 갈래를 골라 파형 · 엔벨로프를 정한다 (켜고 끄면 그 자리에서 새 소리로)");
-        chipMidi.CheckedChanged += delegate { settings().MidiChipSynth = chipMidi.Checked; SaveSettings(); ReloadMidiSynth(); };
+        chipBox.SelectedIndex = ChipIndex();
+        tips.SetToolTip(chipBox, "MIDI · ROL · IMS 곡을 GXSCC처럼 MSX 칩 소리로\n8-bit PSG = PSG만: 사각파 6음 + PSG 드럼\n8-bit PSG + SCC = SCC+ 파형 15음 + PSG 드럼\nROL · IMS는 BNK 악기 이름으로 GM 악기 갈래를 골라 엔벨로프(SCC는 파형도)를 정한다 · 바꾸면 그 자리에서 새 소리로");
+        chipBox.SelectedIndexChanged += delegate
+        {
+            if (syncingChip) return;
+            settings().MidiChipSynth = chipBox.SelectedIndex > 0;
+            settings().MidiChipPsgOnly = chipBox.SelectedIndex == 1;
+            SaveSettings();
+            ReloadMidiSynth();
+        };
         vintageSpeaker.Checked = settings().JukeboxVintageSpeaker;
         tips.SetToolTip(rawTone, "끔 = 표준: 오늘 FM 카드를 새로 설계했다면 냈을 소리 (되먹임을 조금 줄이고 12kHz 위를 살짝 깎음)\n켬 = 거칠게: 칩이 낸 소리 그대로 · ROL / IMS / SOP에만");
         tips.SetToolTip(vintageSpeaker, "모니터 옆에 놓던 작은 PC 스피커로 듣는 소리 흉내 (저음이 빠지고 중고음이 튐)");
@@ -598,12 +613,12 @@ internal sealed class JukeboxView : UserControl, IShellPage
         display.Loaded = programs.Count;
         display.Total = programs.Count;
         display.BankFile = mt32Rom != null ? "MT-32 에뮬레이터 · " + mt32Rom
-            : (chip ? "8-bit 칩 · SCC+ 15음 + PSG 드럼" : windows ? "Windows MIDI 신디사이저" : "GM FM · " + (gmBank != null ? gmBank.Source : "(뱅크 없음)")) + (mt32 ? " (MT-32 → GM)" : "");
+            : (chip ? (settings().MidiChipPsgOnly ? "8-bit PSG · 사각파 6음 + PSG 드럼" : "8-bit PSG + SCC · SCC+ 15음 + PSG 드럼") : windows ? "Windows MIDI 신디사이저" : "GM FM · " + (gmBank != null ? gmBank.Source : "(뱅크 없음)")) + (mt32 ? " (MT-32 → GM)" : "");
         display.BankCount = programs.Count;
         display.BankSameName = false;
         display.LyricFile = null;
         display.TotalSeconds = totalSeconds;
-        display.Mode = m.FormatName + (m.Standard != MidiStandard.None ? " · " + MidiSysEx.Name(m.Standard) : "") + " · " + channels + "채널 · 박당 " + m.Division + "틱" + (mt32Rom != null ? " · MT-32" : chip ? " · 8-bit" : windows ? "" : " · OPL3 18음");
+        display.Mode = m.FormatName + (m.Standard != MidiStandard.None ? " · " + MidiSysEx.Name(m.Standard) : "") + " · " + channels + "채널 · 박당 " + m.Division + "틱" + (mt32Rom != null ? " · MT-32" : chip ? " · " + ChipText() : windows ? "" : " · OPL3 18음");
         lyrics.Lyrics = null;
         lyrics.State = null;
         lenLabel.Text = DeckTheme.Clock(totalSeconds);
@@ -700,7 +715,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
     {
         if (song == null) return "";
         return (song.IsMelodic ? "멜로디 9채널" : "리듬 11채널") + " · " + song.BeatsPerMeasure + "/4 · 박당 " + song.TickBeat + "틱"
-            + (settings().MidiChipSynth ? " · 8-bit (SCC+ · PSG)" : "");
+            + (settings().MidiChipSynth ? " · " + ChipText() : "");
     }
 
     /// <summary>보이스 v의 그 틱 악기 (곡의 악기 이벤트).</summary>
@@ -713,7 +728,18 @@ internal sealed class JukeboxView : UserControl, IShellPage
     }
 
     /// <summary>Preferences에서 MIDI 신디를 바꿨을 때 Jukebox 체크 상자도 맞춘다.</summary>
-    public void SyncMidiSynthCheck() { if (chipMidi.Checked != settings().MidiChipSynth) chipMidi.Checked = settings().MidiChipSynth; }
+    public void SyncMidiSynthCheck()
+    {
+        if (chipBox.SelectedIndex == ChipIndex()) return;
+        syncingChip = true;
+        chipBox.SelectedIndex = ChipIndex();
+        syncingChip = false;
+        ReloadMidiSynth();
+    }
+
+    private int ChipIndex() { return !settings().MidiChipSynth ? 0 : settings().MidiChipPsgOnly ? 1 : 2; }
+    private ChipSound ChipSoundSetting { get { return settings().MidiChipPsgOnly ? ChipSound.Psg : ChipSound.PsgScc; } }
+    private string ChipText() { return settings().MidiChipPsgOnly ? "8-bit PSG" : "8-bit PSG + SCC"; }
 
     /// <summary>GM FM 뱅크: 설정의 MIDI 뱅크(OP2 / BNK) → 뱅크 폴더 · resource 폴더의 GENMIDI.OP2 → 기본 뱅크(이름 맞춤). 같은 것이면 다시 읽지 않는다.</summary>
     private GmBank LoadGmBank()
@@ -852,6 +878,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
         {
             ws.Audio.MidiBank = gmBank;
             ws.Audio.MidiSynth = settings().MidiChipSynth ? MidiSynth.Chip : settings().MidiWindowsSynth ? MidiSynth.Windows : MidiSynth.Fm;
+            ws.Audio.MidiChipSound = ChipSoundSetting;
             ws.Audio.MidiModule = settings().MidiMt32 && !settings().MidiChipSynth ? MidiModule.Mt32 : MidiModule.Gm;
             ws.Audio.PlayMidi(midiSong, Math.Max(0, tick), options);
         }
@@ -866,6 +893,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
                 chipSongBank = bank;
             }
             ws.Audio.MidiSynth = MidiSynth.Chip;
+            ws.Audio.MidiChipSound = ChipSoundSetting;
             ws.Audio.MidiModule = MidiModule.Gm;
             ws.Audio.PlayMidi(chipSong, Math.Max(0, tick), options);
             songChip = true;

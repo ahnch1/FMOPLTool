@@ -124,7 +124,56 @@ public static class ChipMidiTests
             check("AudioEngine plays MIDI with 8-bit chip synth", engine.ActiveMidiSynth == MidiSynth.Chip && er > 500, er.ToString("0"));
             engine.Stop();
         }
+        PsgOnly(check, bass);
         RealLoudness(check);
+    }
+
+    /// <summary>8-bit PSG (PSG만): 사각파 6음, 드럼은 같은 PSG 방식, 볼륨은 dB 단계.</summary>
+    private static void PsgOnly(Action<string, bool, string> check, MidiSong bass)
+    {
+        check("PSG volume: 1.0 → 15, −6 dB → 13, 0 → 0", ChipMidiSynth.PsgVolume(1) == 15 && ChipMidiSynth.PsgVolume(0.5) == 13 && ChipMidiSynth.PsgVolume(0) == 0,
+            ChipMidiSynth.PsgVolume(0.5).ToString());
+        MidiPlayer Psg(MidiSong s, PlaybackOptions o = null)
+        {
+            var p = new MidiPlayer(new OplChip(true)) { Synth = MidiSynth.Chip, ChipSound = ChipSound.Psg };
+            p.Start(s, 0, o);
+            return p;
+        }
+        var q = Psg(bass);
+        Measure(q, Rate / 20, Rate / 2, out double rms, out int cross);
+        check("8-bit PSG: bass A3 ≈ 220 Hz (PSG divider)", Math.Abs(cross - 220) < 4, cross.ToString());
+        check("8-bit PSG: audible, one voice", rms > 500 && q.ChipActiveTones == 1, rms.ToString("0"));
+        q = Psg(bass, new PlaybackOptions { Transpose = 12 });
+        Measure(q, Rate / 20, Rate / 2, out _, out int up);
+        check("8-bit PSG: transpose +12 → ≈ 440 Hz", Math.Abs(up - 440) < 6, up.ToString());
+
+        var chord = new MidiEvent[11];
+        chord[0] = Ev(0, 0xC0, 16);
+        for (int i = 0; i < 10; i++) chord[i + 1] = Ev(0, 0x90, 48 + i * 3, 100);
+        q = Psg(Song(chord));
+        Measure(q, 100, 100, out _, out _);
+        check("8-bit PSG: polyphony capped at 6 voices", q.ChipActiveTones == ChipMidiSynth.PsgToneVoices, q.ChipActiveTones.ToString());
+
+        var kit = Song(Ev(0, 0x99, 36, 120), Ev(0, 0x99, 42, 120));
+        q = Psg(kit);
+        Measure(q, 0, Rate / 20, out double drumRms, out _);
+        check("8-bit PSG: drums on PSG", q.ChipActiveDrums == 2 && drumRms > 200, q.ChipActiveDrums + " " + drumRms.ToString("0"));
+
+        var o = new PlaybackOptions();
+        o.VoiceMute[0] = true;
+        q = Psg(bass, o);
+        Measure(q, Rate / 20, Rate / 4, out double muted, out _);
+        check("8-bit PSG: muted channel is silent", muted < 20, muted.ToString("0"));
+
+        using (var engine = new AudioEngine { MidiSynth = MidiSynth.Chip, MidiChipSound = ChipSound.Psg })
+        {
+            engine.PlayMidi(bass);
+            var buf = new short[Rate / 2];
+            engine.Render(buf, buf.Length);
+            double sq = 0;
+            for (int i = Rate / 10; i < buf.Length; i++) sq += (double)buf[i] * buf[i];
+            check("AudioEngine plays MIDI with 8-bit PSG", Math.Sqrt(sq / (buf.Length - Rate / 10)) > 500 && engine.MidiChipSound == ChipSound.Psg, "");
+        }
     }
 
     /// <summary>_incoming의 MIDI 곡: 8-bit와 FM의 크기가 비슷한가 (앞 20초 RMS).</summary>
@@ -137,15 +186,16 @@ public static class ChipMidiTests
         foreach (var path in System.IO.Directory.GetFiles(dir, "*.mid"))
         {
             var song = MidiFiles.Load(path);
-            double fm = Render(song, MidiSynth.Fm, gm), chip = Render(song, MidiSynth.Chip, gm);
-            double ratio = fm > 0 ? chip / fm : 0;
+            double fm = Render(song, MidiSynth.Fm, gm), chip = Render(song, MidiSynth.Chip, gm), psg = Render(song, MidiSynth.Chip, gm, ChipSound.Psg);
+            double ratio = fm > 0 ? chip / fm : 0, ratioPsg = fm > 0 ? psg / fm : 0;
             check("8-bit loudness ≈ FM: " + System.IO.Path.GetFileName(path), ratio > 0.5 && ratio < 2.0, "chip " + chip.ToString("0") + " / fm " + fm.ToString("0") + " = " + ratio.ToString("0.00"));
+            check("8-bit PSG loudness ≈ FM: " + System.IO.Path.GetFileName(path), ratioPsg > 0.5 && ratioPsg < 2.0, "psg " + psg.ToString("0") + " / fm " + fm.ToString("0") + " = " + ratioPsg.ToString("0.00"));
         }
     }
 
-    private static double Render(MidiSong s, MidiSynth synth, GmBank bank)
+    private static double Render(MidiSong s, MidiSynth synth, GmBank bank, ChipSound sound = ChipSound.PsgScc)
     {
-        using (var e = new AudioEngine { MidiBank = bank, MidiSynth = synth })
+        using (var e = new AudioEngine { MidiBank = bank, MidiSynth = synth, MidiChipSound = sound })
         {
             e.PlayMidi(s);
             var buf = new short[Rate * 20];

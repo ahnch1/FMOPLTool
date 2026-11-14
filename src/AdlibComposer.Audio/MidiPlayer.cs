@@ -15,7 +15,7 @@ public enum MidiSynth
     Windows,
     /// <summary>Roland MT-32 에뮬레이터 (Munt, <see cref="Mt32Emu"/>). 엔진 스테레오 출력, 음색 · 스피커 중 스피커만 적용.</summary>
     Mt32,
-    /// <summary>GXSCC 방식 "8-bit" 칩 소리 (<see cref="ChipMidiSynth"/>: SCC+ 15음 + PSG 드럼). 엔진 출력, 스피커 적용.</summary>
+    /// <summary>GXSCC 방식 "8-bit" 칩 소리 (<see cref="ChipMidiSynth"/>: PSG + SCC 또는 PSG만, <see cref="MidiPlayer.ChipSound"/>). 엔진 출력, 스피커 적용.</summary>
     Chip,
 }
 
@@ -100,6 +100,8 @@ public sealed class MidiPlayer : IDisposable
     public GmBank Bank { get; set; }
     /// <summary>다음 Start부터 쓸 신디사이저 (GM: FM / Windows).</summary>
     public MidiSynth Synth { get; set; } = MidiSynth.Fm;
+    /// <summary>8-bit일 때 쓰는 칩 (다음 Start부터): PSG + SCC / PSG만.</summary>
+    public ChipSound ChipSound { get; set; } = ChipSound.PsgScc;
     /// <summary>다음 Start부터의 MIDI 모듈 규격.</summary>
     public MidiModule Module { get; set; } = MidiModule.Gm;
     /// <summary>열린 MT-32 에뮬레이터 (MT-32 모듈일 때 엔진이 넣는다). null이면 GM 대응.</summary>
@@ -142,7 +144,7 @@ public sealed class MidiPlayer : IDisposable
         else if (ActiveSynth == MidiSynth.Windows && !OpenWindows()) ActiveSynth = MidiSynth.Fm;
         ResetChip();
         mode = s.Standard == MidiStandard.Mt32 ? MidiStandard.None : s.Standard;
-        if (ActiveSynth == MidiSynth.Chip) chipSynth.Reset();
+        if (ActiveSynth == MidiSynth.Chip) { chipSynth.Sound = ChipSound; chipSynth.Reset(); }
         ResetChannels();
         if (ActiveSynth == MidiSynth.Mt32) Mt32.Reset();   // 앞 곡의 사용자 음색 · 설정을 지운다 (전원을 다시 켠 것처럼)
         SendAllOff();

@@ -41,7 +41,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
     private readonly Controls.PianoKeyboardControl keys = new Controls.PianoKeyboardControl { Interactive = false, FocusNote = 60 };
     private readonly Stepper speedStep = new Stepper(), keyStep = new Stepper(), volStep = new Stepper();
     private readonly CheckBox autoNext = new CheckBox();
-    private readonly CheckBox rawTone = new CheckBox(), vintageSpeaker = new CheckBox();
+    private readonly CheckBox rawTone = new CheckBox(), vintageSpeaker = new CheckBox(), chipMidi = new CheckBox();
     private Button playButton;
     private readonly Timer timer = new Timer { Interval = 33 };
     private readonly ToolTip tips = new ToolTip();
@@ -61,6 +61,12 @@ internal sealed class JukeboxView : UserControl, IShellPage
     /// <summary>VGM 곡(.vgm / .vgz)이면 이것. 위치 = ms.</summary>
     private VgmSong vgmSong;
     private List<VgmPlayer.Channel> vgmChannels = new List<VgmPlayer.Channel>();
+    /// <summary>ROL · IMS를 8-bit으로 낼 때 바꾼 MIDI 곡 (곡 · 뱅크가 같으면 다시 쓰고, 다르면 새로 바꾼다).</summary>
+    private MidiSong chipSong;
+    private Song chipSongSource;
+    private InstrumentBank chipSongBank;
+    /// <summary>지금 ROL · IMS 재생이 8-bit인가 (믹서 악기 이름을 곡의 악기 이벤트로 보인다).</summary>
+    private bool songChip;
     private GmBank gmBank;
     private string gmBankKey;
     private InstrumentBank bank;
@@ -246,7 +252,8 @@ internal sealed class JukeboxView : UserControl, IShellPage
         var sound = new FlowLayoutPanel { Dock = DockStyle.Fill, Margin = new Padding(0), BackColor = DeckTheme.Back, WrapContents = false };
         rawTone.Text = "거친 음색";
         vintageSpeaker.Text = "그 시절 스피커";
-        foreach (var cb in new[] { rawTone, vintageSpeaker })
+        chipMidi.Text = "8-bit";
+        foreach (var cb in new[] { rawTone, vintageSpeaker, chipMidi })
         {
             cb.ForeColor = DeckTheme.TextDark;
             cb.Font = ShellTheme.Ui;
@@ -255,6 +262,9 @@ internal sealed class JukeboxView : UserControl, IShellPage
             sound.Controls.Add(cb);
         }
         rawTone.Checked = settings().JukeboxRawTone;
+        chipMidi.Checked = settings().MidiChipSynth;
+        tips.SetToolTip(chipMidi, "MIDI · ROL · IMS 곡을 GXSCC처럼 MSX 칩 소리로: SCC+ 파형 15음 + PSG 드럼\nROL · IMS는 BNK 악기 이름으로 GM 악기 갈래를 골라 파형 · 엔벨로프를 정한다 (켜고 끄면 그 자리에서 새 소리로)");
+        chipMidi.CheckedChanged += delegate { settings().MidiChipSynth = chipMidi.Checked; SaveSettings(); ReloadMidiSynth(); };
         vintageSpeaker.Checked = settings().JukeboxVintageSpeaker;
         tips.SetToolTip(rawTone, "끔 = 표준: 오늘 FM 카드를 새로 설계했다면 냈을 소리 (되먹임을 조금 줄이고 12kHz 위를 살짝 깎음)\n켬 = 거칠게: 칩이 낸 소리 그대로 · ROL / IMS / SOP에만");
         tips.SetToolTip(vintageSpeaker, "모니터 옆에 놓던 작은 PC 스피커로 듣는 소리 흉내 (저음이 빠지고 중고음이 튐)");
@@ -407,7 +417,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
         display.BankSameName = sameName;
         display.LyricFile = iss != null ? Path.GetFileNameWithoutExtension(path) + ".ISS" + (iss.Encoding == KoreanText.Kind.Wansung ? " · 완성형" : " · 조합형") : null;
         display.TotalSeconds = totalSeconds;
-        display.Mode = (song.IsMelodic ? "멜로디 9채널" : "리듬 11채널") + " · " + song.BeatsPerMeasure + "/4 · 박당 " + song.TickBeat + "틱";
+        display.Mode = SongModeText();
         lyrics.Lyrics = iss;
         lyrics.State = null;
         lenLabel.Text = DeckTheme.Clock(totalSeconds);
@@ -567,7 +577,8 @@ internal sealed class JukeboxView : UserControl, IShellPage
         totalSeconds = m.LengthSeconds;
         pausedTick = 0;
         for (int v = 0; v < PlaybackOptions.Voices; v++) { options.VoiceMute[v] = false; options.VoiceTranspose[v] = 0; levels[v] = 0; voiceUsed[v] = v < MidiSong.Channels && m.ChannelUsed[v]; }
-        bool windows = settings().MidiWindowsSynth;
+        bool chip = settings().MidiChipSynth;
+        bool windows = !chip && settings().MidiWindowsSynth;
         bool mt32 = settings().MidiMt32;
         string mt32Rom = null;
         if (mt32)
@@ -575,7 +586,8 @@ internal sealed class JukeboxView : UserControl, IShellPage
             mt32Rom = ws.Audio.OpenMt32(settings().Mt32RomFolderPath, out string err);
             if (mt32Rom == null) AppLog.Warn("Jukebox", "MT-32 에뮬레이터를 쓸 수 없어 GM으로 냅니다 (MT-32 음색 → GM 번호)", err);
         }
-        if (!windows && mt32Rom == null) gmBank = LoadGmBank();
+        if (chip) mt32Rom = null;   // 8-bit는 MT-32 에뮬레이터 대신 (MT-32 곡은 음색 번호를 GM에 맞춰)
+        if (!windows && !chip && mt32Rom == null) gmBank = LoadGmBank();
         int channels = m.ChannelUsed.Count(u => u);
         var programs = new HashSet<int>(m.Events.Where(e => e.Kind == 0xC0 && e.Channel != GeneralMidi.DrumChannel).Select(e => (int)e.Data1));
 
@@ -586,12 +598,12 @@ internal sealed class JukeboxView : UserControl, IShellPage
         display.Loaded = programs.Count;
         display.Total = programs.Count;
         display.BankFile = mt32Rom != null ? "MT-32 에뮬레이터 · " + mt32Rom
-            : (windows ? "Windows MIDI 신디사이저" : "GM FM · " + (gmBank != null ? gmBank.Source : "(뱅크 없음)")) + (mt32 ? " (MT-32 → GM)" : "");
+            : (chip ? "8-bit 칩 · SCC+ 15음 + PSG 드럼" : windows ? "Windows MIDI 신디사이저" : "GM FM · " + (gmBank != null ? gmBank.Source : "(뱅크 없음)")) + (mt32 ? " (MT-32 → GM)" : "");
         display.BankCount = programs.Count;
         display.BankSameName = false;
         display.LyricFile = null;
         display.TotalSeconds = totalSeconds;
-        display.Mode = m.FormatName + (m.Standard != MidiStandard.None ? " · " + MidiSysEx.Name(m.Standard) : "") + " · " + channels + "채널 · 박당 " + m.Division + "틱" + (mt32Rom != null ? " · MT-32" : windows ? "" : " · OPL3 18음");
+        display.Mode = m.FormatName + (m.Standard != MidiStandard.None ? " · " + MidiSysEx.Name(m.Standard) : "") + " · " + channels + "채널 · 박당 " + m.Division + "틱" + (mt32Rom != null ? " · MT-32" : chip ? " · 8-bit" : windows ? "" : " · OPL3 18음");
         lyrics.Lyrics = null;
         lyrics.State = null;
         lenLabel.Text = DeckTheme.Clock(totalSeconds);
@@ -662,6 +674,46 @@ internal sealed class JukeboxView : UserControl, IShellPage
             v.UnsupportedChips.Count > 0 ? "소리 내지 않는 칩: " + string.Join(", ", v.UnsupportedChips) : null);
         StartAt(0);
     }
+
+    /// <summary>"8-bit MIDI"를 바꾸면: MIDI 곡이 열려 있으면 그 곡을 다시 읽어 같은 자리부터 (재생 중이었을 때만 이어서 재생).</summary>
+    private void ReloadMidiSynth()
+    {
+        if (song != null)
+        {
+            // ROL · IMS: 같은 자리에서 새 소리로 (멈춰 있으면 다음 재생부터)
+            display.Mode = SongModeText();
+            display.Invalidate();
+            if (state == PlayState.Playing) StartAt(CurrentTick);
+            return;
+        }
+        if (midiSong == null || currentPath == null) return;
+        bool wasPlaying = state == PlayState.Playing;
+        double at = CurrentTick;
+        PlayMidiFile(currentPath, false);
+        if (midiSong == null) return;
+        if (wasPlaying) { if (at > 0) SeekToTick(at); }
+        else { StopEngine(); state = PlayState.Paused; pausedTick = at; SyncPlayButton(); Tick(); }
+    }
+
+    /// <summary>ROL · IMS 곡 정보의 형식 줄.</summary>
+    private string SongModeText()
+    {
+        if (song == null) return "";
+        return (song.IsMelodic ? "멜로디 9채널" : "리듬 11채널") + " · " + song.BeatsPerMeasure + "/4 · 박당 " + song.TickBeat + "틱"
+            + (settings().MidiChipSynth ? " · 8-bit (SCC+ · PSG)" : "");
+    }
+
+    /// <summary>보이스 v의 그 틱 악기 (곡의 악기 이벤트).</summary>
+    private string TimbreAt(int v, double tick)
+    {
+        if (song == null) return null;
+        string name = null;
+        foreach (var t in song.Voices[v].Timbres) { if (t.Tick > tick) break; name = t.InstrumentName; }
+        return name ?? FirstTimbre(v);
+    }
+
+    /// <summary>Preferences에서 MIDI 신디를 바꿨을 때 Jukebox 체크 상자도 맞춘다.</summary>
+    public void SyncMidiSynthCheck() { if (chipMidi.Checked != settings().MidiChipSynth) chipMidi.Checked = settings().MidiChipSynth; }
 
     /// <summary>GM FM 뱅크: 설정의 MIDI 뱅크(OP2 / BNK) → 뱅크 폴더 · resource 폴더의 GENMIDI.OP2 → 기본 뱅크(이름 맞춤). 같은 것이면 다시 읽지 않는다.</summary>
     private GmBank LoadGmBank()
@@ -799,11 +851,26 @@ internal sealed class JukeboxView : UserControl, IShellPage
         else if (midiSong != null)
         {
             ws.Audio.MidiBank = gmBank;
-            ws.Audio.MidiSynth = settings().MidiWindowsSynth ? MidiSynth.Windows : MidiSynth.Fm;
-            ws.Audio.MidiModule = settings().MidiMt32 ? MidiModule.Mt32 : MidiModule.Gm;
+            ws.Audio.MidiSynth = settings().MidiChipSynth ? MidiSynth.Chip : settings().MidiWindowsSynth ? MidiSynth.Windows : MidiSynth.Fm;
+            ws.Audio.MidiModule = settings().MidiMt32 && !settings().MidiChipSynth ? MidiModule.Mt32 : MidiModule.Gm;
             ws.Audio.PlayMidi(midiSong, Math.Max(0, tick), options);
         }
-        else ws.Audio.Play(song, bank, (int)Math.Max(0, tick), -1, -1, -1, options);
+        else if (settings().MidiChipSynth)
+        {
+            // ROL · IMS → 8-bit: 같은 틱의 MIDI 곡으로 바꿔 칩 신디로 (위치 · 가사 · 채널은 그대로)
+            if (chipSong == null || chipSongSource != song || chipSongBank != bank)
+            {
+                var b = bank;
+                chipSong = SongToMidi.Convert(song, name => b != null ? b.Find(name) : null);
+                chipSongSource = song;
+                chipSongBank = bank;
+            }
+            ws.Audio.MidiSynth = MidiSynth.Chip;
+            ws.Audio.MidiModule = MidiModule.Gm;
+            ws.Audio.PlayMidi(chipSong, Math.Max(0, tick), options);
+            songChip = true;
+        }
+        else { ws.Audio.Play(song, bank, (int)Math.Max(0, tick), -1, -1, -1, options); songChip = false; }
         state = PlayState.Playing;
         timer.Start();
         SyncPlayButton();
@@ -1078,7 +1145,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
             }
             else if (song != null)
             {
-                string name = playing && vs.Instrument != null ? vs.Instrument : FirstTimbre(v);
+                string name = playing && songChip ? TimbreAt(v, ws.Audio.PositionTick) : playing && vs.Instrument != null ? vs.Instrument : FirstTimbre(v);
                 row.Instrument = name;
                 row.Found = bank != null && name != null && bank.Find(name) != null;
             }
@@ -1192,6 +1259,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
     public void SettingsChanged()
     {
         defaultBank = null;
+        SyncMidiSynthCheck();
     }
 
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)

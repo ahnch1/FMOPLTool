@@ -141,6 +141,44 @@ public sealed class GmBank
     /// <summary>GM 번호별 BNK 악기 이름 후보 (앞에서부터 찾는다). STANDARD.BNK 기준.</summary>
     private static readonly string[][] BankNames = BuildNames();
 
+    private static Dictionary<string, int> nameToProgram;
+
+    /// <summary>
+    /// BNK 악기 → 가장 가까운 GM 프로그램 번호 (0~127). 8-bit 재생(ROL · IMS)이 파형 · 엔벨로프 갈래를 고를 때 쓴다.
+    /// 1) STANDARD.BNK 이름 표(<see cref="FromBank"/>와 같은 표)에 그대로 있으면 그 번호,
+    /// 2) 이름에 든 낱말 (PIANO · BASS · STRING · ORGAN · GUIT · FLUTE · BRASS · SAX · SYN …),
+    /// 3) 그래도 모르면 OPL 엔벨로프로: 소리가 사라지는 악기(EG 0) = 피아노 / 빠르게 사라지면 크로매틱 타악기, 이어지는 악기 = 느린 어택이면 현악기, 아니면 신스 리드.
+    /// </summary>
+    public static int GuessProgram(string name, AdlibInstrument ins = null)
+    {
+        if (nameToProgram == null)
+        {
+            var d = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            for (int p = 0; p < 128; p++) foreach (var n in BankNames[p]) if (!d.ContainsKey(n)) d[n] = p;
+            nameToProgram = d;
+        }
+        string key = (name ?? "").Trim();
+        if (key.Length > 0 && nameToProgram.TryGetValue(key, out int exact)) return exact;
+        string u = key.ToUpperInvariant();
+        var words = new (string word, int program)[]
+        {
+            ("PIANO", 0), ("PIANA", 0), ("HARPSI", 6), ("CLAV", 7), ("CELES", 8), ("BELL", 14), ("CHIME", 14), ("VIB", 11), ("MARIM", 12), ("XYLO", 13),
+            ("ORG", 16), ("ACCORD", 21), ("HARMON", 22), ("BASS", 33), ("GUIT", 24), ("GTR", 24), ("BANJO", 105), ("SITAR", 104), ("KOTO", 107), ("HARP", 46),
+            ("VIOLIN", 40), ("VIOLA", 41), ("CELLO", 42), ("STRING", 48), ("STR", 48), ("PIZZ", 45), ("CHOIR", 52), ("VOICE", 52), ("VOX", 54), ("ORCH", 55),
+            ("TRUMP", 56), ("TROMB", 57), ("TUBA", 58), ("HORN", 60), ("BRAS", 61), ("SAX", 65), ("OBOE", 68), ("BASSOON", 70), ("CLAR", 71),
+            ("PICC", 72), ("FLUT", 73), ("FLUTE", 73), ("PAN", 75), ("WHISTL", 78), ("OCARIN", 79), ("LEAD", 80), ("SYN", 80), ("PAD", 88), ("SPACE", 96),
+            ("TIMP", 47), ("TOM", 117), ("DRUM", 118), ("CYM", 119), ("NOISE", 120), ("WAVE", 122), ("BIRD", 123), ("PHONE", 124), ("HELI", 125), ("GUN", 127),
+        };
+        foreach (var (word, program) in words) if (u.Contains(word)) return program;
+        if (ins != null)
+        {
+            var c = ins.Carrier;
+            if (c.Eg == 0) return c.Decay >= 8 ? 8 : 0;
+            return c.Attack <= 10 ? 48 : 80;
+        }
+        return 0;
+    }
+
     private static string[][] BuildNames()
     {
         string[] fam(params string[] n) { return n; }

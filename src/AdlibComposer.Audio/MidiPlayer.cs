@@ -15,6 +15,8 @@ public enum MidiSynth
     Windows,
     /// <summary>Roland MT-32 에뮬레이터 (Munt, <see cref="Mt32Emu"/>). 엔진 스테레오 출력, 음색 · 스피커 중 스피커만 적용.</summary>
     Mt32,
+    /// <summary>GXSCC 방식 "8-bit" 칩 소리 (<see cref="ChipMidiSynth"/>: SCC+ 15음 + PSG 드럼). 엔진 출력, 스피커 적용.</summary>
+    Chip,
 }
 
 /// <summary>곡이 어떤 MIDI 모듈을 위해 만들어졌는지 (설정 → MIDI module).</summary>
@@ -47,6 +49,8 @@ public sealed class MidiPlayer : IDisposable
     private static readonly int[] CarOff = { 3, 4, 5, 11, 12, 13, 19, 20, 21 };
 
     private readonly OplChip chip;
+    /// <summary>"8-bit" 칩 신디 (<see cref="MidiSynth.Chip"/>).</summary>
+    private readonly ChipMidiSynth chipSynth = new ChipMidiSynth();
     private MidiSong song;
     private PlaybackOptions options = new PlaybackOptions();
     private int next;
@@ -103,7 +107,7 @@ public sealed class MidiPlayer : IDisposable
     /// <summary>MT-32 곡을 에뮬레이터 없이 GM 번호로 바꿔 내는 중.</summary>
     private bool Mt32Mapped { get { return Module == MidiModule.Mt32 && ActiveSynth != MidiSynth.Mt32; } }
     /// <summary>Step 1번 = 출력 샘플 1개의 주기 (OPL = 49716Hz, MT-32 = 32000Hz).</summary>
-    public int Rate { get { return ActiveSynth == MidiSynth.Mt32 && Mt32 != null ? Mt32.Rate : chip.NativeRate; } }
+    public int Rate { get { return ActiveSynth == MidiSynth.Chip ? ChipMidiSynth.Rate : ActiveSynth == MidiSynth.Mt32 && Mt32 != null ? Mt32.Rate : chip.NativeRate; } }
     /// <summary>지금 재생이 쓰는 신디사이저.</summary>
     public MidiSynth ActiveSynth { get; private set; }
 
@@ -118,6 +122,13 @@ public sealed class MidiPlayer : IDisposable
     /// <summary>채널 c가 지금 드럼 채널인가.</summary>
     public bool IsDrum(int c) { return c >= 0 && c < 16 && drum[c]; }
 
+    /// <summary>"8-bit" 칩 신디 샘플 하나 (Step과 같은 속도로).</summary>
+    public void GenerateChip(out double left, out double right) { chipSynth.Generate(out left, out right); }
+
+    /// <summary>시험용: 칩 신디에서 울리는 멜로디 · 드럼 음 수.</summary>
+    public int ChipActiveTones { get { return chipSynth.ActiveTones; } }
+    public int ChipActiveDrums { get { return chipSynth.ActiveDrums; } }
+
     public void CopyStates(VoiceState[] dst) { Array.Copy(states, dst, Math.Min(dst.Length, states.Length)); }
 
     // ------------------------------------------------------------ 시작 / 정지
@@ -131,6 +142,7 @@ public sealed class MidiPlayer : IDisposable
         else if (ActiveSynth == MidiSynth.Windows && !OpenWindows()) ActiveSynth = MidiSynth.Fm;
         ResetChip();
         mode = s.Standard == MidiStandard.Mt32 ? MidiStandard.None : s.Standard;
+        if (ActiveSynth == MidiSynth.Chip) chipSynth.Reset();
         ResetChannels();
         if (ActiveSynth == MidiSynth.Mt32) Mt32.Reset();   // 앞 곡의 사용자 음색 · 설정을 지운다 (전원을 다시 켠 것처럼)
         SendAllOff();
@@ -171,7 +183,8 @@ public sealed class MidiPlayer : IDisposable
     {
         if (ch < 0 || ch >= 16 || !options.VoiceMute[ch]) return;
         for (int v = 0; v < Voices; v++) if (voices[v].KeyOn && voices[v].Channel == ch) KeyOff(v);
-        if (ActiveSynth != MidiSynth.Fm) { Send(0xB0 | ch, 123, 0); ClearSent(ch); }
+        if (ActiveSynth == MidiSynth.Chip) chipSynth.AllOff(ch);
+        else if (ActiveSynth != MidiSynth.Fm) { Send(0xB0 | ch, 123, 0); ClearSent(ch); }
         states[ch].Note = -1;
     }
 
@@ -191,6 +204,11 @@ public sealed class MidiPlayer : IDisposable
             bankMsb[c] = !drum[c] ? 0 : mode == MidiStandard.Xg ? MidiSysEx.XgDrumBank : mode == MidiStandard.Gm2 ? MidiSysEx.Gm2DrumBank : 0;
             bankLsb[c] = 0;
             states[c] = new VoiceState { Note = -1, Volume = 100 / 127f, NoteOnCount = states[c].NoteOnCount, Instrument = InstrumentName(c), InstrumentFound = PatchFound(c), Drum = drum[c] };
+            if (ActiveSynth == MidiSynth.Chip)
+            {
+                chipSynth.SetProgram(c, 0); chipSynth.SetBend(c, 0); chipSynth.SetSustain(c, false);
+                chipSynth.SetChannelGain(c, ChipMidiSynth.ChannelGain(volume[c], expression[c]));
+            }
         }
         lastGain = -1;
     }
@@ -249,6 +267,7 @@ public sealed class MidiPlayer : IDisposable
                 program[c] = Mt32Mapped && !drum[c] ? GeneralMidi.Mt32ToGm[e.Data1 & 127] : e.Data1;
                 states[c].Instrument = InstrumentName(c);
                 states[c].InstrumentFound = PatchFound(c);
+                chipSynth.SetProgram(c, program[c]);
                 Send(0xC0 | c, program[c], 0);
                 break;
             case 0xF0:
@@ -256,6 +275,7 @@ public sealed class MidiPlayer : IDisposable
                 break;
             case 0xE0:
                 bend[c] = e.Data1 | (e.Data2 << 7);
+                if (ActiveSynth == MidiSynth.Chip) chipSynth.SetBend(c, (bend[c] - 8192) / 8192.0 * bendRange[c]);
                 Send(0xE0 | c, e.Data1, e.Data2);
                 for (int v = 0; v < Voices; v++) if (voices[v].Channel == c && voices[v].Note >= 0) WriteFreq(v);
                 break;
@@ -331,6 +351,7 @@ public sealed class MidiPlayer : IDisposable
             case 10: pan[c] = val; UpdatePan(c); break;
             case 64:
                 sustain[c] = val >= 64;
+                if (ActiveSynth == MidiSynth.Chip) chipSynth.SetSustain(c, sustain[c]);
                 if (!sustain[c])
                     for (int v = 0; v < Voices; v++)
                         if (voices[v].Channel == c && voices[v].Sustained) { voices[v].Sustained = false; KeyOff(v); }
@@ -341,6 +362,7 @@ public sealed class MidiPlayer : IDisposable
             case 120:
             case 123:
                 for (int v = 0; v < Voices; v++) if (voices[v].Channel == c && voices[v].KeyOn) KeyOff(v);
+                if (ActiveSynth == MidiSynth.Chip) chipSynth.AllOff(c);
                 states[c].Note = -1;
                 break;
             case 121:
@@ -364,6 +386,12 @@ public sealed class MidiPlayer : IDisposable
         states[c].NoteOnCount++;
         states[c].Volume = Math.Max(0.15f, vel / 127f * volume[c] / 127f * expression[c] / 127f);
         if (options.VoiceMute[c]) return;
+        if (ActiveSynth == MidiSynth.Chip)
+        {
+            int t = drum[c] ? n + options.VoiceTranspose[c] : Transposed(c, n);
+            if (t >= 0 && t <= 127) chipSynth.NoteOn(c, n, t, vel, drum[c]);
+            return;
+        }
         if (ActiveSynth != MidiSynth.Fm)
         {
             int t = drum[c] ? n + options.VoiceTranspose[c] : Transposed(c, n);
@@ -387,6 +415,7 @@ public sealed class MidiPlayer : IDisposable
     private void NoteOff(int c, int n)
     {
         if (states[c].Note == n) states[c].Note = -1;
+        if (ActiveSynth == MidiSynth.Chip) { chipSynth.NoteOff(c, n); return; }
         if (ActiveSynth != MidiSynth.Fm)
         {
             if (sentNote[c, n] >= 0) { Send(0x80 | c, sentNote[c, n], 0); sentNote[c, n] = -1; }
@@ -439,6 +468,7 @@ public sealed class MidiPlayer : IDisposable
     {
         for (int v = 0; v < Voices; v++) KeyOff(v);
         for (int c = 0; c < 16; c++) states[c].Note = -1;
+        if (ActiveSynth == MidiSynth.Chip) chipSynth.AllOff(-1);
     }
 
     // ------------------------------------------------------------ OPL 레지스터
@@ -517,6 +547,7 @@ public sealed class MidiPlayer : IDisposable
     private void UpdateVolumes(int c)
     {
         states[c].Volume = volume[c] / 127f * expression[c] / 127f;
+        if (ActiveSynth == MidiSynth.Chip) chipSynth.SetChannelGain(c, ChipMidiSynth.ChannelGain(volume[c], expression[c]));
         if (ActiveSynth != MidiSynth.Fm) return;
         for (int v = 0; v < Voices; v++)
         {

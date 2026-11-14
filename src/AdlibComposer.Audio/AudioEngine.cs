@@ -489,6 +489,7 @@ public sealed class AudioEngine : IDisposable
         var src = source;
         bool useSop = src == Source.Sop || src == Source.Midi;
         bool mt32 = src == Source.Midi && midi.ActiveSynth == MidiSynth.Mt32;
+        bool chipMidi = src == Source.Midi && midi.ActiveSynth == MidiSynth.Chip;
         double step = (double)(src == Source.Vgm ? VgmPlayer.Rate : src == Source.Pcm ? pcm.Rate : src == Source.Midi ? midi.Rate : useSop ? opl3.NativeRate : src == Source.MusicBox ? MusicBoxPlayer.Rate : src == Source.Tracker ? TrackerPlayer.Rate : synth.NativeRate) / OutputRate;
         double gain = MasterVolume * CurrentOptions.Gain;
         for (int i = 0; i < count; i++)
@@ -522,16 +523,20 @@ public sealed class AudioEngine : IDisposable
                 {
                     int l, r;
                     if (src == Source.Midi) midi.Step(); else sop.Step();
-                    if (mt32) { midi.Mt32.Render(out l, out r); l = (int)(l * Mt32Level); r = (int)(r * Mt32Level); }
-                    else opl3.GenerateStereo(out l, out r);
-                    curL = l; curR = r;
+                    if (chipMidi) { midi.GenerateChip(out curL, out curR); }
+                    else
+                    {
+                        if (mt32) { midi.Mt32.Render(out l, out r); l = (int)(l * Mt32Level); r = (int)(r * Mt32Level); }
+                        else opl3.GenerateStereo(out l, out r);
+                        curL = l; curR = r;
+                    }
                 }
                 else
                 {
                     sequencer.Step();
                     curL = curR = synth.Generate();
                 }
-                if (toneStandard && !mt32 && (src == Source.Opl2 || useSop))
+                if (toneStandard && !mt32 && !chipMidi && (src == Source.Opl2 || useSop))
                 {
                     curL = toneL.Process(curL);
                     curR = toneR.Process(curR);

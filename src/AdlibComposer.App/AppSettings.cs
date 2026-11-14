@@ -36,6 +36,8 @@ internal sealed class AppSettings
     public string OrganizerPreferredFolder { get; set; } = "";
     /// <summary>MIDI를 Windows 신디사이저로 (false = OPL FM).</summary>
     public bool MidiWindowsSynth { get; set; }
+    /// <summary>MIDI를 GXSCC 방식 "8-bit" 칩 소리로 (SCC+ 15음 + PSG 드럼). 켜져 있으면 MidiWindowsSynth보다 앞선다.</summary>
+    public bool MidiChipSynth { get; set; }
     /// <summary>MIDI FM용 GM 뱅크 (GENMIDI.OP2 또는 BNK). 비우면 뱅크 폴더의 GENMIDI.OP2, 없으면 기본 뱅크를 이름으로 맞춤.</summary>
     public string MidiBank { get; set; } = "";
     /// <summary>MIDI 모듈 규격: true = Roland MT-32 (에뮬레이터 + ROM, 없으면 GM으로 대응), false = General MIDI.</summary>
@@ -108,7 +110,10 @@ internal sealed class AppSettings
                     {
                         case "browserfolder": s.BrowserFolder = value; break;
                         case "organizerpreferredfolder": s.OrganizerPreferredFolder = value; break;
-                        case "midisynth": s.MidiWindowsSynth = value.Equals("windows", StringComparison.OrdinalIgnoreCase); break;
+                        case "midisynth":
+                            s.MidiWindowsSynth = value.Equals("windows", StringComparison.OrdinalIgnoreCase);
+                            s.MidiChipSynth = value.Equals("chip", StringComparison.OrdinalIgnoreCase);
+                            break;
                         case "midibank": s.MidiBank = value; break;
                         case "midimodule": s.MidiMt32 = value.Equals("mt32", StringComparison.OrdinalIgnoreCase); break;
                         case "mt32romfolder": s.Mt32RomFolder = value; break;
@@ -156,8 +161,8 @@ internal sealed class AppSettings
         sb.AppendLine("LoadDefaultBank=" + (LoadDefaultBank ? "true" : "false"));
         sb.AppendLine("; OplEmulator = builtin | nuked (Nuked OPL3, cycle-accurate)");
         sb.AppendLine("OplEmulator=" + (UseNukedOpl ? "nuked" : "builtin"));
-        sb.AppendLine("; MidiSynth = fm | windows, MidiBank = GENMIDI.OP2 or BNK for FM (empty = GENMIDI.OP2 in BankFolder or resource, else default bank by name)");
-        sb.AppendLine("MidiSynth=" + (MidiWindowsSynth ? "windows" : "fm"));
+        sb.AppendLine("; MidiSynth = fm | windows | chip (8-bit SCC + PSG), MidiBank = GENMIDI.OP2 or BNK for FM (empty = GENMIDI.OP2 in BankFolder or resource, else default bank by name)");
+        sb.AppendLine("MidiSynth=" + (MidiChipSynth ? "chip" : MidiWindowsSynth ? "windows" : "fm"));
         sb.AppendLine("MidiBank=" + MidiBank);
         sb.AppendLine("; MidiModule = gm | mt32 (Roland MT-32 via Munt emulator; needs ROM files in Mt32RomFolder)");
         sb.AppendLine("MidiModule=" + (MidiMt32 ? "mt32" : "gm"));

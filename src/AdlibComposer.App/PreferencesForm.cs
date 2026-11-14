@@ -14,7 +14,7 @@ internal sealed class PreferencesForm : Form
 
     private readonly AppSettings settings;
     private readonly TextBox midiBankBox = new TextBox();
-    private readonly CheckBox midiWinCheck = new CheckBox();
+    private readonly ComboBox midiSynthBox = new ComboBox();
     private readonly ComboBox midiModuleBox = new ComboBox();
     private readonly TextBox mt32RomBox = new TextBox();
     private readonly TextBox bankFolderBox = new TextBox();
@@ -92,11 +92,14 @@ internal sealed class PreferencesForm : Form
             Text = "Applies everywhere: Composer, Instrument Maker preview, Jukebox (ROL / IMS / SOP) and S3M AdLib channels.\nOff = the built-in lightweight emulator. Switching while a song plays restarts the notes that are sounding.",
             ForeColor = Subtle, AutoSize = true, MaximumSize = new Size(700, 0), Margin = new Padding(18, 0, 0, 8)
         });
-        midiWinCheck.Text = "Play MIDI (.mid / .wrk) with the Windows synthesizer instead of OPL FM";
-        midiWinCheck.AutoSize = true;
-        midiWinCheck.Checked = settings.MidiWindowsSynth;
-        midiWinCheck.Margin = new Padding(0, 2, 0, 4);
-        root.Controls.Add(midiWinCheck);
+        var synthRow = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0, 2, 0, 4) };
+        synthRow.Controls.Add(new Label { Text = "MIDI synthesizer", AutoSize = true, Margin = new Padding(0, 6, 8, 0), Width = 170 });
+        midiSynthBox.DropDownStyle = ComboBoxStyle.DropDownList;
+        midiSynthBox.Items.AddRange(new object[] { "OPL FM (GM bank)", "Windows synthesizer", "8-bit chip (SCC + PSG, GXSCC style)" });
+        midiSynthBox.SelectedIndex = settings.MidiChipSynth ? 2 : settings.MidiWindowsSynth ? 1 : 0;
+        midiSynthBox.Width = 260;
+        synthRow.Controls.Add(midiSynthBox);
+        root.Controls.Add(synthRow);
         root.Controls.Add(PathRow("MIDI FM bank (OP2 / BNK)", midiBankBox, settings.MidiBankPath ?? "", delegate { BrowseMidiBank(); }));
         var moduleRow = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0, 4, 0, 4) };
         moduleRow.Controls.Add(new Label { Text = "MIDI module", AutoSize = true, Margin = new Padding(0, 6, 8, 0), Width = 170 });
@@ -294,7 +297,7 @@ internal sealed class PreferencesForm : Form
     {
         var d = new AppSettings();
         midiBankBox.Text = "";
-        midiWinCheck.Checked = false;
+        midiSynthBox.SelectedIndex = 0;
         midiModuleBox.SelectedIndex = 0;
         mt32RomBox.Text = d.Mt32RomFolderPath;
         bankFolderBox.Text = d.BankFolderPath;
@@ -309,7 +312,8 @@ internal sealed class PreferencesForm : Form
         try
         {
             settings.MidiBank = midiBankBox.Text.Trim().Length == 0 ? "" : AppSettings.ToStored(SafeResolve(midiBankBox.Text));
-            settings.MidiWindowsSynth = midiWinCheck.Checked;
+            settings.MidiWindowsSynth = midiSynthBox.SelectedIndex == 1;
+            settings.MidiChipSynth = midiSynthBox.SelectedIndex == 2;
             settings.MidiMt32 = midiModuleBox.SelectedIndex == 1;
             settings.Mt32RomFolder = AppSettings.ToStored(SafeResolve(mt32RomBox.Text));
             settings.BankFolder = AppSettings.ToStored(SafeResolve(bankFolderBox.Text));

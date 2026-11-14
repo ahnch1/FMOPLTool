@@ -45,6 +45,8 @@ public static class Program
         ChipTests.Run(Check);
         VgmTests.Run(Check);
         MidiSysExTests.Run(Check);
+        ChipMidiTests.Run(Check);
+        SongChipTests.Run(Check);
         TestRegistry();
         RealFileTests.Run(Check);
         Console.WriteLine();

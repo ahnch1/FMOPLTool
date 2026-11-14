@@ -34,13 +34,15 @@ public sealed class MusicFileInfo
     public string BankPath;
     public string LyricsPath;
     public bool NumericName;
+    /// <summary>지정 폴더(또는 그 하위 폴더) 안의 파일 — 남길 순위 최우선.</summary>
+    public bool InPreferredFolder;
     public string Error;
 
     public int Score;
     public List<string> ScoreNotes = new List<string>();
     /// <summary>같은 곡 그룹 (없으면 null).</summary>
     public DuplicateGroup Group;
-    /// <summary>그룹에서 남길 것으로 추천된 파일.</summary>
+    /// <summary>그룹에서 남길 것으로 추천된 파일 (ROL · IMS가 섞인 그룹은 형식마다 하나씩).</summary>
     public bool Keep;
 
     public string FileName { get { return System.IO.Path.GetFileName(Path); } }
@@ -56,7 +58,12 @@ public sealed class DuplicateGroup
     public List<MusicFileInfo> Files = new List<MusicFileInfo>();
     /// <summary>판정 이유 (강한 것부터).</summary>
     public SortedSet<MatchKind> Reasons = new SortedSet<MatchKind>();
+    /// <summary>남길 파일 중 순위가 가장 높은 것.</summary>
     public MusicFileInfo Keeper;
+    /// <summary>남길 파일 모두 (Keeper + ROL · IMS 각각 가장 좋은 것).</summary>
+    public List<MusicFileInfo> Keepers = new List<MusicFileInfo>();
+
+    public string KeeperText { get { return string.Join(", ", Keepers.Select(k => k.FileName)); } }
 
     public string ReasonText { get { return string.Join(" · ", Reasons.Select(MusicDuplicateFinder.ReasonName)); } }
 }
@@ -72,7 +79,14 @@ public enum MatchKind { SameBytes = 0, SameNotes = 1, TitleAndInstruments = 2, S
 /// <item>제목 · 악기 순서가 같고 음 개수가 5% 안</item>
 /// <item>형식 · 크기 · 악기 순서가 같고 음표가 90% 이상 같다 (조금 고친 판)</item>
 /// </list>
-/// 그룹 안에서 남길 파일 점수: 같은 이름 BNK +30, 같은 이름 ISS +30, 뜻 있는 파일 이름 +20, 숫자만 나열한 이름(예: SONG001, 0001) −20, 곡 안 제목 +5.
+/// 그룹 안에서 남길 순서 (앞의 것이 먼저):
+/// <list type="number">
+/// <item>지정 폴더(하위 폴더 포함) 안의 파일</item>
+/// <item>같은 이름 ISS가 있는 파일</item>
+/// <item>같은 이름 BNK가 있는 파일</item>
+/// <item>점수: 같은 이름 BNK +30, 같은 이름 ISS +30, 뜻 있는 파일 이름 +20, 숫자만 나열한 이름(예: SONG001, 0001) −20, 곡 안 제목 +5</item>
+/// </list>
+/// ROL과 IMS가 같은 그룹이면 ROL · IMS를 각각 하나씩 남긴다.
 /// </summary>
 public static class MusicDuplicateFinder
 {
@@ -225,11 +239,26 @@ public static class MusicDuplicateFinder
         return t.Length >= 2 ? t : null;
     }
 
+    /// <summary>path가 folder 자신이거나 그 하위 폴더 안에 있는지.</summary>
+    public static bool IsUnder(string path, string folder)
+    {
+        if (string.IsNullOrWhiteSpace(folder)) return false;
+        try
+        {
+            string d = System.IO.Path.GetFullPath(System.IO.Path.GetDirectoryName(path) ?? "").TrimEnd('\\', '/');
+            string r = System.IO.Path.GetFullPath(folder.Trim()).TrimEnd('\\', '/');
+            return string.Equals(d, r, StringComparison.OrdinalIgnoreCase)
+                || d.StartsWith(r + System.IO.Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception) { return false; }
+    }
+
     /// <summary>남길 파일 점수와 그 이유.</summary>
     public static void ScoreFile(MusicFileInfo f)
     {
         f.ScoreNotes.Clear();
         int s = 0;
+        if (f.InPreferredFolder) f.ScoreNotes.Add("지정 폴더 (최우선)");
         if (f.HasBank) { s += 30; f.ScoreNotes.Add("같은 이름 BNK +30"); }
         if (f.HasLyrics) { s += 30; f.ScoreNotes.Add("같은 이름 ISS +30"); }
         if (f.NumericName) { s -= 20; f.ScoreNotes.Add("숫자만 나열된 이름 −20"); }
@@ -239,8 +268,11 @@ public static class MusicDuplicateFinder
         f.Score = s;
     }
 
-    /// <summary>같은 곡 그룹을 만든다 (파일 2개 이상인 것만). 각 파일의 Score · Group · Keep을 채운다.</summary>
-    public static List<DuplicateGroup> FindGroups(IList<MusicFileInfo> files)
+    /// <summary>
+    /// 같은 곡 그룹을 만든다 (파일 2개 이상인 것만). 각 파일의 Score · Group · Keep을 채운다.
+    /// preferredFolder: 이 폴더(하위 폴더 포함) 안의 파일을 가장 먼저 남긴다 (없으면 null).
+    /// </summary>
+    public static List<DuplicateGroup> FindGroups(IList<MusicFileInfo> files, string preferredFolder = null)
     {
         int n = files.Count;
         var parent = new int[n];
@@ -303,7 +335,7 @@ public static class MusicDuplicateFinder
                     if (Math.Abs(na - nb) <= Math.Max(1, Math.Max(na, nb) / 20)) union(l[a], l[b], MatchKind.TitleAndInstruments);
                 }
 
-        foreach (var f in files) { ScoreFile(f); f.Group = null; f.Keep = false; }
+        foreach (var f in files) { f.InPreferredFolder = IsUnder(f.Path, preferredFolder); ScoreFile(f); f.Group = null; f.Keep = false; }
         var groups = new Dictionary<int, DuplicateGroup>();
         for (int i = 0; i < n; i++)
         {
@@ -323,7 +355,15 @@ public static class MusicDuplicateFinder
             if (g.Files.Count < 2) continue;
             g.Files.Sort(CompareKeep);
             g.Keeper = g.Files[0];
-            foreach (var f in g.Files) { f.Group = g; f.Keep = ReferenceEquals(f, g.Keeper); }
+            g.Keepers.Add(g.Keeper);
+            // ROL과 IMS가 섞여 있으면 각 형식에서 가장 좋은 것을 하나씩 남긴다
+            if (g.Files.Any(f => f.Format == "ROL") && g.Files.Any(f => f.Format == "IMS"))
+                foreach (var fmt in new[] { "ROL", "IMS" })
+                {
+                    var best = g.Files.First(f => f.Format == fmt);
+                    if (!g.Keepers.Contains(best)) g.Keepers.Add(best);
+                }
+            foreach (var f in g.Files) { f.Group = g; f.Keep = g.Keepers.Contains(f); }
             result.Add(g);
         }
         result.Sort((a, b) => string.Compare(a.Keeper.Path, b.Keeper.Path, StringComparison.OrdinalIgnoreCase));
@@ -347,10 +387,16 @@ public static class MusicDuplicateFinder
         return (double)same / Math.Max(na, nb);
     }
 
-    /// <summary>남길 순서: 점수 → 음 개수 → 짧은 파일 이름 → 경로.</summary>
+    /// <summary>남길 순서: 지정 폴더 → ISS 있음 → BNK 있음 → 점수 → 음 개수 → 짧은 파일 이름 → 경로.</summary>
     private static int CompareKeep(MusicFileInfo a, MusicFileInfo b)
     {
-        int c = b.Score.CompareTo(a.Score);
+        int c = b.InPreferredFolder.CompareTo(a.InPreferredFolder);
+        if (c != 0) return c;
+        c = b.HasLyrics.CompareTo(a.HasLyrics);
+        if (c != 0) return c;
+        c = b.HasBank.CompareTo(a.HasBank);
+        if (c != 0) return c;
+        c = b.Score.CompareTo(a.Score);
         if (c != 0) return c;
         c = b.NoteCount.CompareTo(a.NoteCount);
         if (c != 0) return c;

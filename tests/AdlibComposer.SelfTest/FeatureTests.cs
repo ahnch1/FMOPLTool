@@ -182,6 +182,27 @@ public static class FeatureTests
                 check("Organizer keeps the file with BNK + ISS", g.Keeper.FileName == "MYSONG.ROL" && g.Keeper.HasBank && g.Keeper.HasLyrics && g.Keeper.Score == 80, g.Keeper.FileName + " " + g.Keeper.Score);
                 var num = g.Files.First(f => f.FileName == "SONG001.ROL");
                 check("Organizer ranks numeric name lowest", num.NumericName && g.Files.Last() == num && !num.Keep, string.Join(", ", g.Files.Select(f => f.FileName + ":" + f.Score)));
+                var demoIms = g.Files.First(f => f.FileName == "DEMO.IMS");
+                check("Organizer keeps one ROL and one IMS", g.Keepers.Count == 2 && demoIms.Keep && g.Keeper.Format == "ROL", g.KeeperText);
+                // 지정 폴더 최우선: 숫자 이름 · 짝 파일 없음이라도 지정 폴더 안의 것을 남긴다
+                Directory.CreateDirectory(Path.Combine(dir, "pref"));
+                File.WriteAllBytes(Path.Combine(dir, "pref", "0002.ROL"), rolBytes);
+                var withPref = infos.Where(f => f.Format == "ROL" && f.Error == null && f.FileName != "OTHER.ROL").ToList();
+                withPref.Add(MusicDuplicateFinder.Analyze(Path.Combine(dir, "pref", "0002.ROL")));
+                var pg = MusicDuplicateFinder.FindGroups(withPref, Path.Combine(dir, "pref") + "\\").Single();
+                check("Organizer: preferred folder first", pg.Keeper.FileName == "0002.ROL" && pg.Keepers.Count == 1 && pg.Keeper.InPreferredFolder, pg.KeeperText);
+                pg = MusicDuplicateFinder.FindGroups(withPref).Single();
+                check("Organizer: no preferred folder → BNK + ISS file", pg.Keeper.FileName == "MYSONG.ROL", pg.KeeperText);
+                // ISS가 BNK보다 먼저, BNK가 점수보다 먼저
+                var a = MusicDuplicateFinder.Analyze(Path.Combine(dir, "SONG001.ROL"));
+                var b = MusicDuplicateFinder.Analyze(Path.Combine(dir, "pref", "0002.ROL"));
+                var c = MusicDuplicateFinder.Analyze(Path.Combine(dir, "sub", "MYSONG.ROL"));
+                a.BankPath = null; a.LyricsPath = "x.iss";     // ISS만
+                b.BankPath = "x.bnk"; b.LyricsPath = null;     // BNK만
+                c.BankPath = null; c.LyricsPath = null;        // 뜻 있는 이름이지만 짝 없음
+                var ord = MusicDuplicateFinder.FindGroups(new List<MusicFileInfo> { c, b, a }).Single().Files.Select(f => f.FileName).ToList();
+                check("Organizer: ISS → BNK → score", string.Join(",", ord) == "SONG001.ROL,0002.ROL,MYSONG.ROL", string.Join(",", ord));
+                File.Delete(Path.Combine(dir, "pref", "0002.ROL"));
                 var keeper = g.Keeper;
                 check("Companions follow the file", MusicDuplicateFinder.CompanionsToTake(keeper, new List<string>()).Count == 2
                     && MusicDuplicateFinder.CompanionsToTake(keeper, new List<string> { Path.Combine(dir, "sub", "MYSONG.IMS") }).Count == 0);

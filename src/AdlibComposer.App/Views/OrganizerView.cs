@@ -14,6 +14,7 @@ namespace AdlibComposer.App.Views;
 /// Organizer 페이지 (TOOLS): 폴더의 ROL / IMS / SOP에서 같은 곡을 찾아 정리한다.
 /// <code>
 /// ┌ 폴더 [..........] [찾아보기] [x] 하위 폴더  [검사]  [x] 같은 곡만 보기   진행 ┐
+/// │ 우선 폴더 [..........] [찾아보기] [지우기]   (이 폴더의 파일을 가장 먼저 남김)  │
 /// ├ 파일 목록 (같은 곡 그룹끼리 묶음, 체크 = 정리 대상) │ 고른 파일 정보          ┤
 /// └ [추천대로 체크] [체크 해제] [x] 시뮬레이션 [x] BNK · ISS도 함께 [삭제] [이동] ┘
 /// </code>
@@ -29,6 +30,9 @@ internal sealed class OrganizerView : UserControl, IShellPage
     private readonly Button btnScan = new Button();
     private readonly CheckBox chkOnlyDup = new CheckBox();
     private readonly Label lblProgress = new Label();
+    private readonly TextBox txtPreferred = new TextBox();
+    private readonly Button btnPreferred = new Button();
+    private readonly Button btnPreferredClear = new Button();
     private readonly SplitContainer split = new SplitContainer();
     private readonly ListView list = new ListView();
     private readonly ListView details = new ListView();
@@ -60,6 +64,8 @@ internal sealed class OrganizerView : UserControl, IShellPage
         Controls.Add(bottomPanel);
         split.BringToFront();
         txtFolder.Text = settings().BrowserFolderPath ?? "";
+        txtPreferred.Text = settings().OrganizerPreferredFolderPath ?? "";
+        preferredUsed = txtPreferred.Text;
         UpdateButtons();
     }
 
@@ -68,7 +74,7 @@ internal sealed class OrganizerView : UserControl, IShellPage
 
     // ------------------------------------------------------------ 구성
 
-    private readonly Panel topPanel = new Panel { Dock = DockStyle.Top, Height = 44 };
+    private readonly Panel topPanel = new Panel { Dock = DockStyle.Top, Height = 74 };
     private readonly Panel bottomPanel = new Panel { Dock = DockStyle.Bottom, Height = 46 };
 
     private void BuildTop()
@@ -95,7 +101,19 @@ internal sealed class OrganizerView : UserControl, IShellPage
         lblProgress.SetBounds(872, 14, 400, 18);
         tips.SetToolTip(btnScan, "ROL · IMS · SOP를 읽어 크기 · 내용(바이트) · 음표 · 제목 · 악기 순서로 같은 곡을 찾는다");
         tips.SetToolTip(chkOnlyDup, "끄면 같은 곡이 없는 파일도 '중복 없음' 묶음에 보인다");
-        topPanel.Controls.AddRange(new Control[] { lbl, txtFolder, btnBrowse, chkRecursive, btnScan, chkOnlyDup, lblProgress });
+        var lblPref = new Label { Text = "우선 폴더", AutoSize = true, Location = new Point(12, 46) };
+        txtPreferred.SetBounds(76, 42, 394, 24);
+        txtPreferred.Leave += delegate { Regroup(); };
+        txtPreferred.KeyDown += (s, e) => { if (e.KeyCode == Keys.Enter) { e.SuppressKeyPress = true; Regroup(); } };
+        btnPreferred.Text = "찾아보기...";
+        btnPreferred.SetBounds(476, 41, 84, 26);
+        btnPreferred.Click += delegate { BrowsePreferred(); };
+        btnPreferredClear.Text = "지우기";
+        btnPreferredClear.SetBounds(566, 41, 60, 26);
+        btnPreferredClear.Click += delegate { txtPreferred.Text = ""; Regroup(); };
+        var lblPrefHint = new Label { Text = "이 폴더(하위 폴더 포함)의 파일을 가장 먼저 남긴다 · 그다음 ISS 있음 → BNK 있음 → 점수 · ROL과 IMS는 각각 하나씩 남김", AutoSize = true, ForeColor = ShellTheme.Muted, Location = new Point(636, 46) };
+        tips.SetToolTip(txtPreferred, "같은 곡 그룹에서 이 폴더(하위 폴더 포함) 안의 파일을 최우선으로 남긴다. 비우면 쓰지 않음");
+        topPanel.Controls.AddRange(new Control[] { lbl, txtFolder, btnBrowse, chkRecursive, btnScan, chkOnlyDup, lblProgress, lblPref, txtPreferred, btnPreferred, btnPreferredClear, lblPrefHint });
     }
 
     private void BuildList()
@@ -156,7 +174,7 @@ internal sealed class OrganizerView : UserControl, IShellPage
         int x = 12, y = 10;
         foreach (var (b, text, w, tip, act) in new (Button, string, int, string, Action)[]
         {
-            (btnRecommend, "추천대로 체크", 104, "각 그룹에서 남길 파일(점수가 가장 높은 것)만 빼고 모두 체크", (Action)CheckRecommended),
+            (btnRecommend, "추천대로 체크", 104, "각 그룹에서 남길 파일(지정 폴더 → ISS → BNK → 점수 순, ROL · IMS는 각각 하나)만 빼고 모두 체크", (Action)CheckRecommended),
             (btnClear, "체크 해제", 76, "모든 체크를 푼다", (Action)ClearChecks),
         })
         {
@@ -220,6 +238,46 @@ internal sealed class OrganizerView : UserControl, IShellPage
         }
     }
 
+    private void BrowsePreferred()
+    {
+        string start = Directory.Exists(txtPreferred.Text.Trim()) ? txtPreferred.Text.Trim() : txtFolder.Text.Trim();
+        using (var dlg = new FolderBrowserDialog { Description = "우선 폴더 — 같은 곡이면 이 폴더의 파일을 가장 먼저 남긴다", SelectedPath = Directory.Exists(start) ? start : "" })
+        {
+            if (dlg.ShowDialog(FindForm()) != DialogResult.OK) return;
+            txtPreferred.Text = dlg.SelectedPath;
+            Regroup();
+        }
+    }
+
+    private string preferredUsed = "";
+
+    private string PreferredFolder { get { string p = txtPreferred.Text.Trim(); return p.Length > 0 ? p : null; } }
+
+    /// <summary>우선 폴더가 바뀌면 다시 읽지 않고 남길 파일만 다시 고른다.</summary>
+    private void Regroup()
+    {
+        string p = txtPreferred.Text.Trim();
+        if (scanning || string.Equals(p, preferredUsed, StringComparison.OrdinalIgnoreCase)) return;
+        preferredUsed = p;
+        SavePreferred(p);
+        if (files.Count == 0) return;
+        groups = MusicDuplicateFinder.FindGroups(files, PreferredFolder);
+        AppLog.Info("정리", "우선 폴더: " + (p.Length > 0 ? p : "(없음)"));
+        FillList();
+    }
+
+    /// <summary>우선 폴더를 설정 파일(FMOPLTool.cfg)에 남긴다.</summary>
+    private void SavePreferred(string p)
+    {
+        try
+        {
+            var s = settings();
+            s.OrganizerPreferredFolder = p.Length > 0 ? AppSettings.ToStored(p) : "";
+            s.Save();
+        }
+        catch (Exception ex) { AppLog.Warn("정리", "우선 폴더를 설정에 남기지 못했습니다", ex.Message); }
+    }
+
     private async void Scan()
     {
         if (scanning) return;
@@ -245,7 +303,9 @@ internal sealed class OrganizerView : UserControl, IShellPage
                 }
             });
             files = found;
-            groups = MusicDuplicateFinder.FindGroups(files);
+            if (!string.Equals(preferredUsed, txtPreferred.Text.Trim(), StringComparison.OrdinalIgnoreCase)) SavePreferred(txtPreferred.Text.Trim());
+            preferredUsed = txtPreferred.Text.Trim();
+            groups = MusicDuplicateFinder.FindGroups(files, PreferredFolder);
             int dupFiles = groups.Sum(g => g.Files.Count);
             int errors = files.Count(f => f.Error != null);
             lblProgress.Text = "파일 " + files.Count + "개 · 같은 곡 그룹 " + groups.Count + "개 (파일 " + dupFiles + "개)" + (errors > 0 ? " · 읽기 오류 " + errors + "개" : "");
@@ -275,7 +335,7 @@ internal sealed class OrganizerView : UserControl, IShellPage
             string root = txtFolder.Text.Trim();
             foreach (var g in groups)
             {
-                var lg = new ListViewGroup("그룹 " + g.Id + "  ·  " + g.Files.Count + "개  ·  " + g.ReasonText + "  ·  남김: " + g.Keeper.FileName);
+                var lg = new ListViewGroup("그룹 " + g.Id + "  ·  " + g.Files.Count + "개  ·  " + g.ReasonText + "  ·  남김: " + g.KeeperText);
                 list.Groups.Add(lg);
                 foreach (var f in g.Files) list.Items.Add(MakeItem(f, lg, root));
             }
@@ -352,11 +412,12 @@ internal sealed class OrganizerView : UserControl, IShellPage
             Add(gSong, "악기 " + f.Instruments.Count + "개", string.Join(", ", f.Instruments));
             Add(gSong, "악기 순서", f.InstrumentKey.Replace("|", "  |  "));
             Add(gJudge, "점수", f.Score + "  (" + string.Join(", ", f.ScoreNotes) + ")");
+            Add(gJudge, "우선 순위", (f.InPreferredFolder ? "지정 폴더 · " : "") + (f.HasLyrics ? "ISS 있음 · " : "ISS 없음 · ") + (f.HasBank ? "BNK 있음" : "BNK 없음"));
             Add(gJudge, "이름", f.NumericName ? "숫자만 나열된 이름 (남길 순위 낮춤)" : "뜻 있는 이름");
             if (f.Group != null)
             {
                 Add(gJudge, "그룹", "그룹 " + f.Group.Id + " · " + f.Group.ReasonText);
-                Add(gJudge, "판정", f.Keep ? "남김 (추천)" : "정리 후보 — 남김: " + f.Group.Keeper.FileName);
+                Add(gJudge, "판정", f.Keep ? "남김 (추천)" : "정리 후보 — 남김: " + f.Group.KeeperText);
                 foreach (var o in f.Group.Files)
                     if (!ReferenceEquals(o, f)) Add(gJudge, "같은 곡", o.FileName + "  (" + o.Folder + ", 점수 " + o.Score + ")");
             }
@@ -501,7 +562,7 @@ internal sealed class OrganizerView : UserControl, IShellPage
             if (f.BankPath != null && !File.Exists(f.BankPath)) f.BankPath = null;
             if (f.LyricsPath != null && !File.Exists(f.LyricsPath)) f.LyricsPath = null;
         }
-        groups = MusicDuplicateFinder.FindGroups(files);
+        groups = MusicDuplicateFinder.FindGroups(files, PreferredFolder);
         lblProgress.Text = "파일 " + files.Count + "개 · 같은 곡 그룹 " + groups.Count + "개";
         FillList();
     }
@@ -531,7 +592,7 @@ internal sealed class OrganizerView : UserControl, IShellPage
             AppLog.Warn("정리", "그룹 전체 " + (move ? "이동" : "삭제") + " 진행 선택: 그룹 " + string.Join(", ", whole.Select(g => g.Id)));
             return true;
         }
-        var keepers = new HashSet<MusicFileInfo>(whole.Select(g => g.Keeper));
+        var keepers = new HashSet<MusicFileInfo>(whole.SelectMany(g => g.Keepers));
         targets.RemoveAll(keepers.Contains);
         filling = true;
         foreach (ListViewItem it in list.Items)

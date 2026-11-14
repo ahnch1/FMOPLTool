@@ -32,6 +32,8 @@ internal sealed class AppSettings
 
     /// <summary>왼쪽 목록에서 마지막으로 연 곡 폴더 (다음 실행 때 다시 연다). 저장 값(상대/절대), 비면 없음.</summary>
     public string BrowserFolder { get; set; } = "";
+    /// <summary>Organizer 우선 폴더: 같은 곡이면 이 폴더(하위 폴더 포함)의 파일을 가장 먼저 남긴다. 저장 값(상대/절대), 비면 없음.</summary>
+    public string OrganizerPreferredFolder { get; set; } = "";
     /// <summary>MIDI를 Windows 신디사이저로 (false = OPL FM).</summary>
     public bool MidiWindowsSynth { get; set; }
     /// <summary>MIDI FM용 GM 뱅크 (GENMIDI.OP2 또는 BNK). 비우면 뱅크 폴더의 GENMIDI.OP2, 없으면 기본 뱅크를 이름으로 맞춤.</summary>
@@ -78,6 +80,7 @@ internal sealed class AppSettings
 
     /// <summary>왼쪽 목록에서 연 곡 폴더 (없으면 null). 파일 대화상자 · Organizer · Tracker의 시작 폴더.</summary>
     public string BrowserFolderPath { get { return string.IsNullOrWhiteSpace(BrowserFolder) ? null : Resolve(BrowserFolder); } }
+    public string OrganizerPreferredFolderPath { get { return string.IsNullOrWhiteSpace(OrganizerPreferredFolder) ? null : Resolve(OrganizerPreferredFolder); } }
     public string MidiBankPath { get { return string.IsNullOrWhiteSpace(MidiBank) ? null : Resolve(MidiBank); } }
     public string Mt32RomFolderPath { get { return Resolve(Mt32RomFolder); } }
 
@@ -104,6 +107,7 @@ internal sealed class AppSettings
                     switch (key.ToLowerInvariant())
                     {
                         case "browserfolder": s.BrowserFolder = value; break;
+                        case "organizerpreferredfolder": s.OrganizerPreferredFolder = value; break;
                         case "midisynth": s.MidiWindowsSynth = value.Equals("windows", StringComparison.OrdinalIgnoreCase); break;
                         case "midibank": s.MidiBank = value; break;
                         case "midimodule": s.MidiMt32 = value.Equals("mt32", StringComparison.OrdinalIgnoreCase); break;
@@ -161,6 +165,8 @@ internal sealed class AppSettings
         sb.AppendLine("; Jukebox: JukeboxTone = standard | raw, JukeboxSpeaker = default | vintage");
         sb.AppendLine("JukeboxTone=" + (JukeboxRawTone ? "raw" : "standard"));
         sb.AppendLine("JukeboxSpeaker=" + (JukeboxVintageSpeaker ? "vintage" : "default"));
+        sb.AppendLine("; OrganizerPreferredFolder = Organizer keeps duplicates in this folder (and subfolders) first (empty = none)");
+        sb.AppendLine("OrganizerPreferredFolder=" + OrganizerPreferredFolder);
         sb.AppendLine("; VoiceColors = voice 1..11 colors (rhythm mode 7..11 = BD SD TO CY HH): Composer note bars, Note heads, Jukebox channels");
         sb.AppendLine("VoiceColors=" + Shell.VoiceColors.Format(VoiceColors));
         File.WriteAllText(FilePath, sb.ToString(), new UTF8Encoding(false));

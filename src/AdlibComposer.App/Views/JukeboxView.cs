@@ -591,14 +591,14 @@ internal sealed class JukeboxView : UserControl, IShellPage
         display.BankSameName = false;
         display.LyricFile = null;
         display.TotalSeconds = totalSeconds;
-        display.Mode = m.FormatName + " · " + channels + "채널 · 박당 " + m.Division + "틱" + (mt32Rom != null ? " · MT-32" : windows ? "" : " · OPL3 18음");
+        display.Mode = m.FormatName + (m.Standard != MidiStandard.None ? " · " + MidiSysEx.Name(m.Standard) : "") + " · " + channels + "채널 · 박당 " + m.Division + "틱" + (mt32Rom != null ? " · MT-32" : windows ? "" : " · OPL3 18음");
         lyrics.Lyrics = null;
         lyrics.State = null;
         lenLabel.Text = DeckTheme.Clock(totalSeconds);
         seek.Enabled = true;
         RebuildMixerRows();
         MarkPlaying();
-        AppLog.Info("Jukebox", "재생: " + Path.GetFileName(path) + " — " + m.FormatName + " " + channels + "채널, 프로그램 " + programs.Count + "개, " + DeckTheme.Clock(totalSeconds)
+        AppLog.Info("Jukebox", "재생: " + Path.GetFileName(path) + " — " + m.FormatName + (m.Standard != MidiStandard.None ? " (" + MidiSysEx.Name(m.Standard) + ")" : "") + (m.UsesBankSelect ? " · 뱅크 셀렉트" : "") + " " + channels + "채널, 프로그램 " + programs.Count + "개, " + DeckTheme.Clock(totalSeconds)
             + ", " + (mt32Rom != null ? "MT-32 에뮬레이터 (" + mt32Rom + ")" : windows ? "Windows 신디사이저" : "FM 뱅크 " + (gmBank != null ? gmBank.Source : "없음")) + (mt32 && mt32Rom == null ? ", MT-32 → GM" : ""),
             m.Comment.Length > 0 ? m.Comment : null);
         StartAt(0);
@@ -1102,7 +1102,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
             {
                 var row = mixer.Rows[v];
                 if (row.Note < 0 || row.Muted) continue;
-                bool drum = midiSong != null && v == GeneralMidi.DrumChannel;
+                bool drum = midiSong != null && voiceStates[v].Drum;
                 int note = row.Note + (drum ? 0 : options.Transpose + options.VoiceTranspose[v]);
                 keys.Lit[note] = row.Color;
             }

@@ -35,4 +35,6 @@ public struct VoiceState
     public string Instrument;
     /// <summary>악기를 뱅크에서 찾았는지.</summary>
     public bool InstrumentFound;
+    /// <summary>드럼 채널인가 (MIDI: 채널 10, GS 드럼 파트 · XG / GM2 드럼 뱅크). 키(조옮김)를 더하지 않는다.</summary>
+    public bool Drum;
 }

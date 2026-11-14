@@ -47,6 +47,10 @@ public sealed class MidiSong
     public List<string> TrackNames { get; } = new List<string>();
     /// <summary>곡 안의 설명 글 (저작권 · 메모 · WRK 주석).</summary>
     public string Comment { get; set; } = "";
+    /// <summary>곡 안의 리셋 SysEx로 본 규격 (GM / GM2 / GS / XG / MT-32, 없으면 None). Finish에서 정한다.</summary>
+    public MidiStandard Standard { get; private set; }
+    /// <summary>뱅크 셀렉트(CC0 / CC32)를 0이 아닌 값으로 쓰는 채널이 있는가.</summary>
+    public bool UsesBankSelect { get; private set; }
     /// <summary>마지막 이벤트 틱.</summary>
     public int LengthTicks { get; private set; }
 
@@ -80,7 +84,9 @@ public sealed class MidiSong
         {
             if (e.IsNoteOn) ChannelUsed[e.Channel] = true;
             if (e.Kind == 0xC0 && FirstProgram[e.Channel] < 0) FirstProgram[e.Channel] = e.Data1;
+            if (e.Kind == 0xB0 && (e.Data1 == 0 || e.Data1 == 32) && e.Data2 != 0) UsesBankSelect = true;
         }
+        Standard = MidiSysEx.Detect(Events);
         // 템포 지도
         var ticks = new List<int> { 0 };
         var values = new List<int> { DefaultTempo };
@@ -211,9 +217,11 @@ public static class MidiFileFormat
                     int sl = ReadVar(d, ref q, end);
                     if (st == 0xF0 && sl > 0 && q + sl <= end)
                     {
-                        var sx = new byte[sl + 1];
+                        bool term = d[q + sl - 1] == 0xF7;
+                        var sx = new byte[sl + 1 + (term ? 0 : 1)];
                         sx[0] = 0xF0;
                         Array.Copy(d, q, sx, 1, sl);
+                        if (!term) sx[sx.Length - 1] = 0xF7;   // F7로 끝나지 않은 메시지 (F7 이어 보내기로 나눈 것은 첫 조각만)
                         s.Events.Add(new MidiEvent { Tick = tick, Status = 0xF0, SysEx = sx, Track = t });
                     }
                     q += sl;

@@ -8,12 +8,9 @@ namespace AdlibComposer.App;
 /// <summary>
 /// 프로그램 설정 (Preferences). 실행 파일과 같은 폴더의 FMOPLTool.cfg에 "키=값" 텍스트로 저장한다.
 /// 경로는 실행 폴더 기준 상대 경로로 저장해서 폴더째 옮겨도 그대로 동작한다.
+/// 곡 폴더는 미리 정하지 않는다: 왼쪽 목록에서 [폴더 열기]로 연 폴더(BrowserFolder)만 기억한다.
 /// <code>
-/// RolFolder=rol
-/// ImsFolder=ims
-/// SopFolder=sop
-/// TrackerFolder=trk
-/// MidiFolder=mid
+/// BrowserFolder=D:\Music\adlib
 /// BankFolder=resource
 /// DefaultBank=resource\STANDARD.BNK
 /// LoadDefaultBank=true
@@ -22,11 +19,6 @@ namespace AdlibComposer.App;
 internal sealed class AppSettings
 {
     public const string FileName = "FMOPLTool.cfg";
-    public const string DefaultSongFolder = "rol";
-    public const string DefaultImsFolder = "ims";
-    public const string DefaultSopFolder = "sop";
-    public const string DefaultTrackerFolder = "trk";
-    public const string DefaultMidiFolder = "mid";
     /// <summary>프로그램 리소스 폴더 (실행 폴더 아래): 기본 뱅크 STANDARD.BNK, MIDI FM용 GENMIDI.OP2, MT-32 ROM.</summary>
     public const string ResourceFolder = "resource";
     public const string DefaultBankFolder = ResourceFolder;
@@ -38,16 +30,8 @@ internal sealed class AppSettings
     public static string BaseDirectory { get { return AppContext.BaseDirectory; } }
     public static string FilePath { get { return Path.Combine(BaseDirectory, FileName); } }
 
-    /// <summary>ROL 곡 폴더. 저장 값(상대/절대).</summary>
-    public string SongFolder { get; set; } = DefaultSongFolder;
-    /// <summary>IMS 곡 폴더 (ROL과 따로). 저장 값(상대/절대).</summary>
-    public string ImsFolder { get; set; } = DefaultImsFolder;
-    /// <summary>SOP 곡 폴더 (OPL3, Jukebox 전용). 저장 값(상대/절대).</summary>
-    public string SopFolder { get; set; } = DefaultSopFolder;
-    /// <summary>Scream Tracker 곡 폴더 (S3M / STM). 저장 값(상대/절대).</summary>
-    public string TrackerFolder { get; set; } = DefaultTrackerFolder;
-    /// <summary>MIDI 곡 폴더 (.mid / .wrk, Jukebox). 저장 값(상대/절대).</summary>
-    public string MidiFolder { get; set; } = DefaultMidiFolder;
+    /// <summary>왼쪽 목록에서 마지막으로 연 곡 폴더 (다음 실행 때 다시 연다). 저장 값(상대/절대), 비면 없음.</summary>
+    public string BrowserFolder { get; set; } = "";
     /// <summary>MIDI를 Windows 신디사이저로 (false = OPL FM).</summary>
     public bool MidiWindowsSynth { get; set; }
     /// <summary>MIDI FM용 GM 뱅크 (GENMIDI.OP2 또는 BNK). 비우면 뱅크 폴더의 GENMIDI.OP2, 없으면 기본 뱅크를 이름으로 맞춤.</summary>
@@ -92,22 +76,11 @@ internal sealed class AppSettings
         return rel.StartsWith("..", StringComparison.Ordinal) || Path.IsPathRooted(rel) ? full : rel;
     }
 
-    public string SongFolderPath { get { return Resolve(SongFolder); } }
-    public string ImsFolderPath { get { return Resolve(ImsFolder); } }
-    public string SopFolderPath { get { return Resolve(SopFolder); } }
-    public string TrackerFolderPath { get { return Resolve(TrackerFolder); } }
-    public string MidiFolderPath { get { return Resolve(MidiFolder); } }
+    /// <summary>왼쪽 목록에서 연 곡 폴더 (없으면 null). 파일 대화상자 · Organizer · Tracker의 시작 폴더.</summary>
+    public string BrowserFolderPath { get { return string.IsNullOrWhiteSpace(BrowserFolder) ? null : Resolve(BrowserFolder); } }
     public string MidiBankPath { get { return string.IsNullOrWhiteSpace(MidiBank) ? null : Resolve(MidiBank); } }
     public string Mt32RomFolderPath { get { return Resolve(Mt32RomFolder); } }
 
-    /// <summary>곡 파일 형식(확장자)에 맞는 폴더: .ims → IMS 폴더, 나머지(.rol) → ROL 폴더.</summary>
-    public string FolderForSong(string pathOrExtension)
-    {
-        string ext = string.IsNullOrEmpty(pathOrExtension) ? "" : Path.GetExtension(pathOrExtension);
-        if (ext.Length == 0 && pathOrExtension != null && pathOrExtension.StartsWith(".")) ext = pathOrExtension;
-        if (string.Equals(ext, ".sop", StringComparison.OrdinalIgnoreCase)) return SopFolderPath;
-        return string.Equals(ext, ".ims", StringComparison.OrdinalIgnoreCase) ? ImsFolderPath : SongFolderPath;
-    }
     public string BankFolderPath { get { return Resolve(BankFolder); } }
     public string DefaultBankPath { get { return string.IsNullOrWhiteSpace(DefaultBank) ? null : Resolve(DefaultBank); } }
 
@@ -130,12 +103,7 @@ internal sealed class AppSettings
                     string key = line.Substring(0, eq).Trim(), value = line.Substring(eq + 1).Trim();
                     switch (key.ToLowerInvariant())
                     {
-                        case "songfolder":                       // 예전 이름
-                        case "rolfolder": s.SongFolder = value; break;
-                        case "imsfolder": s.ImsFolder = value; break;
-                        case "sopfolder": s.SopFolder = value; break;
-                        case "trackerfolder": s.TrackerFolder = value; break;
-                        case "midifolder": s.MidiFolder = value; break;
+                        case "browserfolder": s.BrowserFolder = value; break;
                         case "midisynth": s.MidiWindowsSynth = value.Equals("windows", StringComparison.OrdinalIgnoreCase); break;
                         case "midibank": s.MidiBank = value; break;
                         case "midimodule": s.MidiMt32 = value.Equals("mt32", StringComparison.OrdinalIgnoreCase); break;
@@ -177,12 +145,8 @@ internal sealed class AppSettings
         var sb = new StringBuilder();
         sb.AppendLine("; FMOPLTool / AdLib Composer settings");
         sb.AppendLine("; Paths are relative to this file's folder (the program folder) or absolute.");
-        sb.AppendLine("; RolFolder = ROL songs, ImsFolder = IMS songs, SopFolder = SOP songs (Jukebox), TrackerFolder = S3M/STM, BankFolder = BNK banks, DefaultBank = bank loaded at startup");
-        sb.AppendLine("RolFolder=" + SongFolder);
-        sb.AppendLine("ImsFolder=" + ImsFolder);
-        sb.AppendLine("SopFolder=" + SopFolder);
-        sb.AppendLine("TrackerFolder=" + TrackerFolder);
-        sb.AppendLine("MidiFolder=" + MidiFolder);
+        sb.AppendLine("; BrowserFolder = song folder last opened in the left list, BankFolder = BNK banks, DefaultBank = bank loaded at startup");
+        sb.AppendLine("BrowserFolder=" + BrowserFolder);
         sb.AppendLine("BankFolder=" + BankFolder);
         sb.AppendLine("DefaultBank=" + DefaultBank);
         sb.AppendLine("LoadDefaultBank=" + (LoadDefaultBank ? "true" : "false"));
@@ -202,10 +166,10 @@ internal sealed class AppSettings
         File.WriteAllText(FilePath, sb.ToString(), new UTF8Encoding(false));
     }
 
-    /// <summary>곡/뱅크 폴더가 없으면 만든다 (실패해도 프로그램은 계속).</summary>
+    /// <summary>뱅크 · MT-32 ROM 폴더가 없으면 만든다 (실패해도 프로그램은 계속).</summary>
     public void EnsureFolders()
     {
-        foreach (var dir in new[] { SongFolderPath, ImsFolderPath, SopFolderPath, TrackerFolderPath, MidiFolderPath, BankFolderPath, Mt32RomFolderPath })
+        foreach (var dir in new[] { BankFolderPath, Mt32RomFolderPath })
         {
             try { Directory.CreateDirectory(dir); }
             catch (Exception) { }

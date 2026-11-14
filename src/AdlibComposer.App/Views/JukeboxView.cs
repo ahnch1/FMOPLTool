@@ -88,7 +88,6 @@ internal sealed class JukeboxView : UserControl, IShellPage
         BuildDeck(deck);
 
         timer.Tick += delegate { Tick(); };
-        EnableDrop(this);
         VoiceColors.Changed += delegate
         {
             for (int i = 0; i < mixer.Rows.Count; i++) mixer.Rows[i].Color = ChannelColor(i);
@@ -116,52 +115,13 @@ internal sealed class JukeboxView : UserControl, IShellPage
         browser.MarkCurrent(currentPath);
     }
 
-    // ---------------------------------------------------------------- 끌어다 놓기
-
-    /// <summary>이 페이지와 안의 모든 컨트롤에 파일 끌어다 놓기를 켠다 (어디에 놓아도 재생).</summary>
-    private void EnableDrop(Control c)
+    /// <summary>끌어다 놓은 곡 파일만 재생한다 (다음 곡 목록 = 놓은 곡들, 하나면 그 곡만).</summary>
+    public void PlayFiles(List<string> files)
     {
-        c.AllowDrop = true;
-        c.DragEnter += OnDragEnter;
-        c.DragDrop += OnDragDrop;
-        foreach (Control child in c.Controls) EnableDrop(child);
-        c.ControlAdded += (s, e) => EnableDrop(e.Control);
-    }
-
-    private void OnDragEnter(object sender, DragEventArgs e)
-    {
-        e.Effect = DroppedSongs(e.Data).Count > 0 ? DragDropEffects.Copy : DragDropEffects.None;
-    }
-
-    /// <summary>놓은 곡을 재생한다. 여러 개(또는 폴더)면 그것들이 다음 곡 목록.</summary>
-    private void OnDragDrop(object sender, DragEventArgs e)
-    {
-        var songs = DroppedSongs(e.Data);
+        var songs = files.Where(CanPlay).ToList();
         if (songs.Count == 0) return;
-        AppLog.Info("Jukebox", "끌어다 놓기: " + songs.Count + "곡" + (songs.Count > 1 ? " (다음 곡 목록)" : ""));
         PlayFile(songs[0], false);
-        if (string.Equals(currentPath, songs[0], StringComparison.OrdinalIgnoreCase)) playlist = songs;   // 열었으면: 다음 곡 = 놓은 곡들
-    }
-
-    /// <summary>끌어 온 파일 중 재생할 수 있는 곡 (폴더면 그 안의 곡, 이름순).</summary>
-    private static List<string> DroppedSongs(IDataObject data)
-    {
-        var result = new List<string>();
-        if (data == null || !data.GetDataPresent(DataFormats.FileDrop)) return result;
-        var items = data.GetData(DataFormats.FileDrop) as string[];
-        if (items == null) return result;
-        foreach (var item in items)
-        {
-            try
-            {
-                if (Directory.Exists(item))
-                    result.AddRange(Directory.GetFiles(item).Where(CanPlay).OrderBy(f => Path.GetFileName(f), StringComparer.OrdinalIgnoreCase));
-                else if (File.Exists(item) && CanPlay(item))
-                    result.Add(Path.GetFullPath(item));
-            }
-            catch (Exception) { }
-        }
-        return result;
+        if (string.Equals(currentPath, Path.GetFullPath(songs[0]), StringComparison.OrdinalIgnoreCase)) playlist = songs;
     }
 
     /// <summary>공용 파일 목록에서 고른 곡을 재생한다 (다음 곡 목록 = 그 폴더).</summary>
@@ -1156,7 +1116,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
     /// <summary>Jukebox 키 (이 페이지 안 또는 왼쪽 공용 파일 목록에 포커스가 있을 때). 처리했으면 true.</summary>
     public bool HandleKey(Keys keyData)
     {
-        bool inTree = browser.TreeFocused;
+        bool inTree = false;
         switch (keyData)
         {
             case Keys.Space: TogglePlay(); return true;

@@ -12,9 +12,10 @@ namespace AdlibComposer.App.Shell;
 internal enum MusicFileKind { None, Adlib, Tracker, Midi, Audio }
 
 /// <summary>
-/// 왼쪽 공용 폴더 트리(위) + 곡 파일 목록(아래). 모든 페이지(Composer · Tracker · Jukebox · Note · Orgel Note · Transcribe)가 같이 쓴다.
-/// 두 번 클릭 / Enter = FileActivated (지금 페이지가 열거나, 그 형식을 여는 페이지로 간다).
-/// 목록: ROL · IMS · SOP · S3M · STM · MOD · NST · MID · WRK · MP3 · WAV …, 제목 = 곡 안 제목, 가사 = 같은 이름 .ISS, 뱅크 = 같은 이름 .BNK.
+/// 왼쪽 공용 폴더 / 곡 목록 (모든 페이지가 같이 쓴다).
+/// [폴더 열기]로 고른 폴더(= 뿌리)와 그 아래 폴더만 오간다: 목록 = (위 폴더 ..) · 하위 폴더 · 곡 파일.
+/// 폴더 두 번 클릭 = 들어가기, 곡 두 번 클릭 / Enter = FileActivated (지금 페이지가 열거나, 그 형식을 여는 페이지로).
+/// 곡이 많으면 세로 스크롤바 + 아래 ◀ ▶ 버튼으로 한 쪽(보이는 줄 수)씩 넘긴다. 연 폴더는 설정(BrowserFolder)에 남겨 다음에 다시 연다.
 /// </summary>
 [System.ComponentModel.DesignerCategory("Code")]
 internal sealed class FileBrowser : UserControl
@@ -24,15 +25,29 @@ internal sealed class FileBrowser : UserControl
     private static readonly string[] MidiExt = { ".mid", ".midi", ".wrk" };
     private static readonly string[] AudioExt = { ".mp3", ".wav", ".wma", ".m4a", ".aac", ".flac" };
 
+    /// <summary>목록 한 줄: 위 폴더(..) · 폴더 · 곡 파일.</summary>
+    private sealed class Entry
+    {
+        public string Path;
+        public bool IsDir, IsUp;
+    }
+
     private readonly Workspace ws;
     private readonly Func<AppSettings> settings;
-    private readonly TreeView tree = new TreeView();
     private readonly ListView list = new ListView();
-    private readonly Label folderLabel = new Label();
+    private readonly Label pathLabel = new Label();
+    private readonly Label emptyLabel = new Label();
+    private readonly Button openButton = new Button(), upButton = new Button();
+    private readonly Button prevPage = new Button(), nextPage = new Button();
+    private readonly Label pageLabel = new Label();
+    private readonly ImageList icons = new ImageList { ImageSize = new Size(16, 16), ColorDepth = ColorDepth.Depth32Bit };
     private readonly ToolTip tips = new ToolTip();
-    private string currentPath;
+    private readonly Timer pageTimer = new Timer { Interval = 200 };
+    private string root, current, currentPath;
+    private int songCount;
+    private int lastTop = -1;
 
-    /// <summary>목록의 파일을 두 번 클릭 / Enter.</summary>
+    /// <summary>목록의 곡을 두 번 클릭 / Enter.</summary>
     public event Action<string> FileActivated;
 
     public FileBrowser(Workspace ws, Func<AppSettings> settings)
@@ -41,30 +56,25 @@ internal sealed class FileBrowser : UserControl
         this.settings = settings;
         BackColor = Color.White;
 
-        var inner = new SplitContainer { Dock = DockStyle.Fill, Orientation = Orientation.Horizontal, SplitterWidth = 4, BackColor = Color.FromArgb(225, 228, 232) };
-        inner.Panel1.BackColor = Color.White;
-        inner.Panel2.BackColor = Color.White;
-        Controls.Add(inner);
-        // 처음 크기가 정해진 뒤 폴더 트리 40% / 파일 목록 60%
-        bool sized = false;
-        inner.SizeChanged += delegate
-        {
-            if (sized || inner.Height < 200) return;
-            sized = true;
-            try { inner.SplitterDistance = inner.Height * 2 / 5; } catch (Exception) { }
-        };
+        icons.Images.Add("dir", GlyphImages.Get(Glyphs.Folder, 16, Color.FromArgb(214, 160, 40)));
+        icons.Images.Add("up", GlyphImages.Get('', 16, ShellTheme.Muted));   // Up
+        icons.Images.Add("song", GlyphImages.Get(Glyphs.Composer, 16, ShellTheme.Accent));
 
-        tree.Dock = DockStyle.Fill;
-        tree.BorderStyle = BorderStyle.None;
-        tree.HideSelection = false;
-        tree.ShowLines = false;
-        tree.FullRowSelect = true;
-        tree.ItemHeight = 22;
-        tree.Font = ShellTheme.Ui;
-        tree.BeforeExpand += (s, e) => FillChildren(e.Node);
-        tree.AfterSelect += (s, e) => ShowFolder(e.Node.Tag as string);
-        inner.Panel1.Controls.Add(tree);
-        inner.Panel1.Controls.Add(SectionHeader("폴더"));
+        // 위: [폴더 열기] [위로]
+        var bar = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 36, Padding = new Padding(6, 5, 6, 0), BackColor = Color.FromArgb(246, 247, 249), WrapContents = false };
+        SetupButton(openButton, " 폴더 열기", Glyphs.Open, 104, "곡 폴더 열기 (폴더를 끌어다 놓아도 된다) — 그 폴더와 아래 폴더만 오간다");
+        SetupButton(upButton, " 위로", '', 64, "위 폴더로 (연 폴더 위로는 가지 않는다) · Backspace");
+        openButton.Click += delegate { BrowseFolder(); };
+        upButton.Click += delegate { GoUp(); };
+        bar.Controls.Add(openButton);
+        bar.Controls.Add(upButton);
+
+        pathLabel.Dock = DockStyle.Top;
+        pathLabel.Height = 24;
+        pathLabel.Font = ShellTheme.Ui;
+        pathLabel.ForeColor = ShellTheme.Muted;
+        pathLabel.AutoEllipsis = true;
+        pathLabel.Padding = new Padding(8, 4, 4, 0);
 
         list.Dock = DockStyle.Fill;
         list.BorderStyle = BorderStyle.None;
@@ -75,22 +85,76 @@ internal sealed class FileBrowser : UserControl
         list.HeaderStyle = ColumnHeaderStyle.Nonclickable;
         list.Font = ShellTheme.Ui;
         list.ShowItemToolTips = true;
-        list.Columns.Add("파일", 105);
+        list.SmallImageList = icons;
+        list.Scrollable = true;   // 세로 스크롤바
+        list.Columns.Add("이름", 108);
         list.Columns.Add("제목", 75);
         list.Columns.Add("형식", 40);
         list.Columns.Add("가사", 30, HorizontalAlignment.Center);
         list.Columns.Add("뱅크", 30, HorizontalAlignment.Center);
-        list.ItemActivate += delegate { if (list.SelectedItems.Count > 0 && FileActivated != null) FileActivated(list.SelectedItems[0].Tag as string); };
-        tips.SetToolTip(list, "두 번 클릭 또는 Enter: 지금 페이지에서 열기 (그 페이지가 못 여는 형식이면 여는 페이지로)\n제목 = 곡 안의 제목 · 가사 = 같은 이름 .ISS · 뱅크 = 같은 이름 .BNK");
-        inner.Panel2.Controls.Add(list);
-        folderLabel.Dock = DockStyle.Top;
-        folderLabel.Height = 22;
-        folderLabel.Font = ShellTheme.Ui;
-        folderLabel.ForeColor = ShellTheme.Muted;
-        folderLabel.AutoEllipsis = true;
-        folderLabel.Padding = new Padding(8, 3, 4, 0);
-        inner.Panel2.Controls.Add(folderLabel);
-        inner.Panel2.Controls.Add(SectionHeader("곡 파일"));
+        list.ItemActivate += delegate { ActivateSelected(); };
+        list.KeyDown += (s, e) => { if (e.KeyCode == Keys.Back) { GoUp(); e.Handled = true; } };
+        list.Resize += delegate { UpdatePager(); };
+        tips.SetToolTip(list, "폴더 두 번 클릭: 들어가기 · 곡 두 번 클릭 / Enter: 지금 페이지에서 열기 (못 여는 형식이면 그 형식을 여는 페이지로)\n제목 = 곡 안의 제목 · 가사 = 같은 이름 .ISS · 뱅크 = 같은 이름 .BNK");
+
+        emptyLabel.Dock = DockStyle.Fill;
+        emptyLabel.Font = ShellTheme.Ui;
+        emptyLabel.ForeColor = ShellTheme.Muted;
+        emptyLabel.TextAlign = ContentAlignment.MiddleCenter;
+        emptyLabel.Text = "[폴더 열기]로 곡 폴더를 고르거나\n폴더를 여기에 끌어다 놓으세요";
+
+        // 아래: ◀ n / m 쪽 ▶
+        var pager = new TableLayoutPanel { Dock = DockStyle.Bottom, Height = 32, ColumnCount = 3, Padding = new Padding(6, 3, 6, 3), BackColor = Color.FromArgb(246, 247, 249) };
+        pager.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 44));
+        pager.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        pager.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 44));
+        SetupButton(prevPage, "", '', 40, "앞 쪽 (한 화면 위로)");
+        SetupButton(nextPage, "", '', 40, "다음 쪽 (한 화면 아래로)");
+        prevPage.Dock = nextPage.Dock = DockStyle.Fill;
+        prevPage.Margin = nextPage.Margin = new Padding(0);
+        prevPage.Click += delegate { TurnPage(-1); };
+        nextPage.Click += delegate { TurnPage(1); };
+        pageLabel.Dock = DockStyle.Fill;
+        pageLabel.Font = ShellTheme.Ui;
+        pageLabel.ForeColor = ShellTheme.Muted;
+        pageLabel.TextAlign = ContentAlignment.MiddleCenter;
+        pager.Controls.Add(prevPage, 0, 0);
+        pager.Controls.Add(pageLabel, 1, 0);
+        pager.Controls.Add(nextPage, 2, 0);
+
+        Controls.Add(list);
+        Controls.Add(emptyLabel);
+        Controls.Add(pager);
+        Controls.Add(pathLabel);
+        Controls.Add(bar);
+
+        // 스크롤바를 끌어도 쪽 번호가 맞도록 (ListView에는 Scroll 이벤트가 없다)
+        pageTimer.Tick += delegate
+        {
+            int top = list.Items.Count > 0 && list.TopItem != null ? list.TopItem.Index : -1;
+            if (top != lastTop) UpdatePager();
+        };
+        pageTimer.Start();
+        ShowEmpty();
+    }
+
+    private void SetupButton(Button b, string text, char glyph, int width, string tip)
+    {
+        b.Text = text;
+        b.Image = GlyphImages.Get(glyph, 16, Color.FromArgb(50, 54, 62));
+        b.ImageAlign = string.IsNullOrEmpty(text) ? ContentAlignment.MiddleCenter : ContentAlignment.MiddleLeft;
+        b.TextImageRelation = string.IsNullOrEmpty(text) ? TextImageRelation.Overlay : TextImageRelation.ImageBeforeText;
+        b.Font = ShellTheme.Ui;
+        b.FlatStyle = FlatStyle.Flat;
+        b.FlatAppearance.BorderColor = Color.FromArgb(214, 218, 224);
+        b.FlatAppearance.MouseOverBackColor = Color.FromArgb(236, 239, 242);
+        b.BackColor = Color.White;
+        b.Width = width;
+        b.Height = 26;
+        b.Margin = new Padding(0, 0, 4, 0);
+        b.Cursor = Cursors.Hand;
+        b.TabStop = false;
+        tips.SetToolTip(b, tip);
     }
 
     public static MusicFileKind KindOf(string path)
@@ -103,45 +167,57 @@ internal sealed class FileBrowser : UserControl
         return MusicFileKind.None;
     }
 
-    private static Control SectionHeader(string text)
-    {
-        return new Label
-        {
-            Text = text.ToUpperInvariant(), Dock = DockStyle.Top, Height = 26, Font = ShellTheme.Section,
-            ForeColor = ShellTheme.Muted, BackColor = Color.FromArgb(246, 247, 249), Padding = new Padding(8, 7, 0, 0),
-        };
-    }
-
     // ---------------------------------------------------------------- 공개
 
-    /// <summary>지금 목록의 파일 경로 (보이는 순서).</summary>
+    /// <summary>지금 보이는 폴더의 곡 경로 (보이는 순서, 폴더 빼고).</summary>
     public List<string> Paths
     {
         get
         {
             var l = new List<string>();
-            foreach (ListViewItem it in list.Items) l.Add((string)it.Tag);
+            foreach (ListViewItem it in list.Items) { var e = (Entry)it.Tag; if (!e.IsDir) l.Add(e.Path); }
             return l;
         }
     }
 
-    /// <summary>목록에서 고른 파일 (없으면 null).</summary>
-    public string SelectedPath { get { return list.SelectedItems.Count > 0 ? list.SelectedItems[0].Tag as string : null; } }
+    /// <summary>목록에서 고른 곡 (폴더면 null).</summary>
+    public string SelectedPath
+    {
+        get
+        {
+            if (list.SelectedItems.Count == 0) return null;
+            var e = (Entry)list.SelectedItems[0].Tag;
+            return e.IsDir ? null : e.Path;
+        }
+    }
 
-    public bool TreeFocused { get { return tree.Focused; } }
+    /// <summary>지금 보이는 폴더 (연 폴더가 없으면 null). 파일 대화상자 시작 폴더 등.</summary>
+    public string CurrentFolder { get { return current; } }
+
     public bool ListFocused { get { return list.Focused; } }
     public void FocusList() { list.Focus(); }
 
-    /// <summary>처음 보일 때 한 번 트리를 만든다.</summary>
-    public void EnsureTree()
+    /// <summary>시작할 때: 지난번에 연 폴더를 다시 연다 (없으면 빈 목록).</summary>
+    public void RestoreLastFolder()
     {
-        if (tree.Nodes.Count == 0) BuildTree();
+        string p = settings().BrowserFolderPath;
+        if (p != null && Directory.Exists(p)) OpenFolder(p, false);
     }
 
-    /// <summary>설정(폴더)이 바뀌면 트리를 다시 만든다.</summary>
-    public void SettingsChanged()
+    /// <summary>폴더를 연다 (이 폴더가 뿌리: 이 아래만 오간다). 열기 버튼 · 폴더 끌어다 놓기.</summary>
+    public void OpenFolder(string dir, bool remember = true)
     {
-        if (tree.Nodes.Count > 0) BuildTree();
+        try { dir = Path.GetFullPath(dir); } catch (Exception) { }
+        if (!Directory.Exists(dir)) return;
+        root = dir.TrimEnd('\\', '/');
+        if (root.Length == 2 && root[1] == ':') root += "\\";   // 드라이브 뿌리
+        ShowFolder(root);
+        if (remember)
+        {
+            AppLog.Info("파일", "폴더 열기: " + root);
+            try { var s = settings(); s.BrowserFolder = AppSettings.ToStored(root); s.Save(); }
+            catch (Exception ex) { AppLog.Warn("파일", "설정에 폴더를 남기지 못했습니다", ex.Message); }
+        }
     }
 
     /// <summary>지금 연(재생 중인) 파일을 굵게 표시하고 고른다.</summary>
@@ -150,117 +226,150 @@ internal sealed class FileBrowser : UserControl
         currentPath = path;
         foreach (ListViewItem it in list.Items)
         {
-            bool cur = string.Equals((string)it.Tag, currentPath, StringComparison.OrdinalIgnoreCase);
+            var e = (Entry)it.Tag;
+            bool cur = !e.IsDir && string.Equals(e.Path, currentPath, StringComparison.OrdinalIgnoreCase);
             it.Font = cur ? new Font(list.Font, FontStyle.Bold) : list.Font;
             if (cur) { it.Selected = true; it.Focused = true; it.EnsureVisible(); }
         }
     }
 
-    // ---------------------------------------------------------------- 트리
+    // ---------------------------------------------------------------- 폴더 오가기
 
-    /// <summary>트리 뿌리: ROL · IMS · SOP · 트래커 · MIDI 폴더, 내 음악, 드라이브.</summary>
-    private void BuildTree()
+    private void BrowseFolder()
     {
-        tree.BeginUpdate();
-        tree.Nodes.Clear();
-        var s = settings();
-        AddRoot("ROL 폴더", s.SongFolderPath);
-        AddRoot("IMS 폴더", s.ImsFolderPath);
-        AddRoot("SOP 폴더", s.SopFolderPath);
-        AddRoot("S3M · STM · MOD 폴더", s.TrackerFolderPath);
-        AddRoot("MIDI · WRK 폴더", s.MidiFolderPath);
-        string music = null;
-        try { music = Environment.GetFolderPath(Environment.SpecialFolder.MyMusic); } catch (Exception) { }
-        if (!string.IsNullOrEmpty(music) && Directory.Exists(music)) AddRoot("내 음악", music);
-        var pc = new TreeNode("내 PC");
-        try
+        using (var dlg = new FolderBrowserDialog { Description = "곡 폴더 (이 폴더와 아래 폴더를 왼쪽 목록에서 오간다)", UseDescriptionForTitle = true, ShowNewFolderButton = false })
         {
-            foreach (var d in DriveInfo.GetDrives())
-            {
-                if (!d.IsReady) continue;
-                string label = d.Name.TrimEnd('\\');
-                try { if (!string.IsNullOrEmpty(d.VolumeLabel)) label = d.VolumeLabel + " (" + label + ")"; } catch (Exception) { }
-                pc.Nodes.Add(FolderNode(label, d.RootDirectory.FullName));
-            }
+            if (current != null && Directory.Exists(current)) dlg.SelectedPath = current;
+            if (dlg.ShowDialog(FindForm()) == DialogResult.OK) OpenFolder(dlg.SelectedPath);
         }
-        catch (Exception) { }
-        tree.Nodes.Add(pc);
-        pc.Expand();
-        tree.EndUpdate();
-        if (tree.Nodes.Count > 0 && tree.SelectedNode == null) tree.SelectedNode = tree.Nodes[0];
     }
 
-    private void AddRoot(string label, string path)
+    private bool AtRoot { get { return current == null || string.Equals(current.TrimEnd('\\'), root.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase); } }
+
+    private void GoUp()
     {
-        if (string.IsNullOrEmpty(path)) return;
-        var n = FolderNode(label + "  ·  " + Path.GetFileName(path.TrimEnd('\\', '/')), path);
-        n.NodeFont = new Font(ShellTheme.Ui, FontStyle.Bold);
-        tree.Nodes.Add(n);
+        if (AtRoot) return;
+        string from = current;
+        string parent = Path.GetDirectoryName(current.TrimEnd('\\'));
+        if (parent == null) return;
+        ShowFolder(parent);
+        // 나온 폴더를 고른다
+        foreach (ListViewItem it in list.Items)
+            if (string.Equals(((Entry)it.Tag).Path, from, StringComparison.OrdinalIgnoreCase)) { it.Selected = true; it.Focused = true; it.EnsureVisible(); break; }
     }
 
-    private static TreeNode FolderNode(string text, string path)
+    private void ActivateSelected()
     {
-        var n = new TreeNode(text) { Tag = path, ToolTipText = path };
-        if (HasSubdirectories(path)) n.Nodes.Add(new TreeNode("…"));
-        return n;
+        if (list.SelectedItems.Count == 0) return;
+        var e = (Entry)list.SelectedItems[0].Tag;
+        if (e.IsUp) GoUp();
+        else if (e.IsDir) ShowFolder(e.Path);
+        else if (FileActivated != null) FileActivated(e.Path);
     }
 
-    private static bool HasSubdirectories(string path)
+    private void ShowEmpty()
     {
-        try { return Directory.Exists(path) && Directory.EnumerateDirectories(path).Any(); }
-        catch (Exception) { return false; }
+        list.Items.Clear();
+        list.Visible = false;
+        emptyLabel.Visible = true;
+        pathLabel.Text = "열린 폴더 없음";
+        upButton.Enabled = false;
+        songCount = 0;
+        UpdatePager();
     }
 
-    private void FillChildren(TreeNode node)
-    {
-        string path = node.Tag as string;
-        if (path == null || node.Nodes.Count != 1 || node.Nodes[0].Tag != null) return;
-        node.Nodes.Clear();
-        try
-        {
-            foreach (var d in Directory.GetDirectories(path).OrderBy(x => x, StringComparer.OrdinalIgnoreCase))
-            {
-                var info = new DirectoryInfo(d);
-                if ((info.Attributes & (FileAttributes.Hidden | FileAttributes.System)) != 0) continue;
-                node.Nodes.Add(FolderNode(info.Name, d));
-            }
-        }
-        catch (Exception) { }
-    }
-
-    // ---------------------------------------------------------------- 파일 목록
-
+    /// <summary>폴더 하나를 목록으로: (..) · 하위 폴더 · 곡 파일 (이름순).</summary>
     private void ShowFolder(string dir)
     {
+        current = dir;
+        list.Visible = true;
+        emptyLabel.Visible = false;
         list.BeginUpdate();
         list.Items.Clear();
-        folderLabel.Text = dir ?? "";
-        try { if (dir != null) dir = Path.GetFullPath(dir); } catch (Exception) { }
-        if (dir != null && Directory.Exists(dir))
+        songCount = 0;
+        if (!AtRoot)
+            list.Items.Add(new ListViewItem("..", "up") { Tag = new Entry { Path = Path.GetDirectoryName(dir.TrimEnd('\\')), IsDir = true, IsUp = true }, ToolTipText = "위 폴더로", ForeColor = ShellTheme.Muted });
+        try
         {
-            try
+            foreach (var d in Directory.GetDirectories(dir).OrderBy(x => Path.GetFileName(x), StringComparer.OrdinalIgnoreCase))
             {
-                var files = Directory.GetFiles(dir);
-                var names = new HashSet<string>(files.Select(f => Path.GetFileName(f).ToUpperInvariant()));
-                foreach (var f in files.OrderBy(x => Path.GetFileName(x), StringComparer.OrdinalIgnoreCase))
-                {
-                    if (KindOf(f) == MusicFileKind.None) continue;
-                    string ext = Path.GetExtension(f).ToLowerInvariant();
-                    string stem = Path.GetFileNameWithoutExtension(f).ToUpperInvariant();
-                    var it = new ListViewItem(Path.GetFileName(f)) { Tag = f, ToolTipText = f };
-                    it.SubItems.Add(CachedTitle(f) ?? "");
-                    it.SubItems.Add(ext.TrimStart('.').ToUpperInvariant());
-                    it.SubItems.Add(names.Contains(stem + ".ISS") ? "●" : "");
-                    it.SubItems.Add(names.Contains(stem + ".BNK") ? "●" : "");
-                    if (string.Equals(f, currentPath, StringComparison.OrdinalIgnoreCase)) it.Font = new Font(list.Font, FontStyle.Bold);
-                    list.Items.Add(it);
-                }
+                FileAttributes a;
+                try { a = File.GetAttributes(d); } catch (Exception) { continue; }
+                if ((a & (FileAttributes.Hidden | FileAttributes.System)) != 0) continue;
+                var it = new ListViewItem(Path.GetFileName(d), "dir") { Tag = new Entry { Path = d, IsDir = true }, ToolTipText = d };
+                it.SubItems.Add("");
+                it.SubItems.Add("폴더");
+                list.Items.Add(it);
             }
-            catch (Exception ex) { AppLog.Warn("파일", "폴더를 읽을 수 없습니다: " + dir, ex.Message); }
+            var files = Directory.GetFiles(dir);
+            var names = new HashSet<string>(files.Select(f => Path.GetFileName(f).ToUpperInvariant()));
+            foreach (var f in files.OrderBy(x => Path.GetFileName(x), StringComparer.OrdinalIgnoreCase))
+            {
+                if (KindOf(f) == MusicFileKind.None) continue;
+                string stem = Path.GetFileNameWithoutExtension(f).ToUpperInvariant();
+                var it = new ListViewItem(Path.GetFileName(f), "song") { Tag = new Entry { Path = f }, ToolTipText = f };
+                it.SubItems.Add(CachedTitle(f) ?? "");
+                it.SubItems.Add(Path.GetExtension(f).TrimStart('.').ToUpperInvariant());
+                it.SubItems.Add(names.Contains(stem + ".ISS") ? "●" : "");
+                it.SubItems.Add(names.Contains(stem + ".BNK") ? "●" : "");
+                if (string.Equals(f, currentPath, StringComparison.OrdinalIgnoreCase)) it.Font = new Font(list.Font, FontStyle.Bold);
+                list.Items.Add(it);
+                songCount++;
+            }
         }
+        catch (Exception ex) { AppLog.Warn("파일", "폴더를 읽을 수 없습니다: " + dir, ex.Message); }
         list.EndUpdate();
-        folderLabel.Text = (dir ?? "") + "   (" + list.Items.Count + "곡)";
+        upButton.Enabled = !AtRoot;
+        // 경로: 연 폴더 이름 › 아래 폴더 …
+        string rel = AtRoot ? "" : Path.GetRelativePath(root, dir);
+        string rootName = Path.GetFileName(root.TrimEnd('\\'));
+        pathLabel.Text = (rootName.Length > 0 ? rootName : root) + (rel.Length > 0 ? " › " + rel.Replace("\\", " › ") : "");
+        tips.SetToolTip(pathLabel, dir);
+        if (list.Items.Count > 0) list.Items[0].Focused = true;
+        lastTop = -1;
+        UpdatePager();
         LoadTitles();
+    }
+
+    // ---------------------------------------------------------------- 쪽 넘기기
+
+    /// <summary>한 쪽 = 지금 목록에 보이는 줄 수.</summary>
+    private int PageSize
+    {
+        get
+        {
+            if (list.Items.Count == 0) return 1;
+            int rowH = Math.Max(1, list.GetItemRect(0).Height);
+            int header = list.TopItem != null ? list.GetItemRect(list.TopItem.Index).Top : rowH;
+            return Math.Max(1, (list.ClientSize.Height - Math.Max(0, header)) / rowH);
+        }
+    }
+
+    private void TurnPage(int dir)
+    {
+        if (list.Items.Count == 0) return;
+        int size = PageSize;
+        int top = list.TopItem != null ? list.TopItem.Index : 0;
+        int target = Math.Max(0, Math.Min(list.Items.Count - 1, top + dir * size));
+        // 아래로: 그 쪽의 마지막 줄을 먼저 보이게 한 뒤 맨 위를 맞춘다 (TopItem만으로는 안 움직일 때가 있다)
+        if (dir > 0) list.EnsureVisible(Math.Min(list.Items.Count - 1, target + size - 1));
+        list.EnsureVisible(target);
+        try { list.TopItem = list.Items[target]; } catch (Exception) { }
+        UpdatePager();
+    }
+
+    private void UpdatePager()
+    {
+        int n = list.Items.Count;
+        int size = PageSize;
+        int pages = Math.Max(1, (n + size - 1) / size);
+        int top = n > 0 && list.TopItem != null ? list.TopItem.Index : 0;
+        lastTop = n > 0 && list.TopItem != null ? top : -1;
+        int page = Math.Min(pages, top / size + 1);
+        if (top + size >= n) page = pages;   // 맨 아래까지 내려왔으면 마지막 쪽
+        pageLabel.Text = current == null ? "" : page + " / " + pages + " 쪽 · " + songCount + "곡";
+        prevPage.Enabled = n > 0 && top > 0;
+        nextPage.Enabled = n > 0 && top + size < n;
     }
 
     // ---------------------------------------------------------------- 목록의 곡 제목 (뒤에서 읽기)
@@ -286,7 +395,10 @@ internal sealed class FileBrowser : UserControl
         int gen = ++titleGeneration;
         var todo = new List<string>();
         foreach (ListViewItem it in list.Items)
-            if (KindOf((string)it.Tag) != MusicFileKind.Audio && CachedTitle((string)it.Tag) == null) todo.Add((string)it.Tag);
+        {
+            var e = (Entry)it.Tag;
+            if (!e.IsDir && KindOf(e.Path) != MusicFileKind.Audio && CachedTitle(e.Path) == null) todo.Add(e.Path);
+        }
         if (todo.Count == 0) return;
         System.Threading.Tasks.Task.Run(() =>
         {
@@ -311,7 +423,10 @@ internal sealed class FileBrowser : UserControl
         if (gen != titleGeneration) return;
         list.BeginUpdate();
         foreach (ListViewItem it in list.Items)
-            if (titles.TryGetValue((string)it.Tag, out var t)) it.SubItems[1].Text = t;
+        {
+            var e = (Entry)it.Tag;
+            if (!e.IsDir && titles.TryGetValue(e.Path, out var t)) it.SubItems[1].Text = t;
+        }
         list.EndUpdate();
     }
 
@@ -340,7 +455,7 @@ internal sealed class FileBrowser : UserControl
 
     protected override void Dispose(bool disposing)
     {
-        if (disposing) tips.Dispose();
+        if (disposing) { tips.Dispose(); pageTimer.Dispose(); icons.Dispose(); }
         base.Dispose(disposing);
     }
 }

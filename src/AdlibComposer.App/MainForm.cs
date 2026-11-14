@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
+using System.Linq;
 using System.Windows.Forms;
 using AdlibComposer.App.Controls;
 using AdlibComposer.App.Shell;
@@ -93,11 +94,11 @@ internal sealed class MainForm : Form
         browser = new FileBrowser(ws, delegate { return settings; }) { Dock = DockStyle.Left, Width = 300 };
         browser.FileActivated += OpenFromBrowser;
         jukebox = new JukeboxView(ws, delegate { return settings; }, TryOpenAudio, browser) { Dock = DockStyle.Fill, Visible = false };
-        note = new NoteView(ws, TryOpenAudio, delegate { return settings.FolderForSong(ws.Song.FilePath); }) { Dock = DockStyle.Fill, Visible = false };
+        note = new NoteView(ws, TryOpenAudio, delegate { return SongFolder(); }) { Dock = DockStyle.Fill, Visible = false };
         trackerView = new TrackerView(ws, delegate { return settings; }, TryOpenAudio) { Dock = DockStyle.Fill, Visible = false };
         organizer = new OrganizerView(delegate { return settings; }) { Dock = DockStyle.Fill, Visible = false };
         transcribe = new TranscribeView(ws, TryOpenAudio, SendTranscribedSong) { Dock = DockStyle.Fill, Visible = false };
-        orgel = new OrgelView(ws, TryOpenAudio, delegate { return settings.FolderForSong(ws.Song.FilePath); }) { Dock = DockStyle.Fill, Visible = false };
+        orgel = new OrgelView(ws, TryOpenAudio, delegate { return SongFolder(); }) { Dock = DockStyle.Fill, Visible = false };
         note.NoteActivated += delegate (int voice, int tick, int pitch) { ShowPage(AppPage.Composer); composer.GoTo(voice, tick, pitch); };
 
         BuildMenu();
@@ -121,7 +122,8 @@ internal sealed class MainForm : Form
         timer.Tick += OnTimer;
         timer.Start();
 
-        Shown += delegate { browser.EnsureTree(); TryOpenAudio(); composer.Focus(); };
+        Shown += delegate { browser.RestoreLastFolder(); TryOpenAudio(); composer.Focus(); };
+        EnableDrop(this);
         FormClosing += OnClosing;
         FormClosed += delegate { timer.Stop(); ws.Dispose(); };
 
@@ -352,7 +354,6 @@ internal sealed class MainForm : Form
             ApplyOplCore();
             VoiceColors.Set(settings.VoiceColors);   // Composer · Note · Jukebox가 Changed로 다시 그린다
             jukebox.SettingsChanged();
-            browser.SettingsChanged();
             if (f.LoadBankNow && settings.DefaultBankPath != null && File.Exists(settings.DefaultBankPath) && ConfirmDiscardBank())
             {
                 try { StopPlayback(); ws.OpenBank(settings.DefaultBankPath); LogBank("기본 뱅크"); }
@@ -364,22 +365,89 @@ internal sealed class MainForm : Form
         }
     }
 
-    /// <summary>곡 대화상자 왼쪽 목록에 ROL / IMS 폴더 바로가기를 넣는다.</summary>
+    /// <summary>곡 대화상자 왼쪽 목록에 왼쪽 목록에서 연 폴더 바로가기를 넣는다.</summary>
     private void AddSongPlaces(FileDialog dlg)
     {
-        foreach (var dir in new[] { settings.SongFolderPath, settings.ImsFolderPath, settings.SopFolderPath })
-            if (Directory.Exists(dir)) dlg.CustomPlaces.Add(dir);
+        string dir = browser.CurrentFolder ?? settings.BrowserFolderPath;
+        if (dir != null && Directory.Exists(dir)) dlg.CustomPlaces.Add(dir);
     }
 
-    /// <summary>파일 대화상자 시작 폴더: 지금 파일이 있는 폴더, 없으면 설정 폴더.</summary>
-    private static string StartDir(string currentFile, string settingFolder)
+    /// <summary>내보내기 · 저장 시작 폴더: 지금 곡이 있는 폴더, 없으면 왼쪽 목록의 폴더.</summary>
+    private string SongFolder()
+    {
+        string f = ws.Song.FilePath;
+        if (!string.IsNullOrEmpty(f))
+        {
+            string d = Path.GetDirectoryName(f);
+            if (Directory.Exists(d)) return d;
+        }
+        return browser.CurrentFolder ?? settings.BrowserFolderPath;
+    }
+
+    /// <summary>파일 대화상자 시작 폴더: 지금 파일이 있는 폴더, 없으면 왼쪽 목록의 폴더.</summary>
+    private string StartDir(string currentFile)
+    {
+        return StartDir(currentFile, browser.CurrentFolder ?? settings.BrowserFolderPath);
+    }
+
+    /// <summary>지금 파일이 있는 폴더, 없으면 fallback 폴더 (뱅크 대화상자 = 뱅크 폴더).</summary>
+    private static string StartDir(string currentFile, string fallback)
     {
         if (!string.IsNullOrEmpty(currentFile))
         {
             string d = Path.GetDirectoryName(currentFile);
             if (Directory.Exists(d)) return d;
         }
-        return AppSettings.ExistingOrNull(settingFolder);
+        return AppSettings.ExistingOrNull(fallback);
+    }
+
+    // ---------------------------------------------------------------- 끌어다 놓기 (창 어디든)
+
+    /// <summary>창과 안의 모든 컨트롤에 끌어다 놓기를 켠다.</summary>
+    private void EnableDrop(Control c)
+    {
+        c.AllowDrop = true;
+        c.DragEnter += OnDragEnter;
+        c.DragDrop += OnDragDrop;
+        foreach (Control child in c.Controls) EnableDrop(child);
+        c.ControlAdded += (s, e) => EnableDrop(e.Control);
+    }
+
+    private static string[] DroppedItems(IDataObject data)
+    {
+        if (data == null || !data.GetDataPresent(DataFormats.FileDrop)) return new string[0];
+        return data.GetData(DataFormats.FileDrop) as string[] ?? new string[0];
+    }
+
+    private void OnDragEnter(object sender, DragEventArgs e)
+    {
+        bool ok = false;
+        foreach (var item in DroppedItems(e.Data))
+            if (Directory.Exists(item) || (File.Exists(item) && FileBrowser.KindOf(item) != MusicFileKind.None)) { ok = true; break; }
+        e.Effect = ok ? DragDropEffects.Copy : DragDropEffects.None;
+    }
+
+    /// <summary>
+    /// 폴더를 놓으면 = [폴더 열기]와 같다 (왼쪽 목록). 곡 파일을 놓으면 = 그 파일만 연다:
+    /// Composer · Note · Orgel Note는 작업 곡으로, Jukebox는 그 곡만 재생 (여러 곡이면 그것들이 다음 곡 목록), 다른 형식은 여는 페이지로.
+    /// </summary>
+    private void OnDragDrop(object sender, DragEventArgs e)
+    {
+        var items = DroppedItems(e.Data);
+        string dir = items.FirstOrDefault(Directory.Exists);
+        if (dir != null) { browser.OpenFolder(dir); return; }
+        var files = items.Where(f => File.Exists(f) && FileBrowser.KindOf(f) != MusicFileKind.None).Select(Path.GetFullPath).ToList();
+        if (files.Count == 0) return;
+        AppLog.Info("파일", "끌어다 놓기: " + Path.GetFileName(files[0]) + (files.Count > 1 ? " 외 " + (files.Count - 1) + "개" : ""));
+        BeginInvoke((Action)(() => OpenDropped(files)));   // 끌기 작업이 끝난 뒤 (대화상자를 띄울 수 있게)
+    }
+
+    private void OpenDropped(List<string> files)
+    {
+        Activate();
+        if (page == AppPage.Jukebox && files.Any(JukeboxView.CanPlay)) { jukebox.PlayFiles(files); return; }
+        if (FileBrowser.KindOf(files[0]) == MusicFileKind.Midi) { ShowPage(AppPage.Jukebox); jukebox.PlayFiles(files); return; }
+        OpenFromBrowser(files[0], true);
     }
 
     // ================================================================ 메뉴
@@ -996,10 +1064,13 @@ internal sealed class MainForm : Form
     /// ROL · IMS · SOP = Composer / Note / Orgel Note (작업 곡), S3M · STM · MOD · NST = Tracker, MID · WRK = Jukebox, MP3 · WAV … = Transcribe.
     /// Jukebox는 MP3 · WAV 말고 모두 재생한다.
     /// </summary>
-    private void OpenFromBrowser(string path)
+    private void OpenFromBrowser(string path) { OpenFromBrowser(path, false); }
+
+    /// <param name="single">끌어다 놓은 파일: Jukebox 다음 곡 목록 = 그 곡만 (왼쪽 목록의 폴더가 아니라).</param>
+    private void OpenFromBrowser(string path, bool single)
     {
         if (string.IsNullOrEmpty(path) || !File.Exists(path)) return;
-        if (page == AppPage.Jukebox && JukeboxView.CanPlay(path)) { jukebox.Play(path); return; }
+        if (page == AppPage.Jukebox && JukeboxView.CanPlay(path)) { if (single) jukebox.PlayFiles(new List<string> { path }); else jukebox.Play(path); return; }
         switch (FileBrowser.KindOf(path))
         {
             case MusicFileKind.Adlib:
@@ -1019,7 +1090,7 @@ internal sealed class MainForm : Form
                 break;
             case MusicFileKind.Midi:
                 ShowPage(AppPage.Jukebox);
-                jukebox.Play(path);
+                if (single) jukebox.PlayFiles(new List<string> { path }); else jukebox.Play(path);
                 break;
             case MusicFileKind.Audio:
                 ShowPage(AppPage.Transcribe);
@@ -1035,7 +1106,7 @@ internal sealed class MainForm : Form
         var readable = new List<ISongFormat>();
         foreach (var f in ws.Formats.Songs) if (f.CanRead) readable.Add(f);
         var openFormats = new List<IFileFormat>(readable) { SopFormat.FileInfo };
-        using (var dlg = new OpenFileDialog { Filter = FormatRegistry.BuildFilter(openFormats), Title = "Open song", InitialDirectory = StartDir(ws.Song.FilePath, settings.FolderForSong(ws.Song.FilePath)) })
+        using (var dlg = new OpenFileDialog { Filter = FormatRegistry.BuildFilter(openFormats), Title = "Open song", InitialDirectory = StartDir(ws.Song.FilePath) })
         {
             AddSongPlaces(dlg);
             if (dlg.ShowDialog(this) != DialogResult.OK) return;
@@ -1120,7 +1191,7 @@ internal sealed class MainForm : Form
             using (var dlg = new SaveFileDialog
             {
                 Filter = FormatRegistry.BuildFilter(writable), FilterIndex = filterIndex, DefaultExt = ext.TrimStart('.'), AddExtension = true,
-                FileName = ws.Song.Title, Title = "Save song", InitialDirectory = StartDir(path, settings.FolderForSong(ext))
+                FileName = ws.Song.Title, Title = "Save song", InitialDirectory = StartDir(path)
             })
             {
                 AddSongPlaces(dlg);
@@ -1134,7 +1205,7 @@ internal sealed class MainForm : Form
 
     private void ExportScoreText()
     {
-        using (var dlg = new SaveFileDialog { Filter = "Text score (*.txt)|*.txt", DefaultExt = "txt", FileName = ws.Song.Title + "_score", Title = "Export score", InitialDirectory = StartDir(ws.Song.FilePath, settings.FolderForSong(ws.Song.FilePath)) })
+        using (var dlg = new SaveFileDialog { Filter = "Text score (*.txt)|*.txt", DefaultExt = "txt", FileName = ws.Song.Title + "_score", Title = "Export score", InitialDirectory = StartDir(ws.Song.FilePath) })
         {
             if (dlg.ShowDialog(this) != DialogResult.OK) return;
             try

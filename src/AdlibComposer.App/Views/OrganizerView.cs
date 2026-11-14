@@ -59,7 +59,7 @@ internal sealed class OrganizerView : UserControl, IShellPage
         Controls.Add(topPanel);
         Controls.Add(bottomPanel);
         split.BringToFront();
-        txtFolder.Text = settings().SongFolderPath;
+        txtFolder.Text = settings().BrowserFolderPath ?? "";
         UpdateButtons();
     }
 
@@ -212,7 +212,7 @@ internal sealed class OrganizerView : UserControl, IShellPage
 
     private void Browse()
     {
-        using (var dlg = new FolderBrowserDialog { Description = "정리할 곡 폴더 (ROL · IMS · SOP)", SelectedPath = Directory.Exists(txtFolder.Text) ? txtFolder.Text : settings().SongFolderPath })
+        using (var dlg = new FolderBrowserDialog { Description = "정리할 곡 폴더 (ROL · IMS · SOP)", SelectedPath = Directory.Exists(txtFolder.Text) ? txtFolder.Text : settings().BrowserFolderPath ?? "" })
         {
             if (dlg.ShowDialog(FindForm()) != DialogResult.OK) return;
             txtFolder.Text = dlg.SelectedPath;

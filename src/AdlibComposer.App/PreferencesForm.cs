@@ -5,7 +5,7 @@ using System.Windows.Forms;
 
 namespace AdlibComposer.App;
 
-/// <summary>Preferences (현대식 UI): 곡 폴더, 뱅크 폴더, 기본 뱅크, 소리, 보이스 색. 저장하면 실행 폴더의 FMOPLTool.cfg에 쓴다.</summary>
+/// <summary>Preferences (현대식 UI): 뱅크 폴더, 기본 뱅크, 소리, 보이스 색. 저장하면 실행 폴더의 FMOPLTool.cfg에 쓴다.</summary>
 [System.ComponentModel.DesignerCategory("Code")]   // 코드로 만든 화면: 디자이너 대신 코드로 연다
 internal sealed class PreferencesForm : Form
 {
@@ -13,11 +13,6 @@ internal sealed class PreferencesForm : Form
     private static readonly Color Subtle = Color.FromArgb(96, 96, 96);
 
     private readonly AppSettings settings;
-    private readonly TextBox songBox = new TextBox();
-    private readonly TextBox imsBox = new TextBox();
-    private readonly TextBox sopBox = new TextBox();
-    private readonly TextBox trkBox = new TextBox();
-    private readonly TextBox midBox = new TextBox();
     private readonly TextBox midiBankBox = new TextBox();
     private readonly CheckBox midiWinCheck = new CheckBox();
     private readonly ComboBox midiModuleBox = new ComboBox();
@@ -62,11 +57,11 @@ internal sealed class PreferencesForm : Form
         });
 
         root.Controls.Add(Section("Folders"));
-        root.Controls.Add(PathRow("ROL songs", songBox, settings.SongFolderPath, delegate { BrowseFolder(songBox, "ROL song folder"); }));
-        root.Controls.Add(PathRow("IMS songs", imsBox, settings.ImsFolderPath, delegate { BrowseFolder(imsBox, "IMS song folder"); }));
-        root.Controls.Add(PathRow("SOP songs (Jukebox)", sopBox, settings.SopFolderPath, delegate { BrowseFolder(sopBox, "SOP song folder"); }));
-        root.Controls.Add(PathRow("S3M / STM (Tracker)", trkBox, settings.TrackerFolderPath, delegate { BrowseFolder(trkBox, "Scream Tracker song folder"); }));
-        root.Controls.Add(PathRow("MIDI / WRK (Jukebox)", midBox, settings.MidiFolderPath, delegate { BrowseFolder(midBox, "MIDI song folder"); }));
+        root.Controls.Add(new Label
+        {
+            Text = "Song folders are not set here: open a folder with [폴더 열기] in the left list (or drop a folder on the window). The last one is reopened at start.",
+            ForeColor = Subtle, AutoSize = true, MaximumSize = new Size(700, 0), Margin = new Padding(0, 0, 0, 6)
+        });
         root.Controls.Add(PathRow("Instrument banks (BNK)", bankFolderBox, settings.BankFolderPath, delegate { BrowseFolder(bankFolderBox, "Instrument bank folder"); }));
 
         root.Controls.Add(Section("Default instrument bank"));
@@ -298,11 +293,6 @@ internal sealed class PreferencesForm : Form
     private void ResetDefaults()
     {
         var d = new AppSettings();
-        songBox.Text = d.SongFolderPath;
-        imsBox.Text = d.ImsFolderPath;
-        sopBox.Text = d.SopFolderPath;
-        trkBox.Text = d.TrackerFolderPath;
-        midBox.Text = d.MidiFolderPath;
         midiBankBox.Text = "";
         midiWinCheck.Checked = false;
         midiModuleBox.SelectedIndex = 0;
@@ -318,11 +308,6 @@ internal sealed class PreferencesForm : Form
     {
         try
         {
-            settings.SongFolder = AppSettings.ToStored(SafeResolve(songBox.Text));
-            settings.ImsFolder = AppSettings.ToStored(SafeResolve(imsBox.Text));
-            settings.SopFolder = AppSettings.ToStored(SafeResolve(sopBox.Text));
-            settings.TrackerFolder = AppSettings.ToStored(SafeResolve(trkBox.Text));
-            settings.MidiFolder = AppSettings.ToStored(SafeResolve(midBox.Text));
             settings.MidiBank = midiBankBox.Text.Trim().Length == 0 ? "" : AppSettings.ToStored(SafeResolve(midiBankBox.Text));
             settings.MidiWindowsSynth = midiWinCheck.Checked;
             settings.MidiMt32 = midiModuleBox.SelectedIndex == 1;

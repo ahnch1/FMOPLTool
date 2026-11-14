@@ -191,8 +191,8 @@ internal sealed class TrackerView : UserControl, IShellPage
         if (!ConfirmDiscard()) return;
         using (var dlg = new OpenFileDialog { Filter = TrackerFiles.OpenFilter, Title = "트래커 곡 열기 (S3M · STM · MOD · NST)" })
         {
-            string dir = settings().TrackerFolderPath;
-            if (Directory.Exists(dir)) dlg.InitialDirectory = dir;
+            string dir = settings().BrowserFolderPath;
+            if (dir != null && Directory.Exists(dir)) dlg.InitialDirectory = dir;
             if (dlg.ShowDialog(FindForm()) != DialogResult.OK) return;
             Open(dlg.FileName);
         }
@@ -238,8 +238,8 @@ internal sealed class TrackerView : UserControl, IShellPage
                 FileName = Path.GetFileNameWithoutExtension(DisplayName),
             })
             {
-                string dir = path != null ? Path.GetDirectoryName(path) : settings().TrackerFolderPath;
-                if (Directory.Exists(dir)) dlg.InitialDirectory = dir;
+                string dir = path != null ? Path.GetDirectoryName(path) : settings().BrowserFolderPath;
+                if (dir != null && Directory.Exists(dir)) dlg.InitialDirectory = dir;
                 if (dlg.ShowDialog(FindForm()) != DialogResult.OK) return false;
                 path = dlg.FileName;
             }

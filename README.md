@@ -35,27 +35,20 @@ resource\            ← 프로그램 리소스 (기본 뱅크 폴더 · MT-32 R
   STANDARD.BNK       ← 프로그램 기본 뱅크 (시작할 때 불러옴, 새 곡 기본 악기 piano1/bdrum/... 가 들어 있음)
   GENMIDI.OP2        ← MIDI FM용 GM 뱅크 (Freedoom, BSD 3-Clause, GENMIDI.OP2.LICENSE.txt)
   (MT-32 ROM)        ← 사용자가 넣는 Roland MT-32 컨트롤 + PCM ROM
-rol\                 ← ROL 곡 폴더
-ims\                 ← IMS 곡 폴더
-sop\                 ← SOP 곡 폴더 (Composer SOP 모드 · Jukebox)
-trk\                 ← S3M / STM / MOD / NST 곡 폴더 (Tracker · Jukebox)
-mid\                 ← MIDI (.mid) / Cakewalk (.wrk) 곡 폴더 (Jukebox)
 ```
+
+곡 폴더는 미리 정하지 않는다: 왼쪽 목록의 **폴더 열기**(또는 폴더를 창에 끌어다 놓기)로 연 폴더를 `BrowserFolder`에 기억해 다음 실행 때 다시 연다.
 
 `FMOPLTool.cfg` (텍스트, 경로는 실행 폴더 기준 상대 경로 또는 절대 경로):
 
 ```
-RolFolder=rol
-ImsFolder=ims
-SopFolder=sop
-TrackerFolder=trk
+BrowserFolder=D:\Musicdlib
 BankFolder=resource
 DefaultBank=resource\STANDARD.BNK
 LoadDefaultBank=true
 OplEmulator=builtin
 JukeboxTone=standard
 JukeboxSpeaker=default
-MidiFolder=mid
 MidiSynth=fm
 MidiBank=
 MidiModule=gm
@@ -79,7 +72,8 @@ Mt32RomFolder=resource
 |---|---|
 | 메뉴 / 툴바 | 원본 메뉴(F5~F10) + 툴바(새 곡 · 열기 · 저장 · 뱅크 브라우저 · 재생 · 현재 위치부터 재생 · 정지 · 설정). 재생 버튼 셋은 Composer · Note · Orgel Note · Transcribe가 같이 쓴다 (지금 페이지를 재생) |
 | 페이지 메뉴 (메뉴와 툴바 사이, 가로) | **Composer** · **Instrument Maker** · **Tracker** (CREATE), **Jukebox** (PLAY), **Note** · **Orgel Note** · **Transcribe** (SCORE), **Organizer** (TOOLS). Ctrl+1~8 (Tracker = Ctrl+6, Organizer = Ctrl+7, Transcribe = Ctrl+8) |
-| 왼쪽 폴더 / 파일 | 모든 페이지가 같이 쓰는 폴더 트리 + 곡 파일 목록 (ROL · IMS · SOP · S3M · STM · MOD · NST · MID · WRK · MP3 · WAV …). 두 번 클릭 / Enter = 지금 페이지에서 열기: Composer · Note · Orgel Note = 작업 곡(ROL · IMS · SOP), Tracker = S3M · STM · MOD · NST, Jukebox = 재생, Transcribe = MP3 · WAV. 지금 페이지가 못 여는 형식이면 그 형식을 여는 페이지로 간다 |
+| 왼쪽 폴더 / 곡 목록 | 모든 페이지가 같이 쓴다. **폴더 열기**로 고른 폴더와 그 아래 폴더만 오가는 목록 하나 (`..` · 폴더 · 곡: ROL · IMS · SOP · S3M · STM · MOD · NST · MID · WRK · MP3 · WAV …), **위로** / Backspace. 곡이 많으면 세로 스크롤바 + 아래 ◀ ▶로 한 쪽씩 (n / m 쪽). 곡 두 번 클릭 / Enter = 지금 페이지에서 열기: Composer · Note · Orgel Note = 작업 곡(ROL · IMS · SOP), Tracker = S3M · STM · MOD · NST, Jukebox = 재생(다음 곡 = 그 폴더), Transcribe = MP3 · WAV. 못 여는 형식이면 그 형식을 여는 페이지로 간다 |
+| 끌어다 놓기 (창 어디든) | 폴더 = 폴더 열기와 같다. 곡 파일 = 그 파일만 연다 (Composer · Note · Orgel Note = 작업 곡, Jukebox = 그 곡만 재생 · 여러 곡이면 그것들이 다음 곡 목록, 다른 형식은 여는 페이지로) |
 | 페이지 머리글 | 현재 페이지 이름과 설명 |
 | 진행 로그 | 시작 · 뱅크/곡 열기·저장 · 경고 · 오류 기록. 필터(전체/정보/경고/오류), 상세(예외 내용), 복사, 지우기. 위쪽 경계를 끌어 높이 조절 |
 | 상태 표시줄 | 곡 · 템포 · 커서 · 뱅크, `FMOPLTool.cfg` / 실행 폴더 바로 열기 |
@@ -134,7 +128,7 @@ Mt32RomFolder=resource
 - PNG, 인쇄(실제 크기): 줄 간격 2mm · 격자 8mm로 가로 용지에 띠를 구간별로 싣고 "구간 n → n+1에 이어 붙이기" 표시. 실제 띠와 크기가 다르면 `OrgelView`의 `PrintRowPitchMm` / `PrintGridMm`
 
 **Jukebox** (곡 재생기, 옛 IMPLAY / OCPLAY 화면을 참고한 현대식 데크)
-- 왼쪽 위: 폴더 트리 (ROL 폴더 · IMS 폴더 · SOP 폴더 · S3M·STM 폴더 · MIDI·WRK 폴더 · 내 PC 드라이브), 왼쪽 아래: 고른 폴더의 곡 목록 (파일 · 곡 안 제목(IMS · SOP · S3M · STM · MOD · MIDI, 뒤에서 읽어 채움) · 형식 · 가사 · 뱅크), ROL / IMS / SOP / S3M / STM (S3M/STM: 곡 안 샘플로 재생, 채널 믹서에 L1 R1 A1 …, 길이는 끝까지 빨리 돌려 잰다) (가사 = 같은 이름 .ISS, 뱅크 = 같은 이름 .BNK 표시). 두 번 클릭 / Enter로 재생
+- 곡 고르기: 창 왼쪽 공용 목록 (이름 · 곡 안 제목(IMS · SOP · S3M · STM · MOD · MIDI, 뒤에서 읽어 채움) · 형식 · 가사 · 뱅크) 또는 끌어다 놓기, ROL / IMS / SOP / S3M / STM (S3M/STM: 곡 안 샘플로 재생, 채널 믹서에 L1 R1 A1 …, 길이는 끝까지 빨리 돌려 잰다) (가사 = 같은 이름 .ISS, 뱅크 = 같은 이름 .BNK 표시). 두 번 클릭 / Enter로 재생
 - 정보: 곡 제목(IMS 제목, 조합형 → 유니코드), 곡 파일 (불러온 악기 / 곡이 쓰는 악기), 뱅크 파일 (악기 수), 가사 파일, 지금 / 전체 시간, ♩ 템포 · 속도 · 키
 - 뱅크: 곡 옆에 같은 이름의 BNK가 있으면 그것을 먼저, 없으면 설정의 기본 뱅크(STANDARD.BNK). Composer의 작업 뱅크는 바꾸지 않는다
 - 가사: 같은 이름의 ISS. 조합형(원래 형식)과 완성형(CP949로 바꾼 파일)을 자동 판별. IMPLAY 규칙대로 기록 순서로 글자를 칠하고(카라오케), 다음 줄을 아래에 미리 보여 준다

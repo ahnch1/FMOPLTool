@@ -14,6 +14,7 @@ namespace AdlibComposer.Audio;
 /// 그곳까지 명령만 빨리 실행한다 (소리는 만들지 않음).</para>
 /// <para>그 밖의 칩(SN76489 · YM2413 · YM2612 · YM2151 · YM2203 · YM2608 · OKIM6295)은 <see cref="ISoundChip"/> 공통 경로로 낸다:
 /// 조옮김 · 끄기는 칩의 SetPitch · SetMute, 표시는 칩에 물어본다.</para>
+/// <para>DAC 스트림 (0x90~0x95): 데이터 블록(0x00~0x3F)의 바이트를 정한 속도로 칩 레지스터에 쓴다 (YM2612 DAC · OKIM6258 …).</para>
 /// <para>둘째 칩(듀얼 칩) 명령과 모르는 칩 명령은 건너뛴다.</para>
 /// </summary>
 public sealed class VgmPlayer
@@ -44,10 +45,40 @@ public sealed class VgmPlayer
     }
 
     private readonly List<ExtraChip> extras = new List<ExtraChip>();
-    private ExtraChip xSn, xOpll, xOpn2, xOpm, xOpn, xOpna, xOpnb, xOki, xNes, xPce, xNsfx;
+    private ExtraChip xSn, xOpll, xOpn2, xOpm, xOpn, xOpna, xOpnb, xOki, xNes, xPce, xNsfx, xMsm, xSaa;
     /// <summary>YM2612 PCM 데이터 뱅크 (블록 0x00) · 읽는 위치.</summary>
     private byte[] pcmBank = new byte[0];
     private int pcmLen, pcmPos;
+
+    /// <summary>스트림용 데이터 뱅크 (블록 종류 0x00~0x3F): 이어 붙인 바이트 + 블록마다 시작 위치.</summary>
+    private sealed class DataBank
+    {
+        public byte[] Data = new byte[0];
+        public int Length;
+        public readonly List<int> Starts = new List<int>();
+        public void Add(byte[] d, int at, int n)
+        {
+            if (Length + n > Data.Length) Array.Resize(ref Data, Math.Max(Length + n, Data.Length * 2));
+            Array.Copy(d, at, Data, Length, n);
+            Starts.Add(Length);
+            Length += n;
+        }
+    }
+
+    /// <summary>DAC 스트림 (VGM 0x90~0x95): 데이터 뱅크의 바이트를 정한 속도로 칩 레지스터에 쓴다.</summary>
+    private sealed class DacStream
+    {
+        public int ChipType = -1, Port, Reg;
+        public int BankType = -1, StepSize = 1, StepBase;
+        public double Frequency;
+        public bool Running, Loop, Reverse;
+        public int Start, Pos, Left, Total;
+        public double Next;   // 다음 쓰기 시간 (VGM 샘플)
+    }
+
+    private readonly Dictionary<int, DataBank> banks = new Dictionary<int, DataBank>();
+    private readonly Dictionary<int, DacStream> streams = new Dictionary<int, DacStream>();
+    private bool anyStream;
 
     /// <summary>곡이 쓰는 PSG · SCC · OPL 말고 다른 칩을 만든다 (채널 목록 순서).</summary>
     private static List<ISoundChip> CreateOtherChips(VgmSong s)
@@ -65,6 +96,8 @@ public sealed class VgmPlayer
         if (s.NesApuClock > 0) l.Add(new NesApu(s.NesApuClock, Rate, s.NesFds));
         if ((s.NsfChips & (NsfExpansion.Vrc6 | NsfExpansion.N163 | NsfExpansion.Mmc5)) != 0) l.Add(new NsfExpansion(s.NsfChips, s.NesApuClock > 0 ? s.NesApuClock : NesApu.NtscClock, Rate));
         if (s.Huc6280Clock > 0) l.Add(new Huc6280Psg(s.Huc6280Clock, Rate));
+        if (s.Okim6258Clock > 0) l.Add(new Msm6258(s.Okim6258Clock, s.Okim6258Flags, Rate));
+        if (s.Saa1099Clock > 0) l.Add(new Saa1099(s.Saa1099Clock, Rate));
         return l;
     }
 
@@ -199,7 +232,7 @@ public sealed class VgmPlayer
         }
 
         extras.Clear();
-        xSn = xOpll = xOpn2 = xOpm = xOpn = xOpna = xOpnb = xOki = xNes = xPce = xNsfx = null;
+        xSn = xOpll = xOpn2 = xOpm = xOpn = xOpna = xOpnb = xOki = xNes = xPce = xNsfx = xMsm = xSaa = null;
         foreach (var chip in CreateOtherChips(s))
         {
             var x = new ExtraChip { Chip = chip, Base = -1 };
@@ -212,9 +245,12 @@ public sealed class VgmPlayer
             else if (chip is NesApu) xNes = x;
             else if (chip is Huc6280Psg) xPce = x;
             else if (chip is NsfExpansion) xNsfx = x;
+            else if (chip is Msm6258) xMsm = x;
+            else if (chip is Saa1099) xSaa = x;
             else if (chip is OpnChip o) { if (o.Type == OpnChip.Variant.Ym2612) xOpn2 = x; else if (o.Type == OpnChip.Variant.Ym2203) xOpn = x; else if (o.Type == OpnChip.Variant.Ym2608) xOpna = x; else xOpnb = x; }
         }
         pcmLen = 0; pcmPos = 0;
+        banks.Clear(); streams.Clear(); anyStream = false;
 
         // 칩이 여럿이면 각각 줄여 합이 넘치지 않게
         int chips = (psg != null ? 1 : 0) + (scc != null ? 1 : 0) + (opl != null ? 1 : 0) + extras.Count;
@@ -244,7 +280,7 @@ public sealed class VgmPlayer
 
         // 시작 위치까지 명령만 빨리 (스스로 도는 칩은 그만큼 앞으로)
         double target = Math.Max(0, startMs) * Rate / 1000.0;
-        while (playing && due <= target) ExecuteOne();
+        while (playing && due <= target) { ExecuteOne(); if (anyStream) RunStreams(Math.Min(due, target)); }
         clock = Math.Min(target, playLength);
         if (clock > 0) foreach (var x in extras) if (x.Chip is ISelfRunningChip sr) sr.Skip(clock / Rate);
         if (clock >= playLength) playing = false;
@@ -267,7 +303,8 @@ public sealed class VgmPlayer
         if (!playing) return;
         if (--syncCountdown <= 0) { syncCountdown = 64; SyncAdjustments(); foreach (var x in extras) UpdateOther(x); }
         clock += Math.Max(0.05, Options.Speed);
-        while (playing && due <= clock) ExecuteOne();
+        while (playing && due <= clock) { ExecuteOne(); if (anyStream) RunStreams(Math.Min(due, clock)); }
+        if (anyStream) RunStreams(clock);
         if (clock >= playLength) playing = false;
     }
 
@@ -367,6 +404,9 @@ public sealed class VgmPlayer
             case 0xB8: if ((d[pos + 1] & 0x80) == 0) Other(xOki, 0, d[pos + 1], d[pos + 2]); break;
             case 0xB4: if ((d[pos + 1] & 0x80) == 0) Other(xNes, 0, d[pos + 1], d[pos + 2]); break;
             case 0xB9: if ((d[pos + 1] & 0x80) == 0) Other(xPce, 0, d[pos + 1], d[pos + 2]); break;
+            case 0xB7: if ((d[pos + 1] & 0x80) == 0) Other(xMsm, 0, d[pos + 1], d[pos + 2]); break;
+            case 0xBD: if ((d[pos + 1] & 0x80) == 0) Other(xSaa, 0, d[pos + 1], d[pos + 2]); break;
+            case 0x90: case 0x91: case 0x92: case 0x93: case 0x94: case 0x95: StreamCommand(d, pos); break;
             case 0xD7: if (song.NsfChips != 0) Other(xNsfx, d[pos + 1], d[pos + 2], d[pos + 3]); break;   // NSF 확장 음원 (이 프로그램 안에서만)
             case 0x67: DataBlock(d, pos); break;
             case 0xE0: pcmPos = (int)VgmFormat.U32(d, pos + 1); break;
@@ -400,11 +440,17 @@ public sealed class VgmPlayer
         int size = (int)(VgmFormat.U32(d, p + 3) & 0x7FFFFFFF);
         int at = p + 7;
         if (at + size > d.Length) return;
-        if (type == 0x00)
+        if (type < 0x40)
         {
-            if (pcmLen + size > pcmBank.Length) Array.Resize(ref pcmBank, Math.Max(pcmLen + size, pcmBank.Length * 2));
-            Array.Copy(d, at, pcmBank, pcmLen, size);
-            pcmLen += size;
+            // 압축하지 않은 스트림 데이터 (0x00 YM2612 · 0x04 OKIM6258 …): 스트림이 블록 번호로 찾는다
+            if (!banks.TryGetValue(type, out var bank)) banks[type] = bank = new DataBank();
+            bank.Add(d, at, size);
+            if (type == 0x00)
+            {
+                if (pcmLen + size > pcmBank.Length) Array.Resize(ref pcmBank, Math.Max(pcmLen + size, pcmBank.Length * 2));
+                Array.Copy(d, at, pcmBank, pcmLen, size);
+                pcmLen += size;
+            }
             return;
         }
         if (type == 0xC2 && size > 2 && xNes != null)
@@ -422,6 +468,111 @@ public sealed class VgmPlayer
             if (type == 0x82 && xOpnb != null) ((OpnChip)xOpnb.Chip).LoadAdpcmA(data, start);   // YM2610 ADPCM-A ROM
             if (type == 0x83 && xOpnb != null) ((OpnChip)xOpnb.Chip).LoadAdpcm(data, start);    // YM2610 ADPCM-B (DELTA-T) ROM
             if (type == 0x8B && xOki != null) ((Okim6295)xOki.Chip).LoadRom(data, start);
+        }
+    }
+
+    // ================================================================ DAC 스트림 (0x90~0x95)
+
+    private DacStream StreamOf(int id)
+    {
+        if (!streams.TryGetValue(id, out var st)) streams[id] = st = new DacStream();
+        return st;
+    }
+
+    private void StreamCommand(byte[] d, int p)
+    {
+        if (d[p] == 0x94 && d[p + 1] == 0xFF) { foreach (var x in streams.Values) x.Running = false; return; }
+        var st = StreamOf(d[p + 1]);
+        switch (d[p])
+        {
+            case 0x90: st.ChipType = d[p + 2]; st.Port = d[p + 3]; st.Reg = d[p + 4]; break;
+            case 0x91: st.BankType = d[p + 2]; st.StepSize = Math.Max(1, (int)d[p + 3]); st.StepBase = d[p + 4]; break;
+            case 0x92: st.Frequency = VgmFormat.U32(d, p + 2); break;
+            case 0x93:
+                {
+                    uint ofs = VgmFormat.U32(d, p + 2);
+                    int mode = d[p + 6];
+                    uint len = VgmFormat.U32(d, p + 7);
+                    st.Loop = (mode & 0x80) != 0;
+                    st.Reverse = (mode & 0x10) != 0;
+                    if ((mode & 3) == 0)
+                    {
+                        // 길이는 그대로 두고 읽는 위치만 바꾼다
+                        if (ofs != 0xFFFFFFFF) { st.Start = (int)ofs; st.Pos = st.Start + (st.Reverse ? -st.StepBase : st.StepBase); }
+                        break;
+                    }
+                    if (ofs != 0xFFFFFFFF) st.Start = (int)ofs;
+                    int count = (mode & 3) == 1 ? (int)Math.Min(len, int.MaxValue)
+                              : (mode & 3) == 2 ? (int)Math.Min(len / 1000.0 * st.Frequency, int.MaxValue)
+                              : int.MaxValue;   // 3 = 데이터 끝까지
+                    StreamBegin(st, count);
+                    break;
+                }
+            case 0x94: st.Running = false; break;
+            case 0x95:
+                {
+                    int block = d[p + 2] | (d[p + 3] << 8);
+                    int flags = d[p + 4];
+                    if (st.BankType < 0 || !banks.TryGetValue(st.BankType, out var bank) || block >= bank.Starts.Count) { st.Running = false; break; }
+                    int start = bank.Starts[block];
+                    int end = block + 1 < bank.Starts.Count ? bank.Starts[block + 1] : bank.Length;
+                    st.Start = start;
+                    st.Loop = (flags & 1) != 0;
+                    st.Reverse = (flags & 0x10) != 0;
+                    StreamBegin(st, (end - start) / st.StepSize);
+                    break;
+                }
+        }
+    }
+
+    private void StreamBegin(DacStream st, int count)
+    {
+        st.Pos = st.Start + (st.Reverse ? -st.StepBase : st.StepBase);
+        st.Left = st.Total = Math.Max(0, count);
+        st.Running = st.Frequency > 0 && count > 0;
+        st.Next = due;
+        anyStream |= st.Running;
+    }
+
+    /// <summary>until(VGM 샘플)까지 할 스트림 쓰기를 한다.</summary>
+    private void RunStreams(double until)
+    {
+        bool any = false;
+        foreach (var st in streams.Values)
+        {
+            if (!st.Running) continue;
+            double gap = Rate / st.Frequency;
+            while (st.Running && st.Next <= until)
+            {
+                if (!banks.TryGetValue(st.BankType, out var bank) || st.Pos < 0 || st.Pos >= bank.Length || st.Left <= 0)
+                {
+                    // 끝: 되풀이면 처음부터 (데이터 끝까지 모드는 그 끝에서 다시)
+                    if (st.Loop && st.Total > 0) { st.Pos = st.Start + (st.Reverse ? -st.StepBase : st.StepBase); st.Left = st.Total; if (bank != null && st.Pos >= 0 && st.Pos < bank.Length) continue; }
+                    st.Running = false; break;
+                }
+                StreamWrite(st, bank.Data[st.Pos]);
+                st.Pos += st.Reverse ? -st.StepSize : st.StepSize;
+                st.Left--;
+                st.Next += gap;
+            }
+            any |= st.Running;
+        }
+        anyStream = any;
+    }
+
+    /// <summary>스트림 바이트 하나를 칩에 (VGM 칩 번호: 0x02 YM2612, 0x03 YM2151, 0x06 YM2203, 0x07 YM2608, 0x08 YM2610, 0x17 OKIM6258, 0x18 OKIM6295).</summary>
+    private void StreamWrite(DacStream st, int v)
+    {
+        if ((st.ChipType & 0x80) != 0) return;   // 둘째 칩
+        switch (st.ChipType)
+        {
+            case 0x02: Other(xOpn2, st.Port, st.Reg, v); break;
+            case 0x03: Other(xOpm, 0, st.Reg, v); break;
+            case 0x06: Other(xOpn, 0, st.Reg, v); break;
+            case 0x07: Other(xOpna, st.Port, st.Reg, v); break;
+            case 0x08: Other(xOpnb, st.Port, st.Reg, v); break;
+            case 0x17: Other(xMsm, 0, st.Reg, v); break;
+            case 0x18: Other(xOki, 0, st.Reg, v); break;
         }
     }
 

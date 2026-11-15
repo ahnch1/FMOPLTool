@@ -18,7 +18,7 @@ public sealed class VgmWriter
     // 자주 쓰는 머리말 칸 (VGM 명세의 위치)
     public const int ClockSn76489 = 0x0C, ClockYm2413 = 0x10, ClockYm2612 = 0x2C, ClockYm2151 = 0x30,
         ClockYm2203 = 0x44, ClockYm2608 = 0x48, ClockYm2610 = 0x4C, ClockYm3812 = 0x50, ClockYm3526 = 0x54, ClockY8950 = 0x58, ClockYmf262 = 0x5C,
-        ClockAy8910 = 0x74, ClockNesApu = 0x84, ClockOkim6295 = 0x98, ClockK051649 = 0x9C, ClockHuc6280 = 0xA4;
+        ClockAy8910 = 0x74, ClockNesApu = 0x84, ClockOkim6258 = 0x90, ClockOkim6295 = 0x98, ClockK051649 = 0x9C, ClockHuc6280 = 0xA4, ClockSaa1099 = 0xC8;
 
     private readonly MemoryStream body = new MemoryStream();
     private readonly SortedDictionary<int, uint> clocks = new SortedDictionary<int, uint>();

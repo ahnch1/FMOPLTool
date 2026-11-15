@@ -393,6 +393,7 @@ internal sealed class MainForm : Form
     /// <summary>지금 파일이 있는 폴더, 없으면 fallback 폴더 (뱅크 대화상자 = 뱅크 폴더).</summary>
     private static string StartDir(string currentFile, string fallback)
     {
+        if (ZipFolder.IsCachePath(currentFile)) currentFile = null;   // zip을 푼 임시 폴더 대신 zip이 있는 폴더 (fallback)
         if (!string.IsNullOrEmpty(currentFile))
         {
             string d = Path.GetDirectoryName(currentFile);
@@ -423,12 +424,12 @@ internal sealed class MainForm : Form
     {
         bool ok = false;
         foreach (var item in DroppedItems(e.Data))
-            if (Directory.Exists(item) || (File.Exists(item) && FileBrowser.KindOf(item) != MusicFileKind.None)) { ok = true; break; }
+            if (Directory.Exists(item) || (File.Exists(item) && (FileBrowser.KindOf(item) != MusicFileKind.None || ZipFolder.IsZip(item)))) { ok = true; break; }
         e.Effect = ok ? DragDropEffects.Copy : DragDropEffects.None;
     }
 
     /// <summary>
-    /// 폴더를 놓으면 = [폴더 열기]와 같다 (왼쪽 목록). 곡 파일을 놓으면 = 그 파일만 연다:
+    /// 폴더를 놓으면 = [폴더 열기]와 같다 (왼쪽 목록). zip을 놓으면 = 왼쪽 목록에서 그 zip 안으로. 곡 파일을 놓으면 = 그 파일만 연다:
     /// Composer · Note · Orgel Note는 작업 곡으로, Jukebox는 그 곡만 재생 (여러 곡이면 그것들이 다음 곡 목록), 다른 형식은 여는 페이지로.
     /// </summary>
     private void OnDragDrop(object sender, DragEventArgs e)
@@ -436,10 +437,25 @@ internal sealed class MainForm : Form
         var items = DroppedItems(e.Data);
         string dir = items.FirstOrDefault(Directory.Exists);
         if (dir != null) { browser.OpenFolder(dir); return; }
+        string zip = items.FirstOrDefault(f => File.Exists(f) && ZipFolder.IsZip(f));
+        if (zip != null) { BeginInvoke((Action)(() => OpenDroppedZip(zip))); return; }
         var files = items.Where(f => File.Exists(f) && FileBrowser.KindOf(f) != MusicFileKind.None).Select(Path.GetFullPath).ToList();
         if (files.Count == 0) return;
         AppLog.Info("파일", "끌어다 놓기: " + Path.GetFileName(files[0]) + (files.Count > 1 ? " 외 " + (files.Count - 1) + "개" : ""));
         BeginInvoke((Action)(() => OpenDropped(files)));   // 끌기 작업이 끝난 뒤 (대화상자를 띄울 수 있게)
+    }
+
+    /// <summary>zip을 놓으면: 왼쪽 목록에서 그 zip 안으로 (폴더처럼). Jukebox면 안의 첫 곡부터 재생.</summary>
+    private void OpenDroppedZip(string zip)
+    {
+        Activate();
+        AppLog.Info("파일", "끌어다 놓기: " + Path.GetFileName(zip));
+        browser.OpenZip(zip);
+        if (page == AppPage.Jukebox)
+        {
+            string first = browser.Paths.FirstOrDefault(JukeboxView.CanPlay);
+            if (first != null) jukebox.Play(first);
+        }
     }
 
     private void OpenDropped(List<string> files)
@@ -1183,7 +1199,8 @@ internal sealed class MainForm : Form
     private bool SaveSong(bool saveAs)
     {
         string path = ws.Song.FilePath;
-        if (saveAs || string.IsNullOrEmpty(path))
+        // zip 안 곡(임시 폴더에 푼 것)은 그 자리에 저장하면 zip에 남지 않는다: 다른 이름으로 묻는다
+        if (saveAs || string.IsNullOrEmpty(path) || ZipFolder.IsCachePath(path))
         {
             var writable = new List<IFileFormat>();
             foreach (var f in ws.Formats.Songs) if (f.CanWrite) writable.Add(f);
@@ -1309,7 +1326,7 @@ internal sealed class MainForm : Form
     private bool SaveBank(bool saveAs)
     {
         string path = ws.Bank.FilePath;
-        if (saveAs || string.IsNullOrEmpty(path))
+        if (saveAs || string.IsNullOrEmpty(path) || ZipFolder.IsCachePath(path))
         {
             using (var dlg = new SaveFileDialog { Filter = FormatRegistry.BuildFilter(ws.Formats.Banks), DefaultExt = "bnk", FileName = "NEW.BNK", Title = "Save instrument bank", InitialDirectory = StartDir(ws.Bank.FilePath, settings.BankFolderPath) })
             {

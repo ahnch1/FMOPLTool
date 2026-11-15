@@ -35,7 +35,15 @@ internal sealed class FileBrowser : UserControl
         public bool Multi;
         /// <summary>파일 안 곡 한 줄 (Path = "파일::n").</summary>
         public bool IsTrack;
+        /// <summary>ZIP 파일 (IsDir과 함께: 두 번 클릭하면 폴더처럼 들어간다).</summary>
+        public bool IsZip;
     }
+
+    /// <summary>
+    /// 들어가 있는 ZIP (바깥 → 안쪽 순서): zip 파일 경로와 그것을 푼 임시 폴더. zip 안의 zip도 들어갈 수 있다.
+    /// 목록 · 재생은 푼 폴더의 실제 파일로 하고, 경로 표시 · 위로 가기만 zip 기준으로 바꾼다.
+    /// </summary>
+    private readonly List<(string Zip, string Cache)> zips = new List<(string, string)>();
 
     /// <summary>펼쳐 둔 파일 (곡이 여럿 든 파일: 곡마다 줄). 폴더를 다시 그려도 그대로.</summary>
     private readonly HashSet<string> expanded = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -69,6 +77,7 @@ internal sealed class FileBrowser : UserControl
         icons.Images.Add("song", GlyphImages.Get(Glyphs.Composer, 16, ShellTheme.Accent));
         icons.Images.Add("multi", GlyphImages.Get(Glyphs.Jukebox, 16, ShellTheme.Accent));
         icons.Images.Add("track", GlyphImages.Get(Glyphs.Play, 16, ShellTheme.Muted));
+        icons.Images.Add("zip", GlyphImages.Get(Glyphs.Folder, 16, Color.FromArgb(120, 130, 200)));
 
         // 위: [폴더 열기] [위로]
         var bar = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 36, Padding = new Padding(6, 5, 6, 0), BackColor = Color.FromArgb(246, 247, 249), WrapContents = false };
@@ -117,6 +126,7 @@ internal sealed class FileBrowser : UserControl
         list.Resize += delegate { UpdatePager(); };
         tips.SetToolTip(list, "폴더 두 번 클릭: 들어가기 · 곡 두 번 클릭 / Enter: 지금 페이지에서 열기 (못 여는 형식이면 그 형식을 여는 페이지로)\n"
             + "곡이 여럿 든 파일(KSS · NSF · HES, ▸): 두 번 클릭 / → 로 곡 목록 펼치기, ← 로 접기 — 곡 줄을 두 번 클릭하면 그 곡 재생\n"
+            + "ZIP: 두 번 클릭하면 폴더처럼 들어가 안의 곡(ROL · IMS · SOP · VGM …)과 가사 · 뱅크를 그대로 쓴다\n"
             + "제목 = 곡 안의 제목 · 가사 = 같은 이름 .ISS · 뱅크 = 같은 이름 .BNK");
 
         emptyLabel.Dock = DockStyle.Fill;
@@ -223,8 +233,19 @@ internal sealed class FileBrowser : UserControl
         }
     }
 
-    /// <summary>지금 보이는 폴더 (연 폴더가 없으면 null). 파일 대화상자 시작 폴더 등.</summary>
-    public string CurrentFolder { get { return current; } }
+    /// <summary>지금 보이는 폴더 (연 폴더가 없으면 null). 파일 대화상자 시작 폴더 등 — zip 안이면 그 zip이 있는 실제 폴더.</summary>
+    public string CurrentFolder { get { return zips.Count > 0 ? Path.GetDirectoryName(zips[0].Zip) : current; } }
+
+    /// <summary>zip을 폴더처럼 연다 (끌어다 놓기 등): 그 zip이 있는 폴더를 뿌리로 열고 안으로 들어간다.</summary>
+    public void OpenZip(string zipPath)
+    {
+        string dir = Path.GetDirectoryName(Path.GetFullPath(zipPath));
+        bool inside = root != null && (string.Equals(dir.TrimEnd('\\'), root.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase)
+            || dir.StartsWith(root.TrimEnd('\\') + "\\", StringComparison.OrdinalIgnoreCase));
+        if (!inside) OpenFolder(dir);
+        else ShowFolder(dir);
+        EnterZip(Path.GetFullPath(zipPath));
+    }
 
     public bool ListFocused { get { return list.Focused; } }
     public void FocusList() { list.Focus(); }
@@ -241,6 +262,7 @@ internal sealed class FileBrowser : UserControl
     {
         try { dir = Path.GetFullPath(dir); } catch (Exception) { }
         if (!Directory.Exists(dir)) return;
+        zips.Clear();
         root = dir.TrimEnd('\\', '/');
         if (root.Length == 2 && root[1] == ':') root += "\\";   // 드라이브 뿌리
         ShowFolder(root);
@@ -290,13 +312,21 @@ internal sealed class FileBrowser : UserControl
         }
     }
 
-    private bool AtRoot { get { return current == null || string.Equals(current.TrimEnd('\\'), root.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase); } }
+    private bool AtRoot { get { return zips.Count == 0 && (current == null || string.Equals(current.TrimEnd('\\'), root.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase)); } }
 
     private void GoUp()
     {
         if (AtRoot) return;
         string from = current;
-        string parent = Path.GetDirectoryName(current.TrimEnd('\\'));
+        string parent;
+        if (zips.Count > 0 && string.Equals(current.TrimEnd('\\'), zips[zips.Count - 1].Cache.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase))
+        {
+            // zip 맨 위에서 위로 = zip 밖 (그 zip이 있던 폴더), 나온 zip을 고른다
+            from = zips[zips.Count - 1].Zip;
+            parent = Path.GetDirectoryName(from);
+            zips.RemoveAt(zips.Count - 1);
+        }
+        else parent = Path.GetDirectoryName(current.TrimEnd('\\'));
         if (parent == null) return;
         ShowFolder(parent);
         // 나온 폴더를 고른다
@@ -309,6 +339,7 @@ internal sealed class FileBrowser : UserControl
         if (list.SelectedItems.Count == 0) return;
         var e = (Entry)list.SelectedItems[0].Tag;
         if (e.IsUp) GoUp();
+        else if (e.IsZip) EnterZip(e.Path);
         else if (e.IsDir) ShowFolder(e.Path);
         else if (e.Multi) SetExpanded(list.SelectedItems[0], !expanded.Contains(e.Path));
         else if (FileActivated != null) FileActivated(e.Path);
@@ -349,6 +380,13 @@ internal sealed class FileBrowser : UserControl
                 list.Items.Add(it);
             }
             var files = Directory.GetFiles(dir);
+            foreach (var z in files.Where(AdlibComposer.Formats.ZipFolder.IsZip).OrderBy(x => Path.GetFileName(x), StringComparer.OrdinalIgnoreCase))
+            {
+                var it = new ListViewItem(Path.GetFileName(z), "zip") { Tag = new Entry { Path = z, IsDir = true, IsZip = true }, ToolTipText = z + "\n두 번 클릭: zip 안으로 (폴더처럼)" };
+                it.SubItems.Add("");
+                it.SubItems.Add("ZIP");
+                list.Items.Add(it);
+            }
             var names = new HashSet<string>(files.Select(f => Path.GetFileName(f).ToUpperInvariant()));
             foreach (var f in files.OrderBy(x => Path.GetFileName(x), StringComparer.OrdinalIgnoreCase))
             {
@@ -375,14 +413,51 @@ internal sealed class FileBrowser : UserControl
         list.EndUpdate();
         upButton.Enabled = !AtRoot;
         // 경로: 연 폴더 이름 › 아래 폴더 …
-        string rel = AtRoot ? "" : Path.GetRelativePath(root, dir);
+        string shown = DisplayPath(dir);
+        string rel = AtRoot ? "" : Path.GetRelativePath(root, shown);
         string rootName = Path.GetFileName(root.TrimEnd('\\'));
-        pathLabel.Text = (rootName.Length > 0 ? rootName : root) + (rel.Length > 0 ? " › " + rel.Replace("\\", " › ") : "");
-        tips.SetToolTip(pathLabel, dir);
+        pathLabel.Text = (rootName.Length > 0 ? rootName : root) + (rel.Length > 0 && rel != "." ? " › " + rel.Replace("\\", " › ") : "");
+        tips.SetToolTip(pathLabel, shown + (zips.Count > 0 ? "\n(zip을 푼 임시 폴더: " + dir + ")" : ""));
         if (list.Items.Count > 0) list.Items[0].Focused = true;
         lastTop = -1;
         UpdatePager();
         LoadTitles();
+    }
+
+    // ---------------------------------------------------------------- ZIP
+
+    /// <summary>zip 안으로: 한 번 풀어 둔 임시 폴더를 연다 (처음이면 푸는 동안 잠깐 기다린다).</summary>
+    private void EnterZip(string zipPath)
+    {
+        string cache;
+        var old = Cursor;
+        Cursor = Cursors.WaitCursor;
+        try { cache = AdlibComposer.Formats.ZipFolder.Extract(zipPath); }
+        catch (Exception ex) { AppLog.Warn("파일", "zip을 열 수 없습니다: " + Path.GetFileName(zipPath), ex.Message); return; }
+        finally { Cursor = old; }
+        // 지금 보이는 곳 밖의 zip이면 (끌어다 놓기) 쌓인 것을 정리한다
+        while (zips.Count > 0 && !IsUnder(zipPath, zips[zips.Count - 1].Cache)) zips.RemoveAt(zips.Count - 1);
+        zips.Add((zipPath, cache));
+        AppLog.Info("파일", "zip 열기: " + DisplayPath(zipPath), "푼 곳 (임시): " + cache);
+        ShowFolder(cache);
+    }
+
+    private static bool IsUnder(string path, string dir)
+    {
+        string d = dir.TrimEnd('\\') + "\\";
+        return path.StartsWith(d, StringComparison.OrdinalIgnoreCase) || string.Equals(path.TrimEnd('\\'), dir.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>임시 폴더 경로 → 보이는 경로 (zip 파일 경로 + zip 안 경로). zip 안의 zip도 바깥까지 거슬러 올라간다.</summary>
+    private string DisplayPath(string path)
+    {
+        for (int i = zips.Count - 1; i >= 0; i--)
+        {
+            if (!IsUnder(path, zips[i].Cache)) continue;
+            string inner = Path.GetRelativePath(zips[i].Cache, path);
+            path = inner == "." ? zips[i].Zip : Path.Combine(zips[i].Zip, inner);
+        }
+        return path;
     }
 
     // ---------------------------------------------------------------- 곡이 여럿 든 파일 (KSS · NSF · HES)

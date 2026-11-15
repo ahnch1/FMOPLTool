@@ -50,7 +50,9 @@ public sealed class VgmSong
     /// <summary>K052539 (SCC+): 다섯 채널 모두 자기 파형.</summary>
     public bool SccPlus;
     public double Ym3812Clock, Ym3526Clock, Y8950Clock, Ymf262Clock;
-    public double Sn76489Clock, Ym2413Clock, Ym2612Clock, Ym2151Clock, Ym2203Clock, Ym2608Clock, Okim6295Clock, NesApuClock, Huc6280Clock;
+    public double Sn76489Clock, Ym2413Clock, Ym2612Clock, Ym2151Clock, Ym2203Clock, Ym2608Clock, Okim6295Clock, NesApuClock, Huc6280Clock, Ym2610Clock;
+    /// <summary>YM2610 클럭 bit31: YM2610B (FM 6채널).</summary>
+    public bool Ym2610B;
     /// <summary>NES APU 클럭 bit31: FDS 음원이 함께 있다 (0xB4 aa 0x20~0x7F).</summary>
     public bool NesFds;
     /// <summary>NSF에서 바꾼 곡의 확장 음원 비트 (NSF 머리말 0x7B: 1 VRC6, 2 VRC7, 4 FDS, 8 MMC5, 0x10 N163, 0x20 5B). VGM 파일에는 없다 (0).
@@ -76,7 +78,7 @@ public sealed class VgmSong
     public bool HasOpl { get { return Ym3812Clock > 0 || Ym3526Clock > 0 || Y8950Clock > 0 || Ymf262Clock > 0; } }
     public bool IsOpl3 { get { return Ymf262Clock > 0; } }
     /// <summary>PSG · SCC · OPL 말고 다른 칩 (공통 칩 경로로 내는 것).</summary>
-    public bool HasOther { get { return Sn76489Clock > 0 || Ym2413Clock > 0 || Ym2612Clock > 0 || Ym2151Clock > 0 || Ym2203Clock > 0 || Ym2608Clock > 0 || Okim6295Clock > 0 || NesApuClock > 0 || Huc6280Clock > 0 || SpcImage != null; } }
+    public bool HasOther { get { return Sn76489Clock > 0 || Ym2413Clock > 0 || Ym2612Clock > 0 || Ym2151Clock > 0 || Ym2203Clock > 0 || Ym2608Clock > 0 || Okim6295Clock > 0 || NesApuClock > 0 || Huc6280Clock > 0 || Ym2610Clock > 0 || SpcImage != null; } }
     /// <summary>소리 낼 수 있는 칩이 하나라도 있는가.</summary>
     public bool IsPlayable { get { return HasPsg || HasScc || HasOpl || HasOther; } }
     public bool AyIsYm { get { return AyType >= 0x10; } }
@@ -113,6 +115,7 @@ public sealed class VgmSong
             if (Ym2151Clock > 0) l.Add("YM2151");
             if (Ym2203Clock > 0) l.Add("YM2203");
             if (Ym2608Clock > 0) l.Add("YM2608");
+            if (Ym2610Clock > 0) l.Add(Ym2610B ? "YM2610B" : "YM2610");
             if (Okim6295Clock > 0) l.Add("OKIM6295");
             if (NesApuClock > 0) l.Add(NesFds ? "2A03 + FDS" : "2A03");
             if ((NsfChips & 0x01) != 0) l.Add("VRC6");
@@ -215,6 +218,8 @@ public static class VgmFormat
         s.Ym2151Clock = hz(0x30);
         s.Ym2203Clock = hz(0x44);
         s.Ym2608Clock = hz(0x48);
+        s.Ym2610Clock = hz(0x4C);
+        s.Ym2610B = s.Ym2610Clock > 0 && (clock(0x4C) & 0x80000000) != 0;
         s.Okim6295Clock = hz(0x98);
         s.NesApuClock = hz(0x84);
         s.NesFds = s.NesApuClock > 0 && (clock(0x84) & 0x80000000) != 0;
@@ -234,7 +239,7 @@ public static class VgmFormat
         var other = new (int ofs, string name)[]
         {
             (0x38, "SegaPCM"), (0x40, "RF5C68"),
-            (0x4C, "YM2610 (OPNB)"), (0x60, "YMF278B (OPL4)"), (0x64, "YMF271 (OPX)"),
+(0x60, "YMF278B (OPL4)"), (0x64, "YMF271 (OPX)"),
             (0x68, "YMZ280B"), (0x6C, "RF5C164"), (0x70, "PWM"), (0x80, "Game Boy DMG"), (0x88, "MultiPCM"),
             (0x8C, "uPD7759"), (0x90, "OKIM6258"), (0xA0, "K054539"), (0xA8, "C140"),
             (0xAC, "K053260"), (0xB0, "Pokey"), (0xB4, "QSound"), (0xB8, "SCSP"), (0xC0, "WonderSwan"), (0xC4, "VSU"),

@@ -1,18 +1,22 @@
 using System;
+using System.Linq;
 
 namespace AdlibComposer.Audio.Chips;
 
 /// <summary>
-/// Yamaha OPN 계열: YM2203 (OPN, FM 3 + SSG 3) · YM2608 (OPNA, FM 6 + SSG 3 + 리듬 6 + ADPCM-B) · YM2612 (OPN2, FM 6 + DAC).
-/// PC-88 · PC-98 · 메가 드라이브 소리. FM 샘플레이트 = 클럭 / 72 (OPN) · 클럭 / 144 (OPNA · OPN2), 기본 프리스케일러로 본다.
+/// Yamaha OPN 계열: YM2203 (OPN, FM 3 + SSG 3) · YM2608 (OPNA, FM 6 + SSG 3 + 리듬 6 + ADPCM-B) · YM2612 (OPN2, FM 6 + DAC) ·
+/// YM2610 / YM2610B (OPNB, 네오지오 · 타이토: FM 4 / 6 + SSG 3 + ADPCM-A 6 + ADPCM-B).
+/// PC-88 · PC-98 · 메가 드라이브 · 네오지오 소리. FM 샘플레이트 = 클럭 / 72 (OPN) · 클럭 / 144 (OPNA · OPN2 · OPNB), 기본 프리스케일러로 본다.
+/// <para>YM2610 레지스터: 포트 0 00~0F = SSG, 10~1C = ADPCM-B (OPNA ADPCM-B 레지스터 − 0x10, 주소 256바이트 단위), 포트 1 00~2D = ADPCM-A.
+/// YM2610에는 FM 채널 1 · 4가 없다 (YM2610B는 6채널 모두).</para>
 /// <para>OPNA 리듬 음원은 칩 안 ROM 소리라 넣지 않고 짧은 합성음으로 흉내 낸다 (베이스 드럼 · 스네어 · 심벌 · 하이햇 · 탐 · 림샷).
 /// SSG-EG · 타이머 · CSM은 소리에 쓰지 않는다.</para>
 /// </summary>
 public sealed class OpnChip : ISoundChip
 {
-    public enum Variant { Ym2203, Ym2608, Ym2612 }
+    public enum Variant { Ym2203, Ym2608, Ym2612, Ym2610, Ym2610B }
 
-    public const double Ym2203Clock = 3993600, Ym2608Clock = 7987200, Ym2612Clock = 7670453;
+    public const double Ym2203Clock = 3993600, Ym2608Clock = 7987200, Ym2612Clock = 7670453, Ym2610Clock = 8000000;
 
     public readonly Variant Type;
     private readonly double clock;
@@ -20,7 +24,11 @@ public sealed class OpnChip : ISoundChip
     private readonly PsgEmulator ssg;
     private readonly Rhythm rhythm;
     private readonly AdpcmB adpcm;
+    private readonly AdpcmA adpcmA;
     private readonly int fmCh;
+    /// <summary>믹서에 보이는 FM 채널 → 엔진 채널 (YM2610은 1 · 2 · 4 · 5번만).</summary>
+    private readonly int[] fmShown;
+    private bool IsOpnb { get { return Type == Variant.Ym2610 || Type == Variant.Ym2610B; } }
     private readonly byte[,] reg = new byte[2, 256];
     private readonly int[] fnum = new int[6], block = new int[6];
     private readonly int[] latch = new int[6];
@@ -31,33 +39,52 @@ public sealed class OpnChip : ISoundChip
     public OpnChip(Variant type, double clock = 0)
     {
         Type = type;
-        this.clock = clock > 0 ? clock : type == Variant.Ym2203 ? Ym2203Clock : type == Variant.Ym2608 ? Ym2608Clock : Ym2612Clock;
+        this.clock = clock > 0 ? clock : type == Variant.Ym2203 ? Ym2203Clock : type == Variant.Ym2608 ? Ym2608Clock : IsOpnb ? Ym2610Clock : Ym2612Clock;
         NativeRate = (int)Math.Round(this.clock / (type == Variant.Ym2203 ? 72 : 144));
         fmCh = type == Variant.Ym2203 ? 3 : 6;
+        fmShown = type == Variant.Ym2610 ? new[] { 1, 2, 4, 5 } : Enumerable.Range(0, fmCh).ToArray();
         fm = new FmEngine(FmEngine.Kind.Opn, fmCh, NativeRate);
         if (type != Variant.Ym2612) ssg = new PsgEmulator(this.clock / (type == Variant.Ym2203 ? 2 : 4), NativeRate, true);
         if (type == Variant.Ym2608) { rhythm = new Rhythm(NativeRate); adpcm = new AdpcmB(NativeRate); }
+        if (IsOpnb) { adpcmA = new AdpcmA(this.clock, NativeRate); adpcm = new AdpcmB(NativeRate) { Unit256 = true }; }
         Reset();
     }
 
-    public string Name { get { return Type == Variant.Ym2203 ? "YM2203 (OPN)" : Type == Variant.Ym2608 ? "YM2608 (OPNA)" : "YM2612 (OPN2)"; } }
+    public string Name
+    {
+        get
+        {
+            switch (Type)
+            {
+                case Variant.Ym2203: return "YM2203 (OPN)";
+                case Variant.Ym2608: return "YM2608 (OPNA)";
+                case Variant.Ym2610: return "YM2610 (OPNB)";
+                case Variant.Ym2610B: return "YM2610B (OPNB)";
+                default: return "YM2612 (OPN2)";
+            }
+        }
+    }
     public int NativeRate { get; }
-    /// <summary>FM → SSG → 리듬 6 → ADPCM.</summary>
-    public int ChannelCount { get { return fmCh + (ssg != null ? 3 : 0) + (rhythm != null ? 6 + 1 : 0); } }
+    /// <summary>FM → SSG → 리듬 6 + ADPCM (OPNA) / ADPCM-A 6 + ADPCM-B (OPNB).</summary>
+    public int ChannelCount { get { return fmShown.Length + (ssg != null ? 3 : 0) + (rhythm != null || adpcmA != null ? 6 + 1 : 0); } }
 
     private static readonly string[] RhythmNames = { "BD", "SD", "CY", "HH", "TO", "RI" };
 
     public string ChannelLabel(int ch)
     {
-        if (ch < fmCh) return "F" + (ch + 1);
-        ch -= fmCh;
+        if (ch < fmShown.Length) return "F" + (ch + 1);
+        ch -= fmShown.Length;
         if (ssg != null) { if (ch < 3) return ((char)('A' + ch)).ToString(); ch -= 3; }
         if (rhythm != null) { if (ch < 6) return RhythmNames[ch]; return "PCM"; }
+        if (adpcmA != null) { if (ch < 6) return "A" + (ch + 1); return "AB"; }
         return "?";
     }
 
-    /// <summary>ADPCM-B 메모리 (VGM 데이터 블록 0x81을 여기로).</summary>
+    /// <summary>ADPCM-B 메모리 (VGM 데이터 블록 0x81 · YM2610 0x83을 여기로).</summary>
     public void LoadAdpcm(byte[] data, int start) { adpcm?.Load(data, start); }
+
+    /// <summary>YM2610 ADPCM-A ROM (VGM 데이터 블록 0x82).</summary>
+    public void LoadAdpcmA(byte[] data, int start) { adpcmA?.Load(data, start); }
 
     public void Reset()
     {
@@ -66,10 +93,12 @@ public sealed class OpnChip : ISoundChip
         ssg?.Reset();
         rhythm?.Reset();
         adpcm?.Reset();
+        adpcmA?.Reset();
         Array.Clear(fnum, 0, 6); Array.Clear(block, 0, 6); Array.Clear(latch, 0, 6);
         Array.Clear(spFnum, 0, 3); Array.Clear(spBlock, 0, 3);
         spLatch = 0; special = false;
         for (int c = 0; c < fmCh; c++) { fm.Ch[c].Left = fm.Ch[c].Right = true; }
+        if (Type == Variant.Ym2610) { fm.Ch[0].Mute = true; fm.Ch[3].Mute = true; }   // 없는 채널
     }
 
     // fm.c opn_fktable: F-number 위 4비트 → 키코드 아래 2비트
@@ -82,6 +111,11 @@ public sealed class OpnChip : ISoundChip
         if (fmCh == 3) port = 0;
         reg[port, r] = (byte)v;
         if (port == 0 && r < 0x10) { ssg?.Write(r, v); return; }
+        if (IsOpnb)
+        {
+            if (port == 0 && r >= 0x10 && r < 0x20) { if (r <= 0x1B) adpcm.Write(r - 0x10, v); return; }   // ADPCM-B
+            if (port == 1 && r < 0x30) { adpcmA.Write(r, v); return; }                                    // ADPCM-A
+        }
         if (port == 0 && r >= 0x10 && r < 0x20) { rhythm?.Write(r, v); return; }
         if (port == 1 && r < 0x20) { adpcm?.Write(r, v); return; }
         if (port == 0 && r < 0x30)
@@ -172,6 +206,7 @@ public sealed class OpnChip : ISoundChip
         if (ssg != null) { double s = ssg.Generate() * 0.5; l += s; r += s; }
         if (rhythm != null) { rhythm.Generate(out double rl, out double rr); l += rl; r += rr; }
         if (adpcm != null) { adpcm.Generate(out double al, out double ar); l += al; r += ar; }
+        if (adpcmA != null) { adpcmA.Generate(out double al, out double ar); l += al; r += ar; }
         left = SoundChips.Clip(l);
         right = SoundChips.Clip(r);
     }
@@ -182,10 +217,11 @@ public sealed class OpnChip : ISoundChip
     {
         kind = 0; i = ch;
         if (ch < 0) return false;
-        if (ch < fmCh) return true;
-        i -= fmCh;
+        if (ch < fmShown.Length) { i = fmShown[ch]; return true; }
+        i = ch - fmShown.Length;
         if (ssg != null) { if (i < 3) { kind = 1; return true; } i -= 3; }
         if (rhythm != null) { if (i < 6) { kind = 2; return true; } if (i == 6) { kind = 3; return true; } }
+        if (adpcmA != null) { if (i < 6) { kind = 4; return true; } if (i == 6) { kind = 3; return true; } }
         return false;
     }
 
@@ -195,6 +231,7 @@ public sealed class OpnChip : ISoundChip
         if (k == 0) fm.Ch[i].Mute = mute;
         else if (k == 1) ssg.SetMute(i, mute);
         else if (k == 2) rhythm.Mute[i] = mute;
+        else if (k == 4) adpcmA.Mute[i] = mute;
         else adpcm.Mute = mute;
     }
 
@@ -204,6 +241,7 @@ public sealed class OpnChip : ISoundChip
         if (k == 0) fm.Ch[i].Pitch = ratio > 0 ? ratio : 1;
         else if (k == 1) ssg.SetPitch(i, ratio);
         else if (k == 3) adpcm.Pitch = ratio > 0 ? ratio : 1;
+        else if (k == 4) adpcmA.Pitch[i] = ratio > 0 ? ratio : 1;
     }
 
     public double ChannelFrequency(int ch)
@@ -220,6 +258,7 @@ public sealed class OpnChip : ISoundChip
         if (k == 0) return fm.Level(i);
         if (k == 1) return ssg.ChannelLevel(i);
         if (k == 2) return rhythm.Level(i);
+        if (k == 4) return adpcmA.Level(i);
         return adpcm.Playing ? adpcm.Volume : 0;
     }
 
@@ -229,6 +268,7 @@ public sealed class OpnChip : ISoundChip
         if (k == 0) return fm.Ch[i].Dac;
         if (k == 1) return ssg.ChannelActive(i);
         if (k == 2) return rhythm.Level(i) > 0.02f;
+        if (k == 4) return adpcmA.Playing(i);
         return adpcm.Playing;
     }
 
@@ -330,7 +370,9 @@ public sealed class OpnChip : ISoundChip
             Array.Copy(data, 0, mem, at, Math.Min(data.Length, mem.Length - at));
         }
 
-        private int Unit { get { return (ctrl2 & 2) != 0 ? 32 : 4; } }
+        /// <summary>YM2610: 주소 = 256바이트 단위.</summary>
+        public bool Unit256;
+        private int Unit { get { return Unit256 ? 256 : (ctrl2 & 2) != 0 ? 32 : 4; } }
 
         public void Write(int a, int v)
         {
@@ -389,6 +431,113 @@ public sealed class OpnChip : ISoundChip
             double s = (prev + (acc - prev) * frac) * vol / 256.0 * 0.6;
             if (l) ol = s;
             if (r) or = s;
+        }
+    }
+
+    // ================================================================ ADPCM-A (YM2610 · 6채널)
+
+    /// <summary>
+    /// YM2610 ADPCM-A: 채널 6개, 클럭 / 432 (8MHz → 18.5kHz) 고정 속도, 4비트 → 12비트 누산 (단계 표 49칸).
+    /// 레지스터: 00 키 (bit7 = 끄기, bit0~5 채널), 01 전체 감쇠 (6비트), 08~0D 채널 좌 · 우 · 감쇠 (5비트), 10~15 · 18~1D 시작, 20~25 · 28~2D 끝 (256바이트 단위).
+    /// 크기: 감쇠 칸 = (채널 ^ 0x1F) + (전체 ^ 0x3F), 63 이상 소리 없음, 곱 15 − (칸 & 7), 나눗셈 2^(5 + 칸 >> 3) (ymfm과 같은 셈).
+    /// </summary>
+    private sealed class AdpcmA
+    {
+        private static readonly int[] Steps =
+        {
+            16, 17, 19, 21, 23, 25, 28, 31, 34, 37, 41, 45, 50, 55, 60, 66, 73, 80, 88, 97, 107, 118, 130, 143, 157, 173, 190, 209, 230, 253,
+            279, 307, 337, 371, 408, 449, 494, 544, 598, 658, 724, 796, 876, 963, 1060, 1166, 1282, 1411, 1552,
+        };
+        private static readonly int[] StepInc = { -1, -1, -1, -1, 2, 5, 7, 9 };
+
+        private byte[] mem = new byte[0x10000];
+        private readonly double step;
+        private readonly int[] start = new int[6], end = new int[6], level = new int[6], acc = new int[6], idx = new int[6], cur = new int[6], outv = new int[6];
+        private readonly bool[] on = new bool[6], l = new bool[6], r = new bool[6];
+        private readonly double[] phase = new double[6];
+        public readonly bool[] Mute = new bool[6];
+        public readonly double[] Pitch = { 1, 1, 1, 1, 1, 1 };
+        private int total;
+
+        public AdpcmA(double clock, int rate) { step = clock / 432.0 / rate; Reset(); }
+
+        public void Reset()
+        {
+            for (int c = 0; c < 6; c++) { start[c] = end[c] = level[c] = acc[c] = idx[c] = cur[c] = outv[c] = 0; on[c] = false; l[c] = r[c] = true; phase[c] = 0; }
+            total = 0;
+        }
+
+        public void Load(byte[] data, int at)
+        {
+            if (at < 0) return;
+            int need = at + data.Length;
+            if (need > mem.Length) Array.Resize(ref mem, Math.Min(16 << 20, need));
+            Array.Copy(data, 0, mem, at, Math.Min(data.Length, mem.Length - at));
+        }
+
+        public void Write(int a, int v)
+        {
+            if (a == 0x00)
+            {
+                for (int c = 0; c < 6; c++)
+                {
+                    if ((v & (1 << c)) == 0) continue;
+                    if ((v & 0x80) != 0) on[c] = false;
+                    else { on[c] = true; cur[c] = (start[c] << 8) * 2; acc[c] = 0; idx[c] = 0; phase[c] = 0; outv[c] = 0; }
+                }
+                return;
+            }
+            if (a == 0x01) { total = v & 0x3F; return; }
+            int ch = a & 7;
+            if (ch > 5) return;
+            switch (a & 0xF8)
+            {
+                case 0x08: l[ch] = (v & 0x80) != 0; r[ch] = (v & 0x40) != 0; level[ch] = v & 0x1F; break;
+                case 0x10: start[ch] = (start[ch] & 0xFF00) | v; break;
+                case 0x18: start[ch] = (start[ch] & 0x00FF) | (v << 8); break;
+                case 0x20: end[ch] = (end[ch] & 0xFF00) | v; break;
+                case 0x28: end[ch] = (end[ch] & 0x00FF) | (v << 8); break;
+            }
+        }
+
+        public bool Playing(int c) { return on[c]; }
+
+        public float Level(int c)
+        {
+            if (!on[c]) return 0;
+            int vol = (level[c] ^ 0x1F) + (total ^ 0x3F);
+            return vol >= 63 ? 0 : 1f - vol / 63f;
+        }
+
+        public void Generate(out double ol, out double or)
+        {
+            ol = or = 0;
+            for (int c = 0; c < 6; c++)
+            {
+                if (!on[c]) continue;
+                phase[c] += step * Pitch[c];
+                while (phase[c] >= 1)
+                {
+                    phase[c] -= 1;
+                    int last = ((end[c] << 8) | 0xFF) * 2 + 1;
+                    if (cur[c] > last || (cur[c] >> 1) >= mem.Length) { on[c] = false; break; }
+                    int b = mem[cur[c] >> 1];
+                    int n = (cur[c] & 1) == 0 ? b >> 4 : b & 15;
+                    cur[c]++;
+                    int delta = (2 * (n & 7) + 1) * Steps[idx[c]] / 8;
+                    if ((n & 8) != 0) delta = -delta;
+                    acc[c] = (acc[c] + delta) & 0xFFF;
+                    idx[c] = Math.Max(0, Math.Min(48, idx[c] + StepInc[n & 7]));
+                    int vol = (level[c] ^ 0x1F) + (total ^ 0x3F);
+                    if (vol >= 63) { outv[c] = 0; continue; }
+                    int mul = 15 - (vol & 7), shift = 4 + 1 + (vol >> 3);
+                    outv[c] = (((short)(acc[c] << 4)) * mul >> shift) & ~3;
+                }
+                if (Mute[c]) continue;
+                double s = outv[c] * 0.5;
+                if (l[c]) ol += s;
+                if (r[c]) or += s;
+            }
         }
     }
 }

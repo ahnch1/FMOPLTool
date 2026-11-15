@@ -36,6 +36,30 @@ public sealed class Ym2413 : ISoundChip
         { 0x05, 0x01, 0x00, 0x00, 0xF8, 0xAA, 0x59, 0x55 },   // TOM / CYM
     };
 
+    /// <summary>
+    /// VRC7 (코나미, 패미컴 확장 음원: OPLL에서 리듬 모드를 빼고 6채널, 내장 악기가 다르다). 내장 악기 15개 =
+    /// Nuke.YKT가 칩에서 읽어 낸 값 (emu2413의 VRC7 표). 0 = 사용자 악기.
+    /// </summary>
+    private static readonly byte[,] Vrc7Rom =
+    {
+        { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },
+        { 0x03, 0x21, 0x05, 0x06, 0xE8, 0x81, 0x42, 0x27 },
+        { 0x13, 0x41, 0x14, 0x0D, 0xD8, 0xF6, 0x23, 0x12 },
+        { 0x11, 0x11, 0x08, 0x08, 0xFA, 0xB2, 0x20, 0x12 },
+        { 0x31, 0x61, 0x0C, 0x07, 0xA8, 0x64, 0x61, 0x27 },
+        { 0x32, 0x21, 0x1E, 0x06, 0xE1, 0x76, 0x01, 0x28 },
+        { 0x02, 0x01, 0x06, 0x00, 0xA3, 0xE2, 0xF4, 0xF4 },
+        { 0x21, 0x61, 0x1D, 0x07, 0x82, 0x81, 0x11, 0x07 },
+        { 0x23, 0x21, 0x22, 0x17, 0xA2, 0x72, 0x01, 0x17 },
+        { 0x35, 0x11, 0x25, 0x00, 0x40, 0x73, 0x72, 0x01 },
+        { 0xB5, 0x01, 0x0F, 0x0F, 0xA8, 0xA5, 0x51, 0x02 },
+        { 0x17, 0xC1, 0x24, 0x07, 0xF8, 0xF8, 0x22, 0x12 },
+        { 0x71, 0x23, 0x11, 0x06, 0x65, 0x74, 0x18, 0x16 },
+        { 0x01, 0x02, 0xD3, 0x05, 0xC9, 0x95, 0x03, 0x02 },
+        { 0x61, 0x63, 0x0C, 0x00, 0x94, 0xC0, 0x33, 0xF6 },
+        { 0x21, 0x72, 0x0D, 0x00, 0xC1, 0xD5, 0x56, 0x06 },
+    };
+
     public static readonly string[] InstrumentNames =
     {
         "User", "Violin", "Guitar", "Piano", "Flute", "Clarinet", "Oboe", "Trumpet", "Organ", "Horn",
@@ -64,21 +88,24 @@ public sealed class Ym2413 : ISoundChip
     private double amPhase, pmPhase;
     private int noise = 1;
     private bool rhythm;
+    /// <summary>VRC7: 6채널, 리듬 없음, 다른 내장 악기.</summary>
+    public readonly bool Vrc7;
 
-    public Ym2413(double clock = DefaultClock)
+    public Ym2413(double clock = DefaultClock, bool vrc7 = false)
     {
         this.clock = clock > 0 ? clock : DefaultClock;
+        Vrc7 = vrc7;
         NativeRate = (int)Math.Round(this.clock / 72);
         for (int i = 0; i < slots.Length; i++) slots[i] = new Slot();
         Reset();
     }
 
-    public string Name { get { return "YM2413 (OPLL)"; } }
+    public string Name { get { return Vrc7 ? "VRC7 (NES)" : "YM2413 (OPLL)"; } }
     public int NativeRate { get; }
     /// <summary>멜로디 9 + 리듬 5 (BD · SD · TOM · CYM · HH).</summary>
-    public int ChannelCount { get { return 14; } }
+    public int ChannelCount { get { return Vrc7 ? 6 : 14; } }
     private static readonly string[] DrumNames = { "BD", "SD", "TO", "CY", "HH" };
-    public string ChannelLabel(int ch) { return ch < 9 ? "L" + (ch + 1) : DrumNames[ch - 9]; }
+    public string ChannelLabel(int ch) { return Vrc7 ? "K" + (ch + 1) : ch < 9 ? "L" + (ch + 1) : DrumNames[ch - 9]; }
 
     public void Reset()
     {
@@ -103,6 +130,7 @@ public sealed class Ym2413 : ISoundChip
         }
         if (r == 0x0E)
         {
+            if (Vrc7) return;   // VRC7에는 리듬 모드가 없다
             bool rm = (v & 0x20) != 0;
             if (rm != rhythm) { rhythm = rm; for (int ch = 6; ch < 9; ch++) LoadPatch(ch); }
             if (rhythm)
@@ -139,7 +167,7 @@ public sealed class Ym2413 : ISoundChip
         else if (!on && s.Key) { s.Key = false; s.Stage = 3; }
     }
 
-    private byte PatchByte(int patch, int i) { return patch == 0 ? user[i] : Rom[patch, i]; }
+    private byte PatchByte(int patch, int i) { return patch == 0 ? user[i] : Vrc7 && patch < 16 ? Vrc7Rom[patch, i] : Rom[patch, i]; }
 
     private void LoadPatch(int ch)
     {

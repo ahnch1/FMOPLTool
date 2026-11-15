@@ -51,6 +51,13 @@ public sealed class VgmSong
     public bool SccPlus;
     public double Ym3812Clock, Ym3526Clock, Y8950Clock, Ymf262Clock;
     public double Sn76489Clock, Ym2413Clock, Ym2612Clock, Ym2151Clock, Ym2203Clock, Ym2608Clock, Okim6295Clock, NesApuClock, Huc6280Clock;
+    /// <summary>NES APU 클럭 bit31: FDS 음원이 함께 있다 (0xB4 aa 0x20~0x7F).</summary>
+    public bool NesFds;
+    /// <summary>NSF에서 바꾼 곡의 확장 음원 비트 (NSF 머리말 0x7B: 1 VRC6, 2 VRC7, 4 FDS, 8 MMC5, 0x10 N163, 0x20 5B). VGM 파일에는 없다 (0).
+    /// VRC6 · N163 · MMC5는 예약 명령 0xD7 cc aa dd로 온다.</summary>
+    public int NsfChips;
+    /// <summary>YM2413 자리가 VRC7 (NSF): 6채널, VRC7 내장 악기.</summary>
+    public bool Vrc7;
     /// <summary>SN76489 노이즈 되먹임 · LFSR 너비 (0 = 기본값).</summary>
     public int SnFeedback, SnWidth;
     /// <summary>OKIM6295 핀7 (클럭 칸 bit31).</summary>
@@ -98,15 +105,18 @@ public sealed class VgmSong
         {
             var l = new List<string>();
             if (Sn76489Clock > 0) l.Add("SN76489");
-            if (Ym2413Clock > 0) l.Add("YM2413");
+            if (Ym2413Clock > 0) l.Add(Vrc7 ? "VRC7" : "YM2413");
             if (Ym2612Clock > 0) l.Add("YM2612");
             if (Ym2151Clock > 0) l.Add("YM2151");
             if (Ym2203Clock > 0) l.Add("YM2203");
             if (Ym2608Clock > 0) l.Add("YM2608");
             if (Okim6295Clock > 0) l.Add("OKIM6295");
-            if (NesApuClock > 0) l.Add("2A03");
+            if (NesApuClock > 0) l.Add(NesFds ? "2A03 + FDS" : "2A03");
+            if ((NsfChips & 0x01) != 0) l.Add("VRC6");
+            if ((NsfChips & 0x10) != 0) l.Add("N163");
+            if ((NsfChips & 0x08) != 0) l.Add("MMC5");
             if (Huc6280Clock > 0) l.Add("HuC6280");
-            if (HasPsg) l.Add(AyTypeName);
+            if (HasPsg) l.Add((NsfChips & 0x20) != 0 ? "Sunsoft 5B" : AyTypeName);
             if (HasScc) l.Add(SccPlus ? "SCC+" : "SCC");
             if (Ymf262Clock > 0) l.Add("OPL3");
             else if (Ym3812Clock > 0) l.Add("OPL2");
@@ -204,6 +214,7 @@ public static class VgmFormat
         s.Ym2608Clock = hz(0x48);
         s.Okim6295Clock = hz(0x98);
         s.NesApuClock = hz(0x84);
+        s.NesFds = s.NesApuClock > 0 && (clock(0x84) & 0x80000000) != 0;
         s.Huc6280Clock = hz(0xA4);
         s.OkiPin7 = (clock(0x98) & 0x80000000) != 0;
         if (s.Version < 0x110 && s.Ym2413Clock > 0)

@@ -44,7 +44,7 @@ public sealed class VgmPlayer
     }
 
     private readonly List<ExtraChip> extras = new List<ExtraChip>();
-    private ExtraChip xSn, xOpll, xOpn2, xOpm, xOpn, xOpna, xOki, xNes, xPce;
+    private ExtraChip xSn, xOpll, xOpn2, xOpm, xOpn, xOpna, xOki, xNes, xPce, xNsfx;
     /// <summary>YM2612 PCM 데이터 뱅크 (블록 0x00) · 읽는 위치.</summary>
     private byte[] pcmBank = new byte[0];
     private int pcmLen, pcmPos;
@@ -54,13 +54,14 @@ public sealed class VgmPlayer
     {
         var l = new List<ISoundChip>();
         if (s.Sn76489Clock > 0) l.Add(new Sn76489(s.Sn76489Clock, Rate, s.SnFeedback, s.SnWidth));
-        if (s.Ym2413Clock > 0) l.Add(new Ym2413(s.Ym2413Clock));
+        if (s.Ym2413Clock > 0) l.Add(new Ym2413(s.Ym2413Clock, s.Vrc7));
         if (s.Ym2612Clock > 0) l.Add(new OpnChip(OpnChip.Variant.Ym2612, s.Ym2612Clock));
         if (s.Ym2151Clock > 0) l.Add(new Ym2151(s.Ym2151Clock));
         if (s.Ym2203Clock > 0) l.Add(new OpnChip(OpnChip.Variant.Ym2203, s.Ym2203Clock));
         if (s.Ym2608Clock > 0) l.Add(new OpnChip(OpnChip.Variant.Ym2608, s.Ym2608Clock));
         if (s.Okim6295Clock > 0) l.Add(new Okim6295(s.Okim6295Clock, s.OkiPin7, Rate));
-        if (s.NesApuClock > 0) l.Add(new NesApu(s.NesApuClock, Rate));
+        if (s.NesApuClock > 0) l.Add(new NesApu(s.NesApuClock, Rate, s.NesFds));
+        if ((s.NsfChips & (NsfExpansion.Vrc6 | NsfExpansion.N163 | NsfExpansion.Mmc5)) != 0) l.Add(new NsfExpansion(s.NsfChips, s.NesApuClock > 0 ? s.NesApuClock : NesApu.NtscClock, Rate));
         if (s.Huc6280Clock > 0) l.Add(new Huc6280Psg(s.Huc6280Clock, Rate));
         return l;
     }
@@ -177,7 +178,7 @@ public sealed class VgmPlayer
         }
 
         extras.Clear();
-        xSn = xOpll = xOpn2 = xOpm = xOpn = xOpna = xOki = xNes = xPce = null;
+        xSn = xOpll = xOpn2 = xOpm = xOpn = xOpna = xOki = xNes = xPce = xNsfx = null;
         foreach (var chip in CreateOtherChips(s))
         {
             var x = new ExtraChip { Chip = chip, Base = -1 };
@@ -189,6 +190,7 @@ public sealed class VgmPlayer
             else if (chip is Okim6295) xOki = x;
             else if (chip is NesApu) xNes = x;
             else if (chip is Huc6280Psg) xPce = x;
+            else if (chip is NsfExpansion) xNsfx = x;
             else if (chip is OpnChip o) { if (o.Type == OpnChip.Variant.Ym2612) xOpn2 = x; else if (o.Type == OpnChip.Variant.Ym2203) xOpn = x; else xOpna = x; }
         }
         pcmLen = 0; pcmPos = 0;
@@ -341,6 +343,7 @@ public sealed class VgmPlayer
             case 0xB8: if ((d[pos + 1] & 0x80) == 0) Other(xOki, 0, d[pos + 1], d[pos + 2]); break;
             case 0xB4: if ((d[pos + 1] & 0x80) == 0) Other(xNes, 0, d[pos + 1], d[pos + 2]); break;
             case 0xB9: if ((d[pos + 1] & 0x80) == 0) Other(xPce, 0, d[pos + 1], d[pos + 2]); break;
+            case 0xD7: if (song.NsfChips != 0) Other(xNsfx, d[pos + 1], d[pos + 2], d[pos + 3]); break;   // NSF 확장 음원 (이 프로그램 안에서만)
             case 0x67: DataBlock(d, pos); break;
             case 0xE0: pcmPos = (int)VgmFormat.U32(d, pos + 1); break;
             default:

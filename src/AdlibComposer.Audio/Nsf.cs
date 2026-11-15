@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using AdlibComposer.Audio.Chips;
 using AdlibComposer.Audio.Cpu;
 using AdlibComposer.Formats;
 
@@ -15,7 +16,8 @@ namespace AdlibComposer.Audio;
 /// 0x6E NTSC 재생 간격(µs), 0x70 뱅크 8개 (0이 아니면 4KB 뱅크 전환: $5FF8~$5FFF), 0x7A PAL/NTSC, 0x7B 확장 음원.</para>
 /// <para>돌리는 방법 (nesdev 위키 "NSF"): RAM · APU를 지우고 $4015 = $0F, $4017 = $40, init을 A = 곡 번호(0부터) · X = 0(NTSC)으로 부르고,
 /// 그 뒤 재생 간격마다 play를 부른다. DPCM 샘플은 시작할 때 CPU 메모리에서 VGM 데이터 블록(0xC2)으로 옮긴다.
-/// 확장 음원(VRC6 · FDS · N163 …)은 소리 내지 않는다.</para>
+/// 확장 음원: FDS = VGM 그대로 (NES 클럭 bit31 + 0xB4 aa 0x20~0x7F), VRC7 = YM2413(VRC7 악기), 선소프트 5B = YM2149,
+/// VRC6 · N163 · MMC5 = VGM 예약 명령 0xD7 (<see cref="Chips.NsfExpansion"/>). FDS 곡은 $6000~$FFFF가 RAM이고 뱅크 전환은 RAM에 베낀다.</para>
 /// <para>곡 길이 = 같은 이름의 .m3u (<see cref="NezM3u"/>, 종류 NSF, 번호는 1부터), 없으면 2분.</para>
 /// </summary>
 public static class Nsf
@@ -99,7 +101,7 @@ public static class Nsf
         v.TitleEn = t.Title.Length > 0 ? t.Title : Path.GetFileNameWithoutExtension(path) + " #" + (t.Song + 1);
         v.GameEn = h.Title;
         v.AuthorEn = h.Artist;
-        v.SourceFormat = "NSF · 곡 " + (t.Song + 1) + " (" + (track + 1) + "/" + tracks.Count + ")" + (h.Expansion != 0 ? " · 확장 음원 없이" : "");
+        v.SourceFormat = "NSF · 곡 " + (t.Song + 1) + " (" + (track + 1) + "/" + tracks.Count + ")" + (h.Expansion != 0 ? " · " + ExpansionName(h.Expansion) : "");
         return v;
     }
 
@@ -121,9 +123,21 @@ public static class Nsf
         private readonly byte[] shadow = new byte[0x10000];
         private readonly bool[] shadowValid = new bool[0x10000];
 
+        // 확장 음원
+        private readonly int exp;
+        private bool Has(int bit) { return (exp & bit) != 0; }
+        /// <summary>FDS: $6000~$FFFF가 RAM (뱅크 전환 = 4KB를 RAM에 베낀다).</summary>
+        private readonly byte[] fdsMem;
+        private int vrc7Addr, sunAddr, n163Addr;
+        private readonly byte[] n163Ram = new byte[128];
+        private readonly byte[] exRam = new byte[0x400];   // MMC5 $5C00~$5FFF
+        private int mul1 = 0xFF, mul2 = 0xFF;
+        public bool UsedVrc7, Used5B;
+
         public Machine(Header h)
         {
             banked = h.Banked;
+            exp = h.Expansion;
             if (banked)
             {
                 int pad = h.LoadAddr & 0x0FFF;
@@ -137,7 +151,22 @@ public static class Nsf
                 rom = new byte[0x8000];
                 int at = h.LoadAddr - 0x8000;
                 if (at < 0) at = 0;
-                Array.Copy(h.Data, 0, rom, at, Math.Min(h.Data.Length, 0x8000 - at));
+                if (h.LoadAddr >= 0x8000) Array.Copy(h.Data, 0, rom, at, Math.Min(h.Data.Length, 0x8000 - at));
+            }
+            if (Has(NsfExpansion.Fds))
+            {
+                fdsMem = new byte[0xA000];
+                if (banked)
+                {
+                    // $6000 · $7000 = 머리말 뱅크 6 · 7, $8000~ = 뱅크 0~7
+                    CopyBank(0x6000, h.Banks[6]); CopyBank(0x7000, h.Banks[7]);
+                    for (int i = 0; i < 8; i++) CopyBank(0x8000 + i * 0x1000, h.Banks[i]);
+                }
+                else
+                {
+                    int at = h.LoadAddr - 0x6000;
+                    if (at >= 0) Array.Copy(h.Data, 0, fdsMem, at, Math.Min(h.Data.Length, fdsMem.Length - at));
+                }
             }
         }
 
@@ -147,13 +176,31 @@ public static class Nsf
             bankAt[slot] = (bank % Math.Max(1, n)) * 0x1000;
         }
 
+        private void CopyBank(int addr, int bank)
+        {
+            int n = rom.Length / 0x1000;
+            Array.Copy(rom, (bank % Math.Max(1, n)) * 0x1000, fdsMem, addr - 0x6000, 0x1000);
+        }
+
         public byte Read(int a)
         {
             a &= 0xFFFF;
             if (a < 0x2000) return Ram[a & 0x7FF];
+            if (fdsMem != null && a >= 0x6000) return fdsMem[a - 0x6000];
             if (a >= 0x8000) return banked ? rom[bankAt[(a - 0x8000) >> 12] + (a & 0xFFF)] : rom[a - 0x8000];
             if (a >= 0x6000) return Sram[a - 0x6000];
-            if (a == 0x4015) return (byte)0;
+            if (Has(NsfExpansion.N163) && a >= 0x4800 && a < 0x5000)
+            {
+                byte v = n163Ram[n163Addr & 0x7F];
+                if ((n163Addr & 0x80) != 0) n163Addr = 0x80 | ((n163Addr + 1) & 0x7F);
+                return v;
+            }
+            if (Has(NsfExpansion.Mmc5))
+            {
+                if (a >= 0x5C00 && a < 0x6000) return exRam[a - 0x5C00];
+                if (a == 0x5205) return (byte)(mul1 * mul2);
+                if (a == 0x5206) return (byte)((mul1 * mul2) >> 8);
+            }
             return 0;
         }
 
@@ -161,8 +208,13 @@ public static class Nsf
         {
             a &= 0xFFFF;
             if (a < 0x2000) { Ram[a & 0x7FF] = v; return; }
-            if (a >= 0x6000 && a < 0x8000) { Sram[a - 0x6000] = v; return; }
-            if (a >= 0x5FF8 && a <= 0x5FFF) { if (banked) SetBank(a - 0x5FF8, v); return; }
+            if (a >= 0x5FF6 && a <= 0x5FFF)
+            {
+                if (!banked) return;
+                if (fdsMem != null) { CopyBank(0x6000 + (a - 0x5FF6) * 0x1000, v); return; }
+                if (a >= 0x5FF8) SetBank(a - 0x5FF8, v);
+                return;
+            }
             if (a >= 0x4000 && a <= 0x4017 && a != 0x4014 && a != 0x4016)
             {
                 int r = a - 0x4000;
@@ -170,7 +222,51 @@ public static class Nsf
                 if (r == 0x15 && (v & 0x10) != 0) CopyDpcm();
                 Emit(0xB4, (byte)r, v);
                 UsedApu = true;
+                return;
             }
+            // ---- 확장 음원 (쓰기만으로 칩에 간다)
+            if (Has(NsfExpansion.Fds))
+            {
+                if (a >= 0x4040 && a <= 0x407F) { Emit(0xB4, (byte)(0x40 + a - 0x4040), v); return; }
+                if (a >= 0x4080 && a <= 0x408A) { Emit(0xB4, (byte)(0x20 + a - 0x4080), v); return; }
+                if (a == 0x4023) { Emit(0xB4, 0x3F, v); return; }
+            }
+            if (Has(NsfExpansion.Mmc5))
+            {
+                if (a >= 0x5000 && a <= 0x5015) { Emit(0xD7, NsfExpansion.IdMmc5, (byte)(a & 0x1F), v); return; }
+                if (a == 0x5205) { mul1 = v; return; }
+                if (a == 0x5206) { mul2 = v; return; }
+                if (a >= 0x5C00 && a < 0x6000) { exRam[a - 0x5C00] = v; return; }
+            }
+            if (Has(NsfExpansion.N163))
+            {
+                if (a >= 0x4800 && a < 0x5000)
+                {
+                    int r = n163Addr & 0x7F;
+                    n163Ram[r] = v;
+                    Emit(0xD7, NsfExpansion.IdN163, (byte)r, v);
+                    if ((n163Addr & 0x80) != 0) n163Addr = 0x80 | ((n163Addr + 1) & 0x7F);
+                    return;
+                }
+                if (a >= 0xF800) { n163Addr = v; return; }
+            }
+            if (Has(NsfExpansion.Vrc6) && (a == 0x9000 || a == 0x9001 || a == 0x9002 || a == 0x9003 || (a >= 0xA000 && a <= 0xA002) || (a >= 0xB000 && a <= 0xB002)))
+            {
+                Emit(0xD7, NsfExpansion.IdVrc6, (byte)((((a >> 12) - 9) * 4) + (a & 3)), v);
+                return;
+            }
+            if (Has(NsfExpansion.Vrc7))
+            {
+                if (a == 0x9010) { vrc7Addr = v; return; }
+                if (a == 0x9030) { UsedVrc7 = true; Emit(0x51, (byte)vrc7Addr, v); return; }
+            }
+            if (Has(NsfExpansion.Sunsoft5B))
+            {
+                if (a >= 0xC000 && a < 0xE000) { sunAddr = v & 0x0F; return; }
+                if (a >= 0xE000) { Used5B = true; Emit(0xA0, (byte)sunAddr, v); return; }
+            }
+            if (fdsMem != null && a >= 0x6000) { fdsMem[a - 0x6000] = v; return; }
+            if (a >= 0x6000 && a < 0x8000) Sram[a - 0x6000] = v;
         }
 
         /// <summary>DPCM을 켤 때: 읽을 메모리를 VGM 데이터 블록으로 (앞서 옮긴 것과 다를 때만).</summary>
@@ -239,7 +335,16 @@ public static class Nsf
         }
 
         var w = new VgmWriter { System = "NES (NSF)", Notes = "NSF", Title = h.Title, Author = h.Artist };
-        w.SetClock(VgmWriter.ClockNesApu, apuClock);
+        bool fds = (h.Expansion & NsfExpansion.Fds) != 0;
+        w.SetClock(VgmWriter.ClockNesApu, apuClock, fds ? 0x80000000u : 0);
+        if ((h.Expansion & NsfExpansion.Vrc7) != 0) w.SetClock(VgmWriter.ClockYm2413, 3579545);
+        if ((h.Expansion & NsfExpansion.Sunsoft5B) != 0)
+        {
+            // 선소프트 5B = YM2149 (CPU 클럭, 클럭 반 핀): 소리 = 클럭 / (32 × 주기)
+            w.SetClock(VgmWriter.ClockAy8910, m.Clock);
+            w.SetHeaderByte(0x78, 0x10);
+            w.SetHeaderByte(0x79, 0x11);
+        }
         long at = 0;
         foreach (var (time, cmd) in m.Log)
         {
@@ -251,7 +356,9 @@ public static class Nsf
         var v = VgmFormat.Read(w.ToArray());
         v.FadeSeconds = Math.Max(0, Math.Min(fade, seconds / 2));
         if (!m.UsedApu) v.UnsupportedChips.Add("(칩 쓰기 없음)");
-        if (h.Expansion != 0) v.UnsupportedChips.Add(ExpansionName(h.Expansion));
+        v.NsfChips = h.Expansion & 0x3F;
+        v.Vrc7 = (h.Expansion & NsfExpansion.Vrc7) != 0;
+        if ((h.Expansion & ~0x3F) != 0) v.UnsupportedChips.Add("NSF 확장 음원 비트 0x" + (h.Expansion & ~0x3F).ToString("X2"));
         if (cpu.UnknownOps > 0 || cpu.Jammed) v.UnsupportedChips.Add("(6502 알 수 없는 명령 " + cpu.UnknownOps + (cpu.Jammed ? ", 멈춤" : "") + ")");
         return v;
     }
@@ -265,7 +372,7 @@ public static class Nsf
         if ((bits & 8) != 0) l.Add("MMC5");
         if ((bits & 0x10) != 0) l.Add("N163");
         if ((bits & 0x20) != 0) l.Add("Sunsoft 5B");
-        return "NSF 확장 음원 " + string.Join(" · ", l);
+        return string.Join(" · ", l);
     }
 
     /// <summary>addr를 부르고 함정으로 돌아오거나 한도까지 돌린다. a ≥ 0이면 A = a, x ≥ 0이면 X = x.</summary>

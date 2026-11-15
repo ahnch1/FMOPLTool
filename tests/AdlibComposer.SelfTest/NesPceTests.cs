@@ -25,6 +25,7 @@ public static class NesPceTests
         VgmChips(check);
         NsfSynthetic(check);
         HesSynthetic(check);
+        NsfExpansions(check);
         Real(check);
     }
 
@@ -297,6 +298,86 @@ public static class NesPceTests
         var ch = VgmPlayer.ChannelsOf(dv);
         int dm = ch.FindIndex(c => c.Label == "DM");
         check("NSF (synthetic): DPCM memory → VGM data block 0xC2, DM used", block && dm >= 0 && used[dm], block + " " + dm);
+    }
+
+    // ------------------------------------------------------------ NSF 확장 음원 (만든 파일)
+
+    /// <summary>init = 주어진 (주소, 값) 쓰기들, play = RTS. 코드는 $8000, FDS면 $8000도 RAM.</summary>
+    private static byte[] MakeExpNsf(int exp, params (int addr, int v)[] writes)
+    {
+        var code = new List<byte>();
+        foreach (var (addr, v) in writes) code.AddRange(new byte[] { 0xA9, (byte)v, 0x8D, (byte)addr, (byte)(addr >> 8) });
+        code.Add(0x60);
+        int play = code.Count;
+        code.Add(0x60);
+        var d = new byte[0x80 + code.Count];
+        Encoding.ASCII.GetBytes("NESM").CopyTo(d, 0);
+        d[5] = 1; d[6] = 1; d[7] = 1;
+        d[8] = 0x00; d[9] = 0x80; d[10] = 0x00; d[11] = 0x80; d[12] = (byte)play; d[13] = 0x80;
+        d[0x6E] = 0x1A; d[0x6F] = 0x41;
+        d[0x7B] = (byte)exp;
+        code.ToArray().CopyTo(d, 0x80);
+        return d;
+    }
+
+    private static void ExpCheck(Action<string, bool, string> check, string name, byte[] nsf, string label, double hz, double tol)
+    {
+        var v = Nsf.Render(nsf, 0, 1, 0);
+        var ch = VgmPlayer.ChannelsOf(v);
+        var used = VgmPlayer.ScanUsed(v);
+        int at = ch.FindIndex(c => c.Label == label);
+        var p = new VgmPlayer(); p.Start(v, 0, null);
+        var a = new double[Rate];
+        for (int i = 0; i < a.Length; i++) { p.Step(); p.Generate(out double l, out _); a[i] = l; }
+        double f = Freq(a, 4410, Rate), r = Rms(a, 4410, Rate);
+        bool pitchOk = hz <= 0 || Math.Abs(f - hz) < tol;
+        check("NSF " + name + ": " + label + " sounds" + (hz > 0 ? " at " + hz.ToString("0") + " Hz" : ""),
+            at >= 0 && used[at] && r > 300 && pitchOk && v.UnsupportedChips.Count == 0,
+            v.ChipSummary + ", " + string.Join(",", ch.Select(c => c.Label)) + ", f " + f.ToString("0.0") + ", rms " + r.ToString("0") + (v.UnsupportedChips.Count > 0 ? " [" + string.Join(",", v.UnsupportedChips) + "]" : ""));
+    }
+
+    private static void NsfExpansions(Action<string, bool, string> check)
+    {
+        // VRC6 사각파 (듀티 7 = 50%) 440Hz, 톱니 220Hz
+        ExpCheck(check, "VRC6", MakeExpNsf(NsfExpansion.Vrc6, (0x9000, 0x7F), (0x9001, 253), (0x9002, 0x80)), "V1", 440, 5);
+        ExpCheck(check, "VRC6 saw", MakeExpNsf(NsfExpansion.Vrc6, (0xB000, 42), (0xB001, 580 & 0xFF), (0xB002, 0x80 | (580 >> 8))), "VS", 220, 4);
+        // N163: 32칸 네모 파형, 채널 8 하나, 440Hz
+        var n = new List<(int, int)> { (0xF800, 0x80) };
+        for (int i = 0; i < 16; i++) n.Add((0x4800, i < 8 ? 0xFF : 0x00));
+        int freq = 7735;
+        n.Add((0xF800, 0x80 | 0x78));
+        n.AddRange(new (int, int)[] { (0x4800, freq & 0xFF), (0x4800, 0), (0x4800, (freq >> 8) & 0xFF), (0x4800, 0), (0x4800, 0xE0 | (freq >> 16)), (0x4800, 0), (0x4800, 0), (0x4800, 0x0F) });
+        ExpCheck(check, "N163", MakeExpNsf(NsfExpansion.N163, n.ToArray()), "N1", 440, 5);
+        // MMC5 사각파 440Hz
+        ExpCheck(check, "MMC5", MakeExpNsf(NsfExpansion.Mmc5, (0x5015, 1), (0x5000, 0xBF), (0x5002, 253), (0x5003, 0x08)), "M1", 440, 5);
+        // 선소프트 5B = YM2149: 주기 127 → 1789773 / (32 × 127) = 440.4Hz
+        ExpCheck(check, "Sunsoft 5B", MakeExpNsf(NsfExpansion.Sunsoft5B, (0xC000, 7), (0xE000, 0x3E), (0xC000, 8), (0xE000, 15), (0xC000, 0), (0xE000, 127), (0xC000, 1), (0xE000, 0)), "A", 440.4, 5);
+        // VRC7: 악기 1, 볼륨 최대, F-number 290 블록 4 ≈ 440Hz (FM이라 소리 높이는 채널 표시로)
+        var v7 = Nsf.Render(MakeExpNsf(NsfExpansion.Vrc7, (0x9010, 0x30), (0x9030, 0x10), (0x9010, 0x10), (0x9030, 0x22), (0x9010, 0x20), (0x9030, 0x19)), 0, 1, 0);
+        var ch7 = VgmPlayer.ChannelsOf(v7);
+        var u7 = VgmPlayer.ScanUsed(v7);
+        int k1 = ch7.FindIndex(c => c.Label == "K1");
+        check("NSF VRC7: YM2413 in VRC7 mode, 6 channels, K1 used", v7.Vrc7 && k1 >= 0 && u7[k1] && ch7.Count(c => c.Label.StartsWith("K")) == 6 && !ch7.Any(c => c.Label == "BD"),
+            v7.ChipSummary + ", " + string.Join(",", ch7.Select(c => c.Label)));
+        ExpCheck(check, "VRC7", MakeExpNsf(NsfExpansion.Vrc7, (0x9010, 0x30), (0x9030, 0x10), (0x9010, 0x10), (0x9030, 0x22), (0x9010, 0x20), (0x9030, 0x19)), "K1", 0, 0);
+        // FDS: 64칸 네모 파형, 직접 볼륨 32, 변조 멈춤, freq 1031 → 440Hz
+        var fw = new List<(int, int)> { (0x4023, 0x83), (0x4089, 0x80) };
+        for (int i = 0; i < 64; i++) fw.Add((0x4040 + i, i < 32 ? 63 : 0));
+        fw.AddRange(new (int, int)[] { (0x4089, 0x00), (0x4080, 0x80 | 32), (0x4087, 0x80), (0x4082, 1031 & 0xFF), (0x4083, 1031 >> 8) });
+        ExpCheck(check, "FDS", MakeExpNsf(NsfExpansion.Fds, fw.ToArray()), "FD", 440, 5);
+        // 변조가 켜지면 소리 높이가 흔들린다 (같은 칸만 쓰면 변조 카운터가 계속 올라 높아진다)
+        var fm = new List<(int, int)>(fw);
+        fm.RemoveAt(fm.Count - 3);   // (0x4087, 0x80) 빼고
+        for (int i = 0; i < 32; i++) fm.Add((0x4088, 1));
+        fm.AddRange(new (int, int)[] { (0x4084, 0x80 | 16), (0x4086, 0x40), (0x4087, 0x00) });
+        var mv = Nsf.Render(MakeExpNsf(NsfExpansion.Fds, fm.ToArray()), 0, 1, 0);
+        var mp = new VgmPlayer(); mp.Start(mv, 0, null);
+        var ma = new double[Rate];
+        for (int i = 0; i < ma.Length; i++) { mp.Step(); mp.Generate(out double l, out _); ma[i] = l; }
+        // 변조 카운터가 −64~63을 빠르게 돌아 비브라토가 된다: 20ms 창마다 소리 높이를 재어 폭을 본다
+        double lo = double.MaxValue, hi = 0;
+        for (int w0 = 4410; w0 + 882 <= Rate; w0 += 882) { double fw0 = Freq(ma, w0, w0 + 882); lo = Math.Min(lo, fw0); hi = Math.Max(hi, fw0); }
+        check("NSF FDS: modulation bends pitch (vibrato)", Rms(ma, 2205, Rate) > 300 && hi - lo > 100, lo.ToString("0") + " ~ " + hi.ToString("0") + " Hz");
     }
 
     private static byte[] MakeHes()

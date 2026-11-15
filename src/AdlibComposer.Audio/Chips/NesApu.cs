@@ -64,22 +64,38 @@ public sealed class NesApu : ISoundChip
     private double cycleFrac;
     private double hpPrev, hpOut;
     private readonly double hpA;
-    private readonly bool[] mute = new bool[5];
-    private readonly double[] pitch = { 1, 1, 1, 1, 1 };
+    private readonly bool[] mute = new bool[6];
+    private readonly double[] pitch = { 1, 1, 1, 1, 1, 1 };
+
+    // ------------------------------------------------------------ FDS (패미컴 디스크 시스템, VGM: NES 클럭 bit31 + 0xB4 aa 0x20~0x7F)
+    /// <summary>FDS 음원이 있는가: 64칸 6비트 파형 + 볼륨 엔벨로프 + 주파수 변조 (nesdev 위키 "FDS audio").</summary>
+    public readonly bool Fds;
+    private readonly byte[] fdsWave = new byte[64];
+    private readonly byte[] fdsModTable = new byte[32];
+    private int fdsFreq, fdsVolGain, fdsVolSpeed, fdsModGain, fdsModSpeed, fdsModFreq, fdsModCounter, fdsModPos, fdsMaster, fdsEnvMaster = 0xE8;
+    private bool fdsVolDirect = true, fdsVolUp, fdsModDirect = true, fdsModUp, fdsWaveHalt = true, fdsEnvHalt, fdsModHalt = true, fdsWriteMode;
+    private long fdsWaveAcc, fdsModAcc;
+    private int fdsVolTimer, fdsModTimer, fdsOut;
+    private double fdsLp;
+    private readonly double fdsLpA;
+    private static readonly double[] FdsMaster = { 1.0, 2.0 / 3, 2.0 / 4, 2.0 / 5 };
+    private static readonly int[] FdsModStep = { 0, 1, 2, 4, 0, -4, -2, -1 };
     private readonly byte[] regs = new byte[0x20];
 
-    public NesApu(double clock = NtscClock, int rate = 44100)
+    public NesApu(double clock = NtscClock, int rate = 44100, bool fds = false)
     {
+        Fds = fds;
+        fdsLpA = 1 - Math.Exp(-2 * Math.PI * 2000.0 / rate);   // FDS 출력의 RC 로우패스 (약 2kHz)
         this.clock = clock > 0 ? clock : NtscClock;
         this.rate = rate;
         hpA = Math.Exp(-2 * Math.PI * 30.0 / rate);
         Reset();
     }
 
-    public string Name { get { return "2A03 (NES APU)"; } }
+    public string Name { get { return Fds ? "2A03 + FDS (NES)" : "2A03 (NES APU)"; } }
     public int NativeRate { get { return rate; } }
-    public int ChannelCount { get { return 5; } }
-    private static readonly string[] Labels = { "P1", "P2", "TR", "NO", "DM" };
+    public int ChannelCount { get { return Fds ? 6 : 5; } }
+    private static readonly string[] Labels = { "P1", "P2", "TR", "NO", "DM", "FD" };
     public string ChannelLabel(int ch) { return Labels[ch]; }
 
     public void Reset()
@@ -90,6 +106,10 @@ public sealed class NesApu : ISoundChip
         dmcRateIdx = dmcOut = dmcAddr = dmcLen = dmcCurAddr = dmcBytesLeft = dmcShift = 0; dmcBits = 8; dmcLoop = false; dmcSilent = true; dmcHasBuffer = false; dmcTimer = 0;
         fiveStep = false; frameCycle = 0; cycleFrac = 0; hpPrev = hpOut = 0;
         Array.Clear(regs, 0, regs.Length);
+        Array.Clear(fdsWave, 0, 64); Array.Clear(fdsModTable, 0, 32);
+        fdsFreq = fdsVolGain = fdsVolSpeed = fdsModGain = fdsModSpeed = fdsModFreq = fdsModCounter = fdsModPos = fdsMaster = 0; fdsEnvMaster = 0xE8;
+        fdsVolDirect = fdsModDirect = fdsWaveHalt = fdsModHalt = true; fdsVolUp = fdsModUp = fdsEnvHalt = fdsWriteMode = false;
+        fdsWaveAcc = fdsModAcc = 0; fdsVolTimer = fdsModTimer = fdsOut = 0; fdsLp = 0;
     }
 
     /// <summary>DPCM이 읽는 메모리 (VGM 데이터 블록 0xC2: 시작 주소 + 바이트).</summary>
@@ -102,7 +122,8 @@ public sealed class NesApu : ISoundChip
 
     public void Write(int port, int reg, int value)
     {
-        reg &= 0x1F; value &= 0xFF;
+        reg &= 0x7F; value &= 0xFF;
+        if (reg >= 0x20) { if (Fds) FdsWrite(reg, value); return; }
         if (reg < 0x18) regs[reg] = (byte)value;
         switch (reg)
         {
@@ -198,7 +219,19 @@ public sealed class NesApu : ISoundChip
         int n = (int)cycleFrac;
         cycleFrac -= n;
         double sum = 0;
-        for (int k = 0; k < n; k++) { Tick(); sum += Mix(); }
+        double fdsSum = 0;
+        for (int k = 0; k < n; k++)
+        {
+            Tick(); sum += Mix();
+            if (Fds) { FdsTick(); fdsSum += fdsOut; }
+        }
+        if (Fds && n > 0)
+        {
+            // FDS: 0~2016 → 사각파 하나 최대쯤의 2배 (패미컴 디스크 음원은 본체 소리보다 크게 섞인다), 로우패스
+            double f = mute.Length > 5 && mute[5] ? 0 : fdsSum / n / 2016.0 * 0.3;
+            fdsLp += (f - fdsLp) * fdsLpA;
+            sum += fdsLp * n;
+        }
         double v = n > 0 ? sum / n : Mix();
         // 직류 빼기
         double y = v - hpPrev + hpA * hpOut;
@@ -275,8 +308,103 @@ public sealed class NesApu : ISoundChip
 
     // ------------------------------------------------------------ 조절 · 표시
 
-    public void SetMute(int ch, bool on) { if (ch >= 0 && ch < 5) mute[ch] = on; }
-    public void SetPitch(int ch, double ratio) { if (ch >= 0 && ch < 4) pitch[ch] = ratio > 0 ? ratio : 1.0; }
+    public void SetMute(int ch, bool on) { if (ch >= 0 && ch < 6) mute[ch] = on; }
+    public void SetPitch(int ch, double ratio) { if (ch >= 0 && ch < 6 && ch != 4) pitch[ch] = ratio > 0 ? ratio : 1.0; }
+
+    // ------------------------------------------------------------ FDS
+
+    /// <summary>VGM 0xB4 aa: 0x20~0x3E = $4080~$409E, 0x3F = $4023, 0x40~0x7F = $4040~$407F (파형 메모리).</summary>
+    private void FdsWrite(int reg, int v)
+    {
+        if (reg >= 0x40) { if (fdsWriteMode) fdsWave[reg - 0x40] = (byte)(v & 0x3F); return; }
+        switch (reg - 0x20)
+        {
+            case 0x0:   // $4080 볼륨 엔벨로프
+                fdsVolDirect = (v & 0x80) != 0; fdsVolUp = (v & 0x40) != 0; fdsVolSpeed = v & 0x3F;
+                if (fdsVolDirect) fdsVolGain = v & 0x3F;
+                fdsVolTimer = 0;
+                break;
+            case 0x2: fdsFreq = (fdsFreq & 0xF00) | v; break;
+            case 0x3:
+                fdsFreq = (fdsFreq & 0xFF) | ((v & 0x0F) << 8);
+                fdsWaveHalt = (v & 0x80) != 0; fdsEnvHalt = (v & 0x40) != 0;
+                if (fdsWaveHalt) fdsWaveAcc = 0;
+                break;
+            case 0x4:   // $4084 변조 엔벨로프
+                fdsModDirect = (v & 0x80) != 0; fdsModUp = (v & 0x40) != 0; fdsModSpeed = v & 0x3F;
+                if (fdsModDirect) fdsModGain = v & 0x3F;
+                fdsModTimer = 0;
+                break;
+            case 0x5: fdsModCounter = ((v & 0x7F) ^ 0x40) - 0x40; break;   // 7비트 부호
+            case 0x6: fdsModFreq = (fdsModFreq & 0xF00) | v; break;
+            case 0x7:
+                fdsModFreq = (fdsModFreq & 0xFF) | ((v & 0x0F) << 8);
+                fdsModHalt = (v & 0x80) != 0;
+                if (fdsModHalt) fdsModAcc = 0;
+                break;
+            case 0x8:   // $4088 변조 표 (멈춰 있을 때 한 칸씩)
+                if (fdsModHalt) { fdsModTable[(fdsModPos >> 1) & 31] = (byte)(v & 7); fdsModPos = (fdsModPos + 2) & 63; }
+                break;
+            case 0x9: fdsWriteMode = (v & 0x80) != 0; fdsMaster = v & 3; break;
+            case 0xA: fdsEnvMaster = v; break;
+        }
+    }
+
+    private void FdsTick()
+    {
+        // 엔벨로프: 8 × (속도 + 1) × 전체 속도($408A) 사이클마다 한 칸
+        if (!fdsEnvHalt && !fdsWaveHalt && fdsEnvMaster > 0)
+        {
+            if (!fdsVolDirect && ++fdsVolTimer >= 8 * (fdsVolSpeed + 1) * fdsEnvMaster)
+            {
+                fdsVolTimer = 0;
+                if (fdsVolUp) { if (fdsVolGain < 32) fdsVolGain++; } else if (fdsVolGain > 0) fdsVolGain--;
+            }
+            if (!fdsModDirect && ++fdsModTimer >= 8 * (fdsModSpeed + 1) * fdsEnvMaster)
+            {
+                fdsModTimer = 0;
+                if (fdsModUp) { if (fdsModGain < 32) fdsModGain++; } else if (fdsModGain > 0) fdsModGain--;
+            }
+        }
+        // 변조 장치: 표 한 칸마다 카운터를 움직인다
+        if (!fdsModHalt && fdsModFreq > 0)
+        {
+            fdsModAcc += fdsModFreq;
+            while (fdsModAcc >= 65536)
+            {
+                fdsModAcc -= 65536;
+                int e = fdsModTable[(fdsModPos >> 1) & 31];
+                fdsModCounter = e == 4 ? 0 : (((fdsModCounter + FdsModStep[e]) + 64) & 127) - 64;
+                fdsModPos = (fdsModPos + 1) & 63;
+            }
+        }
+        // 파형
+        if (!fdsWaveHalt)
+        {
+            int f = fdsFreq;
+            if (!fdsModHalt && fdsModGain != 0)
+            {
+                // nesdev "FDS audio" 주파수 변조 계산
+                int temp = fdsModCounter * fdsModGain;
+                int rem = temp & 0x0F;
+                temp >>= 4;
+                if (rem > 0 && (temp & 0x80) == 0) temp += fdsModCounter < 0 ? -1 : 2;
+                if (temp >= 192) temp -= 256; else if (temp < -64) temp += 256;
+                temp = fdsFreq * temp;
+                rem = temp & 0x3F;
+                temp >>= 6;
+                if (rem >= 32) temp += 1;
+                f = fdsFreq + temp;
+                if (f < 0) f = 0;
+            }
+            fdsWaveAcc += (long)(f * pitch[5]);
+        }
+        if (!fdsWriteMode)
+        {
+            int pos = (int)((fdsWaveAcc >> 16) & 63);
+            fdsOut = (int)(fdsWave[pos] * Math.Min(fdsVolGain, 32) * FdsMaster[fdsMaster]);
+        }
+    }
 
     public double ChannelFrequency(int ch)
     {
@@ -284,6 +412,7 @@ public sealed class NesApu : ISoundChip
         {
             case 0: case 1: return PulseAudible(ch) ? clock / (16.0 * (pulse[ch].Period + 1)) : 0;
             case 2: return triLength > 0 && triLinear > 0 && triPeriod >= 2 ? clock / (32.0 * (triPeriod + 1)) : 0;
+            case 5: return Fds && !fdsWaveHalt && fdsVolGain > 0 && fdsFreq > 0 ? clock * fdsFreq / (64.0 * 65536) : 0;
         }
         return 0;
     }
@@ -296,6 +425,7 @@ public sealed class NesApu : ISoundChip
             case 2: return triLength > 0 && triLinear > 0 ? 1f : 0;
             case 3: return noiseLength > 0 ? (noiseConst ? noiseVol : noiseEnvVol) / 15f : 0;
             case 4: return dmcBytesLeft > 0 || !dmcSilent ? 1f : 0;
+            case 5: return Fds && !fdsWaveHalt ? Math.Min(fdsVolGain, 32) / 32f : 0;
         }
         return 0;
     }
@@ -304,6 +434,7 @@ public sealed class NesApu : ISoundChip
     {
         if (ch == 3) return noiseLength > 0 && (noiseConst ? noiseVol : noiseEnvVol) > 0;
         if (ch == 4) return dmcBytesLeft > 0;
+        if (ch == 5) return Fds && !fdsWaveHalt && fdsVolGain > 0 && fdsFreq > 0;
         return false;
     }
 }

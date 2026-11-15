@@ -20,9 +20,9 @@ internal enum MusicFileKind { None, Adlib, Tracker, Midi, Vgm, Audio }
 [System.ComponentModel.DesignerCategory("Code")]
 internal sealed class FileBrowser : UserControl
 {
-    private static readonly string[] AdlibExt = { ".rol", ".ims", ".sop" };
+    private static readonly string[] AdlibExt = { ".rol", ".ims", ".sop", ".mus" };
     private static readonly string[] TrackerExt = { ".s3m", ".stm", ".mod", ".nst" };
-    private static readonly string[] MidiExt = { ".mid", ".midi", ".wrk" };
+    private static readonly string[] MidiExt = MidiFiles.Extensions;   // .mid · .midi · .wrk · .xmi · .mdi
     private static readonly string[] VgmExt = AdlibComposer.Audio.ChipSongs.Extensions.ToArray();
     private static readonly string[] AudioExt = { ".mp3", ".wav", ".wma", ".m4a", ".aac", ".flac" };
 

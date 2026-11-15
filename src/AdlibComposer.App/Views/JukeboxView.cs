@@ -23,7 +23,7 @@ namespace AdlibComposer.App.Views;
 [System.ComponentModel.DesignerCategory("Code")]   // 코드로 만든 화면: 디자이너 대신 코드로 연다
 internal sealed class JukeboxView : UserControl, IShellPage
 {
-    private static readonly string[] SongExtensions = new[] { ".rol", ".ims", ".sop", ".s3m", ".stm", ".mod", ".nst", ".mid", ".midi", ".wrk" }.Concat(ChipSongs.Extensions).ToArray();
+    private static readonly string[] SongExtensions = new[] { ".rol", ".ims", ".mus", ".sop", ".s3m", ".stm", ".mod", ".nst", ".mid", ".midi", ".wrk", ".xmi", ".mdi" }.Concat(ChipSongs.Extensions).ToArray();
 
     private readonly Workspace ws;
     private readonly Func<AppSettings> settings;
@@ -123,7 +123,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
         var l = new List<string>();
         foreach (var p in browser.Paths.Where(CanPlay))
         {
-            if (ChipSongs.IsChipSong(p)) l.AddRange(ChipSongs.Tracks(p).Select(t => t.path));
+            if (ChipSongs.HasTracks(p)) l.AddRange(ChipSongs.Tracks(p).Select(t => t.path));
             else l.Add(p);
         }
         return l;
@@ -620,7 +620,9 @@ internal sealed class JukeboxView : UserControl, IShellPage
         display.Loaded = programs.Count;
         display.Total = programs.Count;
         display.BankFile = mt32Rom != null ? "MT-32 에뮬레이터 · " + mt32Rom
-            : (chip ? (settings().MidiChipPsgOnly ? "8-bit PSG · 사각파 6음 + PSG 드럼" : "8-bit PSG + SCC · SCC+ 15음 + PSG 드럼") : windows ? "Windows MIDI 신디사이저" : "GM FM · " + (gmBank != null ? gmBank.Source : "(뱅크 없음)")) + (mt32 ? " (MT-32 → GM)" : "");
+            : (chip ? (settings().MidiChipPsgOnly ? "8-bit PSG · 사각파 6음 + PSG 드럼" : "8-bit PSG + SCC · SCC+ 15음 + PSG 드럼") : windows ? "Windows MIDI 신디사이저"
+                : m.CustomBank != null ? "곡 FM 악기 · " + (m.CustomBank.Source.Length > 0 ? m.CustomBank.Source : "곡 안") + (gmBank != null ? " + " + gmBank.Source : "")
+                : "GM FM · " + (gmBank != null ? gmBank.Source : "(뱅크 없음)")) + (mt32 ? " (MT-32 → GM)" : "");
         display.BankCount = programs.Count;
         display.BankSameName = false;
         display.LyricFile = null;
@@ -812,10 +814,27 @@ internal sealed class JukeboxView : UserControl, IShellPage
         return tempoMap != null ? tempoMap.TickAt(seconds) : 0;
     }
 
-    /// <summary>같은 이름의 BNK가 곡 옆에 있으면 그것, 아니면 기본 뱅크, 그것도 없으면 지금 작업 뱅크.</summary>
+    /// <summary>
+    /// 같은 이름의 BNK가 곡 옆에 있으면 그것, 아니면 기본 뱅크, 그것도 없으면 지금 작업 뱅크.
+    /// Ad Lib MUS는 음색 뱅크(.snd): 같은 이름 → 같은 폴더의 아무 .snd (악기를 번호로 고른다).
+    /// </summary>
     private InstrumentBank FindBank(string songPath, out bool sameName)
     {
         sameName = false;
+        if (string.Equals(Path.GetExtension(songPath), ".mus", StringComparison.OrdinalIgnoreCase))
+        {
+            string snd = SideFile(songPath, ".snd");
+            if (snd != null) { var sb = ReadBank(snd); if (sb != null) { sameName = true; return sb; } }
+            try
+            {
+                foreach (var f in Directory.GetFiles(Path.GetDirectoryName(songPath), "*.snd").OrderBy(x => x, StringComparer.OrdinalIgnoreCase))
+                {
+                    var sb = ReadBank(f);
+                    if (sb != null) return sb;
+                }
+            }
+            catch (Exception) { }
+        }
         string side = SideFile(songPath, ".bnk");
         if (side != null)
         {

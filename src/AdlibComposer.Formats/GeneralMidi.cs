@@ -89,6 +89,9 @@ public sealed class GmPatch
 public sealed class GmBank
 {
     public string Source { get; private set; } = "";
+
+    /// <summary>뱅크 출처 설명 (곡 안 뱅크 · AIL 음색 묶음 등).</summary>
+    public void SetSource(string source) { Source = source ?? ""; }
     public GmPatch[] Melodic { get; } = new GmPatch[128];
     /// <summary>[음 번호 0~127], 35~81만 채운다.</summary>
     public GmPatch[] Drums { get; } = new GmPatch[128];

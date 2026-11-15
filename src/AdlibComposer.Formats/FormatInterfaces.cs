@@ -49,7 +49,9 @@ public sealed class FormatRegistry
         var r = new FormatRegistry();
         r.Songs.Add(new RolFormat());
         r.Songs.Add(new ImsFormat());
+        r.Songs.Add(new AdlibMusFormat());
         r.Banks.Add(new BnkFormat());
+        r.Banks.Add(new SndBankFormat());
         r.Instruments.Add(new InsFormat());
         // SOP(OPL3)는 곡 안에 악기가 있어 ISongFormat이 아니다: SopFormat(SopSong) + SopConvert(Song SOP 모드 ↔ SopSong)로 Workspace가 따로 다룬다.
         return r;

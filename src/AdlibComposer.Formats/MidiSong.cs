@@ -53,6 +53,8 @@ public sealed class MidiSong
     public bool UsesBankSelect { get; private set; }
     /// <summary>마지막 이벤트 틱.</summary>
     public int LengthTicks { get; private set; }
+    /// <summary>곡이 정한 FM 악기 (MDI의 AdLib 악기, XMI 옆 AIL 음색 묶음). FM으로 낼 때 이것을 먼저, 없는 번호는 설정의 GM 뱅크로.</summary>
+    public GmBank CustomBank { get; set; }
 
     /// <summary>채널별로 쓰이는지 (노트가 있는지).</summary>
     public bool[] ChannelUsed { get; } = new bool[Channels];
@@ -125,23 +127,63 @@ public sealed class MidiSong
 /// <summary>.mid / .midi / .wrk 열기.</summary>
 public static class MidiFiles
 {
-    public static readonly string[] Extensions = { ".mid", ".midi", ".wrk" };
+    /// <summary>MIDI로 읽는 형식: 표준 MIDI · Cakewalk WRK · Miles XMI · Ad Lib MDI.</summary>
+    public static readonly string[] Extensions = { ".mid", ".midi", ".wrk", ".xmi", ".mdi" };
+
+    /// <summary>"파일::n" (XMI 안 n번 곡)이면 파일 부분.</summary>
+    public static string FilePart(string path, out int sequence)
+    {
+        sequence = 0;
+        int sep = path == null ? -1 : path.LastIndexOf("::", StringComparison.Ordinal);
+        if (sep > 1 && int.TryParse(path.Substring(sep + 2), out int n)) { sequence = n; return path.Substring(0, sep); }
+        return path;
+    }
 
     public static bool IsMidi(string path)
     {
-        string ext = Path.GetExtension(path ?? "");
+        string ext = Path.GetExtension(FilePart(path ?? "", out _));
         return Extensions.Any(x => string.Equals(x, ext, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>XMI 파일 안 곡 수 (XMI가 아니면 1).</summary>
+    public static int SequenceCount(string path)
+    {
+        try { var d = File.ReadAllBytes(FilePart(path, out _)); return XmiFormat.IsXmi(d) ? Math.Max(1, XmiFormat.SequenceCount(d)) : 1; }
+        catch (Exception) { return 1; }
     }
 
     public static MidiSong Load(string path)
     {
-        byte[] d = File.ReadAllBytes(path);
+        string file = FilePart(path, out int seq);
+        byte[] d = File.ReadAllBytes(file);
         MidiSong s;
         if (WrkFormat.IsWrk(d)) s = WrkFormat.Read(d);
+        else if (XmiFormat.IsXmi(d))
+        {
+            s = XmiFormat.Read(d, seq);
+            s.CustomBank = FindAilBank(file);
+        }
+        else if (MdiFormat.IsMdi(d)) s = MdiFormat.Read(d);
         else s = MidiFileFormat.Read(d);
-        s.FilePath = path;
-        if (string.IsNullOrWhiteSpace(s.Title)) s.Title = Path.GetFileNameWithoutExtension(path);
+        s.FilePath = file;
+        if (string.IsNullOrWhiteSpace(s.Title)) s.Title = Path.GetFileNameWithoutExtension(file) + (XmiFormat.IsXmi(d) && XmiFormat.SequenceCount(d) > 1 ? " #" + (seq + 1) : "");
         return s;
+    }
+
+    /// <summary>XMI 옆의 Miles AIL 음색 묶음: 같은 이름 .AD → 아무 .AD → 아무 .OPL (그 게임의 AdLib 악기). 없으면 null.</summary>
+    public static GmBank FindAilBank(string xmiPath)
+    {
+        try
+        {
+            string dir = Path.GetDirectoryName(Path.GetFullPath(xmiPath));
+            var files = Directory.GetFiles(dir);
+            string stem = Path.GetFileNameWithoutExtension(xmiPath);
+            var pick = files.FirstOrDefault(f => string.Equals(Path.GetFileNameWithoutExtension(f), stem, StringComparison.OrdinalIgnoreCase) && string.Equals(Path.GetExtension(f), ".ad", StringComparison.OrdinalIgnoreCase))
+                ?? files.Where(f => string.Equals(Path.GetExtension(f), ".ad", StringComparison.OrdinalIgnoreCase)).OrderBy(f => f, StringComparer.OrdinalIgnoreCase).FirstOrDefault()
+                ?? files.Where(f => string.Equals(Path.GetExtension(f), ".opl", StringComparison.OrdinalIgnoreCase)).OrderBy(f => f, StringComparer.OrdinalIgnoreCase).FirstOrDefault();
+            return pick == null ? null : AilTimbres.Read(File.ReadAllBytes(pick), Path.GetFileName(pick));
+        }
+        catch (Exception) { return null; }
     }
 
     internal static string Text(byte[] d, int at, int len)

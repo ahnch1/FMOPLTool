@@ -478,9 +478,14 @@ public sealed class MidiPlayer : IDisposable
 
     private GmPatch Patch(int c, int n)
     {
-        if (Bank == null) return null;
-        if (drum[c]) return n >= 0 && n < 128 ? Bank.Drums[n] : null;
-        return Bank.Melodic[program[c] & 127];
+        // 곡이 정한 악기(MDI · XMI의 AIL 음색)가 있으면 먼저, 없는 번호는 설정의 GM 뱅크
+        var own = song?.CustomBank;
+        if (drum[c])
+        {
+            if (n < 0 || n >= 128) return null;
+            return own?.Drums[n] ?? Bank?.Drums[n];
+        }
+        return own?.Melodic[program[c] & 127] ?? Bank?.Melodic[program[c] & 127];
     }
 
     private string InstrumentName(int c)
@@ -501,7 +506,8 @@ public sealed class MidiPlayer : IDisposable
     private bool PatchFound(int c)
     {
         if (ActiveSynth != MidiSynth.Fm) return true;
-        return Bank != null && (drum[c] || Bank.Melodic[program[c] & 127] != null);
+        var own = song?.CustomBank;
+        return (Bank != null || own != null) && (drum[c] || own?.Melodic[program[c] & 127] != null || Bank?.Melodic[program[c] & 127] != null);
     }
 
     /// <summary>GM 권장 곡선: dB = 40·log10(v/127). OPL TL 1 = 0.75dB.</summary>

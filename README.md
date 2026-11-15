@@ -7,7 +7,7 @@ BNK 악기를 보이스(채널)에 할당하고, 건반 악보에 노트를 배�
 - 화면: 원본 스크린샷(640x400 흑백 DOS 화면) 레이아웃을 따른 WinForms GUI
 - 확장: 곡 포맷, 악보(스코어) 변환, OPL 칩 교체를 위한 인터페이스 제공
 
-버전: `Directory.Build.props`의 `<Version>` (현재 1.15.0). 주·부 번호(1.1, 1.2 ...)는 직접 정하고, 작업마다 마지막 번호를 올린다.
+버전: `Directory.Build.props`의 `<Version>` (현재 1.16.0). 주·부 번호(1.1, 1.2 ...)는 직접 정하고, 작업마다 마지막 번호를 올린다.
 
 ## 빌드 / 실행
 
@@ -73,7 +73,7 @@ Mt32RomFolder=resource
 |---|---|
 | 메뉴 / 툴바 | 원본 메뉴(F5~F10) + 툴바(새 곡 · 열기 · 저장 · 뱅크 브라우저 · 재생 · 현재 위치부터 재생 · 정지 · 설정). 재생 버튼 셋은 Composer · Note · Orgel Note · Transcribe가 같이 쓴다 (지금 페이지를 재생) |
 | 페이지 메뉴 (메뉴와 툴바 사이, 가로) | **Jukebox** (PLAY), **Composer** · **Instrument Maker** · **Tracker** (CREATE), **Note** · **Orgel Note** · **Transcribe** (SCORE), **Organizer** (TOOLS) — 곡을 듣고 → 고치고 → 악보로 가는 순서. Ctrl+1~8 (Jukebox = Ctrl+1, Composer = Ctrl+2, Instrument Maker = Ctrl+3, Note = Ctrl+4, Orgel Note = Ctrl+5, Tracker = Ctrl+6, Organizer = Ctrl+7, Transcribe = Ctrl+8) |
-| 왼쪽 폴더 / 곡 목록 | 모든 페이지가 같이 쓴다. **폴더 열기**로 고른 폴더와 그 아래 폴더만 오가는 목록 하나 (`..` · 폴더 · 곡: ROL · IMS · SOP · S3M · STM · MOD · NST · MID · WRK · VGM · VGZ · S98 · KSS · NSF · HES · SPC · IMF · WLF · HSC · CMF · DRO · RAW · MP3 · WAV …), **위로** / Backspace. 곡이 많으면 세로 스크롤바 + 아래 ◀ ▶로 한 쪽씩 (n / m 쪽). 곡 두 번 클릭 / Enter = 지금 페이지에서 열기: Composer · Note · Orgel Note = 작업 곡(ROL · IMS · SOP), Tracker = S3M · STM · MOD · NST, Jukebox = 재생(다음 곡 = 그 폴더), Transcribe = MP3 · WAV. 못 여는 형식이면 그 형식을 여는 페이지로 간다. 곡이 여럿 든 파일(KSS · NSF · HES, ▸ 표시)은 두 번 클릭 / → 로 곡마다 한 줄씩 펼치고 ← 로 접는다 — 곡 줄을 두 번 클릭하면 그 곡을 재생, 재생 중인 곡 줄은 굵게 (다음 곡으로 넘어가면 따라 펼친다). **ZIP**은 폴더처럼 들어간다 (두 번 클릭 · 창에 끌어다 놓기, 위로 / Backspace로 나옴): 처음 한 번 임시 폴더(%TEMP%\FMOPLTool\zip)에 풀어 안의 ROL · IMS · SOP · VGM · KSS · NSF … 를 그대로 열고, 같은 이름의 가사(ISS) · 뱅크(BNK) · m3u도 함께 쓴다. 이름은 UTF-8 / 옛 한글(완성형 · 조합형)을 알아보고, zip 밖으로 나가는 이름은 막는다. zip 안 곡을 고쳐 저장하면 다른 이름으로 저장을 묻는다 (zip은 바꾸지 않음) |
+| 왼쪽 폴더 / 곡 목록 | 모든 페이지가 같이 쓴다. **폴더 열기**로 고른 폴더와 그 아래 폴더만 오가는 목록 하나 (`..` · 폴더 · 곡: ROL · IMS · SOP · S3M · STM · MOD · NST · MID · WRK · XMI · MDI · MUS · VGM · VGZ · S98 · KSS · NSF · HES · SPC · IMF · WLF · HSC · CMF · DRO · RAW · MP3 · WAV …), **위로** / Backspace. 곡이 많으면 세로 스크롤바 + 아래 ◀ ▶로 한 쪽씩 (n / m 쪽). 곡 두 번 클릭 / Enter = 지금 페이지에서 열기: Composer · Note · Orgel Note = 작업 곡(ROL · IMS · SOP), Tracker = S3M · STM · MOD · NST, Jukebox = 재생(다음 곡 = 그 폴더), Transcribe = MP3 · WAV. 못 여는 형식이면 그 형식을 여는 페이지로 간다. 곡이 여럿 든 파일(KSS · NSF · HES, ▸ 표시)은 두 번 클릭 / → 로 곡마다 한 줄씩 펼치고 ← 로 접는다 — 곡 줄을 두 번 클릭하면 그 곡을 재생, 재생 중인 곡 줄은 굵게 (다음 곡으로 넘어가면 따라 펼친다). **ZIP**은 폴더처럼 들어간다 (두 번 클릭 · 창에 끌어다 놓기, 위로 / Backspace로 나옴): 처음 한 번 임시 폴더(%TEMP%\FMOPLTool\zip)에 풀어 안의 ROL · IMS · SOP · VGM · KSS · NSF … 를 그대로 열고, 같은 이름의 가사(ISS) · 뱅크(BNK) · m3u도 함께 쓴다. 이름은 UTF-8 / 옛 한글(완성형 · 조합형)을 알아보고, zip 밖으로 나가는 이름은 막는다. zip 안 곡을 고쳐 저장하면 다른 이름으로 저장을 묻는다 (zip은 바꾸지 않음) |
 | 끌어다 놓기 (창 어디든) | 폴더 = 폴더 열기와 같다. 곡 파일 = 그 파일만 연다 (Composer · Note · Orgel Note = 작업 곡, Jukebox = 그 곡만 재생 · 여러 곡이면 그것들이 다음 곡 목록, 다른 형식은 여는 페이지로) |
 | 페이지 머리글 | 현재 페이지 이름과 설명 |
 | 진행 로그 | 시작 · 뱅크/곡 열기·저장 · 경고 · 오류 기록. 필터(전체/정보/경고/오류), 상세(예외 내용), 복사, 지우기. 위쪽 경계를 끌어 높이 조절 |
@@ -156,6 +156,7 @@ Mt32RomFolder=resource
 - SPC (슈퍼 패미컴 사운드 순간 상태, ID666 태그 글자 / 바이너리): SPC700 CPU + S-DSP를 직접 돌린다 (BRR 샘플 · 가우스 보간(근사 표) · ADSR / GAIN · 노이즈 · 피치 변조 · 에코 FIR). 믹서 = 보이스 V1~V8 (끄기 · 음높이), 길이 · 페이드 = 태그 (없으면 3분), 이동은 칩을 그만큼 앞으로 돌린다 (실시간의 7~9배 빠르기라 긴 이동은 잠깐 걸림)
 - IMF (.imf 560Hz · .wlf 700Hz, 종류 0 / 1, 꼬리 태그) · HSC (HSC-Tracker) · CMF (Creative Music File, 리듬 모드 CC 0x67): OPL2 레지스터 기록으로 바꿔 VGM처럼 재생
 - DRO (DOSBox Raw OPL, 판 0.1 · 2.0) · RAW (Rdos Raw OPL Capture, 곡 안 클럭 바꾸기 포함): 게임이 OPL에 쓴 기록을 VGM으로. OPL2 · OPL3 그대로, 듀얼 OPL2(사운드 블래스터 프로 1)는 OPL3 하나에 칩 0 = 왼쪽 · 칩 1 = 오른쪽
+- DOS 게임 음악 (PC/AT): **XMI** (Miles AIL XMIDI — 곡 여럿이면 왼쪽 목록에서 곡마다, 같은 폴더의 AIL 음색 묶음 .AD / .OPL이 있으면 그 게임의 AdLib 악기로), **MDI** (Ad Lib MIDI Driver — 곡 안의 AdLib 악기로, 타악기 모드 = GM 드럼), **MUS** (Ad Lib MUS + 음색 뱅크 .SND: 같은 이름 → 같은 폴더의 .SND). XMI · MDI는 MIDI 재생(FM · Windows 신디 · MT-32)으로, MUS는 ROL · IMS처럼 Composer · Jukebox에서
 - 다른 페이지로 가면 일시정지 (오디오 엔진을 Composer와 같이 쓴다). 돌아와서 Space로 이어 듣기
 - File → Export VGM (chip log)...: 작업 곡(ROL · IMS = YM3812, SOP = YMF262)을 VGM / VGZ로 저장 (재생기를 소리 없이 돌려 레지스터 쓰기를 기록, 다른 VGM 플레이어에서 재생)
 - File → Extract Disk Image (D88 / FDI / HDM)...: PC-98 MS-DOS(FAT12) · PC-88 N88-BASIC(2D) 디스크의 파일을 이미지 옆 "이름_files" 폴더에 꺼내고 왼쪽 목록에서 연다 (PMD · FMP · mucom88 곡 재생은 아직 없음)

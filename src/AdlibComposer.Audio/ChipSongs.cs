@@ -33,10 +33,18 @@ public static class ChipSongs
         (Kss.Extensions, p => Kss.Tracks(p).Select(t => t.Title.Length > 0 ? t.Title : Path.GetFileNameWithoutExtension(p) + " #" + t.Song).ToList()),
         (Nsf.Extensions, p => Nsf.Tracks(p).Select(t => t.Title).ToList()),
         (Hes.Extensions, p => Hes.Tracks(p).Select(t => t.Title).ToList()),
+        // XMI는 MIDI로 재생하지만 곡이 여럿 든 파일이라 목록만 같이 쓴다
+        (new[] { ".xmi" }, p => Enumerable.Range(1, MidiFiles.SequenceCount(p)).Select(i => Path.GetFileNameWithoutExtension(p) + " #" + i).ToList()),
     };
 
     /// <summary>곡이 여럿 들 수 있는 형식인가 (KSS · NSF · HES): 파일 목록이 곡마다 줄을 펼친다.</summary>
-    public static bool HasTracks(string path) { return MultiOf(path) != null; }
+    public static bool HasTracks(string path)
+    {
+        if (MultiOf(path) == null) return false;
+        // XMI는 곡이 둘 이상일 때만 펼친다 (대부분 하나)
+        if (string.Equals(Path.GetExtension(FilePart(path)), ".xmi", StringComparison.OrdinalIgnoreCase)) return MidiFiles.SequenceCount(FilePart(path)) > 1;
+        return true;
+    }
 
     private static Func<string, List<string>> MultiOf(string path)
     {

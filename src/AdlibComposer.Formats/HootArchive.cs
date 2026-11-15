@@ -114,6 +114,35 @@ public static class HootArchive
         return n;
     }
 
+    /// <summary>
+    /// 항목 하나(&lt;game&gt; XML)를 푼 zip 폴더에 <see cref="Extension"/> 파일로 (hoot 트리에서 고른 항목 재생). 같은 내용의 파일이 있으면 그것,
+    /// 이름만 같고 내용이 다르면 " (2)" … 를 붙인다. 쓴 (또는 있던) 파일 경로.
+    /// </summary>
+    public static string WriteEntry(string dir, string gameXml, string fallbackName)
+    {
+        string text = "<?xml version=\"1.0\" encoding=\"utf-8\"?>\r\n" + gameXml.Trim() + "\r\n";
+        string name = EntryFileName(gameXml, fallbackName);
+        for (int k = 1; ; k++)
+        {
+            string path = Path.Combine(dir, (k == 1 ? name : name + " (" + k + ")") + Extension);
+            if (!File.Exists(path)) { File.WriteAllText(path, text, new UTF8Encoding(true)); return path; }
+            string have;
+            try { have = File.ReadAllText(path); } catch (Exception) { continue; }
+            if (Same(have, text)) return path;
+        }
+    }
+
+    /// <summary>두 항목 XML이 같은가 (공백 · 줄바꿈 · 머리말 차이는 무시).</summary>
+    private static bool Same(string a, string b)
+    {
+        string Norm(string s)
+        {
+            int g = s.IndexOf("<game>", StringComparison.Ordinal);
+            return Regex.Replace(g >= 0 ? s.Substring(g) : s, @"\s+", "");
+        }
+        return Norm(a) == Norm(b);
+    }
+
     /// <summary>항목 이름 → 파일 이름 ("[PC-9801] " 떼고, 쓸 수 없는 글자 → _, 80자까지).</summary>
     private static string EntryFileName(string game, string fallback)
     {

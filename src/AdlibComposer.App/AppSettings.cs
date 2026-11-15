@@ -32,6 +32,8 @@ internal sealed class AppSettings
 
     /// <summary>왼쪽 목록에서 마지막으로 연 곡 폴더 (다음 실행 때 다시 연다). 저장 값(상대/절대), 비면 없음.</summary>
     public string BrowserFolder { get; set; } = "";
+    /// <summary>왼쪽 목록 [hoot]로 마지막에 연 hoot 목록 폴더 (xml · xml_new …). 저장 값(상대/절대), 비면 없음.</summary>
+    public string HootFolder { get; set; } = "";
     /// <summary>Organizer 우선 폴더: 같은 곡이면 이 폴더(하위 폴더 포함)의 파일을 가장 먼저 남긴다. 저장 값(상대/절대), 비면 없음.</summary>
     public string OrganizerPreferredFolder { get; set; } = "";
     /// <summary>MIDI를 Windows 신디사이저로 (false = OPL FM).</summary>
@@ -84,6 +86,7 @@ internal sealed class AppSettings
 
     /// <summary>왼쪽 목록에서 연 곡 폴더 (없으면 null). 파일 대화상자 · Organizer · Tracker의 시작 폴더.</summary>
     public string BrowserFolderPath { get { return string.IsNullOrWhiteSpace(BrowserFolder) ? null : Resolve(BrowserFolder); } }
+    public string HootFolderPath { get { return string.IsNullOrWhiteSpace(HootFolder) ? null : Resolve(HootFolder); } }
     public string OrganizerPreferredFolderPath { get { return string.IsNullOrWhiteSpace(OrganizerPreferredFolder) ? null : Resolve(OrganizerPreferredFolder); } }
     public string MidiBankPath { get { return string.IsNullOrWhiteSpace(MidiBank) ? null : Resolve(MidiBank); } }
     public string Mt32RomFolderPath { get { return Resolve(Mt32RomFolder); } }
@@ -111,6 +114,7 @@ internal sealed class AppSettings
                     switch (key.ToLowerInvariant())
                     {
                         case "browserfolder": s.BrowserFolder = value; break;
+                        case "hootfolder": s.HootFolder = value; break;
                         case "organizerpreferredfolder": s.OrganizerPreferredFolder = value; break;
                         case "midisynth":
                             s.MidiWindowsSynth = value.Equals("windows", StringComparison.OrdinalIgnoreCase);
@@ -159,6 +163,8 @@ internal sealed class AppSettings
         sb.AppendLine("; Paths are relative to this file's folder (the program folder) or absolute.");
         sb.AppendLine("; BrowserFolder = song folder last opened in the left list, BankFolder = BNK banks, DefaultBank = bank loaded at startup");
         sb.AppendLine("BrowserFolder=" + BrowserFolder);
+        sb.AppendLine("; HootFolder = hoot game list folder (xml / xml_new) last opened with [hoot] in the left list");
+        sb.AppendLine("HootFolder=" + HootFolder);
         sb.AppendLine("BankFolder=" + BankFolder);
         sb.AppendLine("DefaultBank=" + DefaultBank);
         sb.AppendLine("LoadDefaultBank=" + (LoadDefaultBank ? "true" : "false"));

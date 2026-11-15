@@ -65,6 +65,7 @@ public static class Program
             Console.WriteLine(AdlibComposer.Audio.Hes.Describe(b, song, sec));
             return 0;
         }
+        if (args.Length > 1 && args[0] == "--hoottree") return HootPc98Tests.TreeStats(args[1]);
         if (args.Length > 1 && args[0] == "--hoot98survey")
         {
             // 진단: --hoot98survey 폴더 [zip 수] [초]

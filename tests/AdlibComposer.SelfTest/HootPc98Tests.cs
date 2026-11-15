@@ -105,6 +105,12 @@ public static class HootPc98Tests
             check("hoot pc98dos song: resident test driver plays on hoot interrupt (self-running PC-98 chip, YM2203 tone)",
                 rms > 300 && v.ChipSummary.Contains("PC-98") && v.Title == "Tone B" && Math.Abs(v.LengthSeconds - (HootPc98.DefaultSeconds + HootPc98.DefaultFade)) < 0.1,
                 "rms " + rms.ToString("0") + ", " + v.ChipSummary + ", " + v.Title + ", " + v.LengthSeconds.ToString("0") + " s");
+            // hoot 트리에서 고른 항목: 같은 내용이면 있던 파일, 다르면 (2)
+            string game = xml.Substring(xml.IndexOf("	<game>"), xml.IndexOf("</game>") + 7 - xml.IndexOf("	<game>"));
+            string w1 = HootArchive.WriteEntry(dir, game, "tone_98"), w2 = HootArchive.WriteEntry(dir, game.Replace("Tone B", "Tone C"), "tone_98");
+            check("hoot tree entry: WriteEntry reuses the same entry's .hoot, numbers a different one with the same name",
+                w1 == hp && Path.GetFileName(w2) == "Tone Test (YM2203) (2).hoot" && ChipSongs.Tracks(w2)[1].title == "Tone C", Path.GetFileName(w1) + ", " + Path.GetFileName(w2));
+            File.Delete(w2);
             var e = HootArchive.Load(hp);
             var m = HootPc98.Boot(DosFileSystem.FromDirectory(dir), e, out var shells);
             m.Play(0x11);
@@ -202,6 +208,18 @@ public static class HootPc98Tests
         Console.WriteLine();
         foreach (var kv in stats) Console.WriteLine(kv.Key + ": sound " + kv.Value.sound + "/" + kv.Value.total + (kv.Value.halted > 0 ? ", unknown op " + kv.Value.halted : ""));
         Console.WriteLine(zips.Count + " zips, " + sw.Elapsed.TotalSeconds.ToString("0") + " s");
+        return 0;
+    }
+
+    /// <summary>진단: --hoottree xml폴더 — hoot 트리(제작사 → 장비 → 게임 → 곡)를 만들 자료를 읽는 시간과 단계별 수.</summary>
+    public static int TreeStats(string dir)
+    {
+        var sw = Stopwatch.StartNew();
+        var games = HootLists.ReadFolder(dir);
+        long ms = sw.ElapsedMilliseconds;
+        var machines = games.GroupBy(g => g.Platform.Length > 0 ? g.Platform : g.AliasType.Length > 0 ? g.AliasType : "(기계 모름)").OrderByDescending(x => x.Count()).ToList();
+        Console.WriteLine("games " + games.Count + " in " + ms + " ms, makers " + games.Select(g => g.File).Distinct().Count() + ", songs " + games.Sum(g => g.Titles.Count(t => !t.Code.StartsWith("range:"))));
+        Console.WriteLine("machines " + machines.Count + ": " + string.Join(" | ", machines.Take(40).Select(m => m.Key + " " + m.Count())));
         return 0;
     }
 }

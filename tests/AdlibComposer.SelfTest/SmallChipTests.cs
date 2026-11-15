@@ -86,7 +86,7 @@ public static class SmallChipTests
     }
 
     /// <summary>사인 nSamples개 → 바이트 (아래 니블 먼저).</summary>
-    private static byte[] OkiSine(double hz, double rate, int nSamples, double amp = 1500)
+    internal static byte[] OkiSine(double hz, double rate, int nSamples, double amp = 1500)
     {
         var x = new double[nSamples];
         for (int i = 0; i < nSamples; i++) x[i] = amp * Math.Sin(2 * Math.PI * hz * i / rate);

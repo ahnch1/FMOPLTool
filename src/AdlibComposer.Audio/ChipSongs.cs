@@ -20,6 +20,7 @@ public static class ChipSongs
         (Nsf.Extensions, Nsf.Load),
         (Hes.Extensions, Hes.Load),
         (Gbs.Extensions, Gbs.Load),
+        (Mdx.Extensions, Mdx.Load),
         (Spc.Extensions, Spc.Load),
         (AdlibStreamFormats.ImfExtensions, LoadImf),
         (AdlibStreamFormats.HscExtensions, AdlibStreamFormats.LoadHsc),

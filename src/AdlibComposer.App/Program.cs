@@ -8,6 +8,7 @@ internal static class Program
     [STAThread]
     private static void Main()
     {
+        AdlibComposer.Audio.Windows.WindowsAudio.Register();
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
         Application.Run(new MainForm());

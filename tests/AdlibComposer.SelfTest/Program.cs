@@ -21,6 +21,7 @@ public static class Program
 
     public static int Main(string[] args)
     {
+        AdlibComposer.Audio.Windows.WindowsAudio.Register();
         if (args.Length > 0 && (args[0] == "--probe" || args[0] == "--render" || args[0] == "--latency" || args[0] == "--drum" || args[0] == "--drumshape")) return Probe.Run(args);
         if (args.Length > 0 && args[0] == "--transcribe") return TranscribeTests.Probe(args);
         if (args.Length > 0 && args[0].StartsWith("--")) return DemoRender.Run(args);

@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Runtime.InteropServices;
 using AdlibComposer.Core;
 using AdlibComposer.Formats;
 
@@ -33,7 +32,7 @@ public enum MidiModule
 /// <para>FM: OPL3 2-op 채널 18개에 음을 나눠 싣는다 (빈 채널 → 가장 오래 꺼져 있던 채널 → 가장 오래 울린 음을 뺏음). GM 드럼은 MIDI 채널 10.
 /// 볼륨 · 익스프레션 · 벨로시티는 GM 권장 곡선(40·log10)으로 캐리어(가산 연결이면 모듈레이터도) TL에 더한다. 팬은 왼쪽 · 가운데 · 오른쪽 3단계 (OPL3 C0 비트).
 /// 피치 벤드 (RPN 0 = 벤드 범위, 기본 ±2), 서스테인 페달(CC64), CC121 · 123 지원.</para>
-/// <para>Windows: 이벤트를 midiOutShortMsg로, SysEx는 midiOutLongMsg로 보낸다. 조옮김 · 채널 끄기 · 속도 · 볼륨(CC7 비율)도 적용된다.
+/// <para>Windows: 이벤트를 바깥 MIDI 장치(<see cref="AudioPlatform.MidiOutFactory"/>, Windows = midiOut)로 보낸다. 조옮김 · 채널 끄기 · 속도 · 볼륨(CC7 비율)도 적용된다.
 /// 시작할 때 곡 규격에 맞는 리셋(GS 리셋 / GM On …)을 먼저 보내 앞 곡의 설정이 남지 않게 한다.</para>
 /// <para>리셋 SysEx (GM · GM2 · GS · XG): 채널 상태를 처음으로 되돌리고 규격(모드)을 바꾼다. 드럼 채널: 기본은 10,
 /// GS "Use for rhythm part" SysEx, XG 뱅크 MSB 126 · 127, GM2 뱅크 MSB 120 (프로그램 체인지 때 적용)으로 다른 채널도 드럼이 된다.
@@ -90,7 +89,7 @@ public sealed class MidiPlayer : IDisposable
     private long clock;
 
     // Windows
-    private IntPtr midiOut;
+    private IMidiOutDevice midiOut;
     private readonly int[,] sentNote = new int[16, 128];
     private double lastGain = -1;
 
@@ -594,101 +593,50 @@ public sealed class MidiPlayer : IDisposable
         chip.Write(bank | (0xB0 + ch), ((f >> 10) << 2) | ((f & 1023) >> 8));
     }
 
-    // ------------------------------------------------------------ Windows MIDI 출력
+    // ------------------------------------------------------------ 바깥 MIDI 장치 (Windows MIDI 신디사이저)
 
-    [DllImport("winmm.dll")] private static extern int midiOutOpen(out IntPtr handle, int deviceId, IntPtr callback, IntPtr instance, int flags);
-    [DllImport("winmm.dll")] private static extern int midiOutShortMsg(IntPtr handle, int message);
-    [DllImport("winmm.dll")] private static extern int midiOutReset(IntPtr handle);
-    [DllImport("winmm.dll")] private static extern int midiOutClose(IntPtr handle);
-    [DllImport("winmm.dll")] private static extern int midiOutPrepareHeader(IntPtr handle, IntPtr header, int size);
-    [DllImport("winmm.dll")] private static extern int midiOutUnprepareHeader(IntPtr handle, IntPtr header, int size);
-    [DllImport("winmm.dll")] private static extern int midiOutLongMsg(IntPtr handle, IntPtr header, int size);
-
-    /// <summary>MIDIHDR (mmsystem.h). 순서 배치가 C 구조체와 같다 (32 · 64비트 모두).</summary>
-    [StructLayout(LayoutKind.Sequential)]
-    private struct MidiHdr
-    {
-        public IntPtr Data;
-        public int BufferLength;
-        public int BytesRecorded;
-        public IntPtr User;
-        public int Flags;
-        public IntPtr Next;
-        public IntPtr Reserved;
-        public int Offset;
-        public IntPtr R0, R1, R2, R3, R4, R5, R6, R7;
-    }
-
-    private static readonly int HdrSize = Marshal.SizeOf(typeof(MidiHdr));
-    private const int MidiErrStillPlaying = 65;
-    /// <summary>장치가 아직 다 보내지 않은 SysEx 버퍼 (다 보내면 풀어 준다).</summary>
-    private readonly List<(IntPtr hdr, IntPtr data)> pendingSysEx = new List<(IntPtr, IntPtr)>();
-    /// <summary>보낸 SysEx 수 (Windows 장치로, 시험 · 진단용).</summary>
+    /// <summary>보낸 SysEx 수 (바깥 장치로, 시험 · 진단용).</summary>
     public int SysExSent { get; private set; }
     /// <summary>장치가 아직 붙잡고 있는 SysEx 버퍼 수.</summary>
-    public int SysExPending { get { return pendingSysEx.Count; } }
+    public int SysExPending { get { return midiOut != null ? midiOut.SysExPending : 0; } }
 
-    /// <summary>SysEx 하나 보내기 (F0 … F7): MT-32 에뮬레이터 또는 Windows 장치. FM은 할 일 없음.</summary>
+    private bool OutOpen { get { return midiOut != null && midiOut.IsOpen; } }
+
+    /// <summary>SysEx 하나 보내기 (F0 … F7): MT-32 에뮬레이터 또는 바깥 장치. FM은 할 일 없음.</summary>
     private void SendSysEx(byte[] sx)
     {
         if (sx == null || sx.Length < 2) return;
         if (ActiveSynth == MidiSynth.Mt32) { Mt32?.SendSysEx(sx); return; }
-        if (ActiveSynth != MidiSynth.Windows || midiOut == IntPtr.Zero) return;
+        if (ActiveSynth != MidiSynth.Windows || !OutOpen) return;
         if (sx.Length > 4 && sx[1] == 0x41 && sx[3] == 0x16) return;   // MT-32 SysEx는 GS 신디에 보내지 않는다
-        ReleaseSysEx(false);
-        IntPtr data = Marshal.AllocHGlobal(sx.Length);
-        IntPtr hdr = Marshal.AllocHGlobal(HdrSize);
-        Marshal.Copy(sx, 0, data, sx.Length);
-        Marshal.StructureToPtr(new MidiHdr { Data = data, BufferLength = sx.Length, BytesRecorded = sx.Length }, hdr, false);
-        try
-        {
-            if (midiOutPrepareHeader(midiOut, hdr, HdrSize) != 0) { Marshal.FreeHGlobal(hdr); Marshal.FreeHGlobal(data); return; }
-            if (midiOutLongMsg(midiOut, hdr, HdrSize) != 0) { midiOutUnprepareHeader(midiOut, hdr, HdrSize); Marshal.FreeHGlobal(hdr); Marshal.FreeHGlobal(data); return; }
-        }
-        catch (Exception) { Marshal.FreeHGlobal(hdr); Marshal.FreeHGlobal(data); return; }
-        pendingSysEx.Add((hdr, data));
-        SysExSent++;
-        ReleaseSysEx(false);
-    }
-
-    /// <summary>다 보낸 SysEx 버퍼를 푼다. all = 장치를 닫기 전 (리셋 뒤라 모두 끝나 있다).</summary>
-    private void ReleaseSysEx(bool all)
-    {
-        for (int i = pendingSysEx.Count - 1; i >= 0; i--)
-        {
-            var (hdr, data) = pendingSysEx[i];
-            int r = midiOut != IntPtr.Zero ? midiOutUnprepareHeader(midiOut, hdr, HdrSize) : 0;
-            if (r == MidiErrStillPlaying && !all) continue;
-            Marshal.FreeHGlobal(hdr);
-            Marshal.FreeHGlobal(data);
-            pendingSysEx.RemoveAt(i);
-        }
+        if (midiOut.SysEx(sx)) SysExSent++;
     }
 
     private bool OpenWindows()
     {
-        if (midiOut != IntPtr.Zero) return true;
-        try
+        if (OutOpen) return true;
+        if (midiOut == null)
         {
-            if (midiOutOpen(out midiOut, -1, IntPtr.Zero, IntPtr.Zero, 0) != 0) { midiOut = IntPtr.Zero; return false; }   // -1 = MIDI 매퍼
-            return true;
+            var f = AudioPlatform.MidiOutFactory;
+            if (f == null) return false;
+            try { midiOut = f(); } catch (Exception) { midiOut = null; return false; }
         }
-        catch (Exception) { midiOut = IntPtr.Zero; return false; }   // winmm 없음 (Windows 아님)
+        try { return midiOut.Open(); } catch (Exception) { return false; }
     }
 
     private void Send(int status, int d1, int d2)
     {
         if (ActiveSynth == MidiSynth.Mt32) { Mt32?.Send(status, d1, d2); return; }
-        if (ActiveSynth != MidiSynth.Windows || midiOut == IntPtr.Zero) return;
+        if (ActiveSynth != MidiSynth.Windows || !OutOpen) return;
         if ((status & 0xF0) == 0xB0 && d1 == 7) return;   // 볼륨은 SendVolume이 비율을 곱해 보낸다
-        midiOutShortMsg(midiOut, (status & 0xFF) | ((d1 & 0x7F) << 8) | ((d2 & 0x7F) << 16));
+        midiOut.ShortMessage((status & 0xFF) | ((d1 & 0x7F) << 8) | ((d2 & 0x7F) << 16));
     }
 
     private void SendVolume(int c)
     {
-        if (midiOut == IntPtr.Zero) return;
+        if (!OutOpen) return;
         int v = (int)Math.Round(volume[c] * Math.Min(1.0, options.Gain));
-        midiOutShortMsg(midiOut, (0xB0 | c) | (7 << 8) | (Math.Max(0, Math.Min(127, v)) << 16));
+        midiOut.ShortMessage((0xB0 | c) | (7 << 8) | (Math.Max(0, Math.Min(127, v)) << 16));
     }
 
     private void SendVolumes()
@@ -703,14 +651,14 @@ public sealed class MidiPlayer : IDisposable
     {
         for (int c = 0; c < 16; c++) ClearSent(c);
         if (ActiveSynth == MidiSynth.Mt32) Mt32?.AllOff();
-        if (midiOut == IntPtr.Zero) return;
-        for (int c = 0; c < 16; c++) { midiOutShortMsg(midiOut, (0xB0 | c) | (64 << 8)); midiOutShortMsg(midiOut, (0xB0 | c) | (123 << 8)); }
+        if (!OutOpen) return;
+        for (int c = 0; c < 16; c++) { midiOut.ShortMessage((0xB0 | c) | (64 << 8)); midiOut.ShortMessage((0xB0 | c) | (123 << 8)); }
     }
 
     public void Dispose()
     {
-        if (midiOut == IntPtr.Zero) return;
-        try { midiOutReset(midiOut); ReleaseSysEx(true); midiOutClose(midiOut); } catch (Exception) { }
-        midiOut = IntPtr.Zero;
+        if (midiOut == null) return;
+        try { midiOut.Dispose(); } catch (Exception) { }
+        midiOut = null;
     }
 }

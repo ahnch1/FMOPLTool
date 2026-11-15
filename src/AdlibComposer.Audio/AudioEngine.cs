@@ -39,7 +39,7 @@ public sealed class AudioEngine : IDisposable
     private bool sopMode { get { return source == Source.Sop; } }
     /// <summary>오르골 소리(−1~1)를 16bit 쪽 크기로.</summary>
     private const double MusicBoxScale = 7000;
-    private WaveOutPlayer player;
+    private IAudioOutput player;
     private double resamplePos;
     private double prevL, curL, prevR, curR;
 
@@ -193,12 +193,12 @@ public sealed class AudioEngine : IDisposable
         }
     }
 
-    /// <summary>출력 장치를 연다 (Windows 전용, 스테레오). 실패하면 예외.</summary>
+    /// <summary>출력 장치를 연다 (<see cref="AudioPlatform.OutputFactory"/>, 스테레오). 실패하면 예외.</summary>
     public void OpenDevice()
     {
         if (player != null) return;
         lock (snap) deviceBase = renderedSamples;
-        player = new WaveOutPlayer(OutputRate, 512, 2, RenderStereo);   // 6 x 512 프레임 ≈ 70ms
+        player = AudioPlatform.CreateOutput(OutputRate, 512, 2, RenderStereo);   // Windows: 6 x 512 프레임 ≈ 70ms
         player.Start();
     }
 

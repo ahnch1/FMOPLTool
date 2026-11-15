@@ -9,7 +9,7 @@ namespace AdlibComposer.Audio;
 /// <para>방식은 emu2149 (Mitsutaka Okazaki, MIT)를 따른다: 칩 내부 속도(클럭 / 8)로 한 걸음씩 돌리고 출력 샘플 하나에 든 걸음을 평균 (상자 필터),
 /// 볼륨은 32단계 표 (YM2149 = 엔벨로프 32단계, AY-3-8910 = 16단계를 두 칸씩). 출력은 0 이상(한쪽)이므로 낮은 대역 차단(약 20Hz)으로 직류를 뺀다.</para>
 /// </summary>
-public sealed class PsgEmulator
+public sealed class PsgEmulator : ISoundChip
 {
     public const double MsxClock = 1789772.5;
     public const int Channels = 3;
@@ -96,7 +96,27 @@ public sealed class PsgEmulator
         envStep = 0;
     }
 
-    private int TonePeriod(int ch) { int p = reg[ch * 2] | (reg[ch * 2 + 1] << 8); return p == 0 ? 1 : p; }
+    private int TonePeriod(int ch)
+    {
+        int p = reg[ch * 2] | (reg[ch * 2 + 1] << 8);
+        if (p == 0) return 1;
+        if (pitch[ch] != 1.0) p = SoundChips.Clamp((int)Math.Round(p / pitch[ch]), 1, 4095);
+        return p;
+    }
+
+    private readonly double[] pitch = { 1.0, 1.0, 1.0 };
+
+    // ------------------------------------------------------------ ISoundChip
+
+    public string Name { get { return IsYm2149 ? "YM2149 (PSG)" : "AY-3-8910 (PSG)"; } }
+    int ISoundChip.NativeRate { get { return Rate; } }
+    public int ChannelCount { get { return Channels; } }
+    public string ChannelLabel(int ch) { return ((char)('A' + ch)).ToString(); }
+    void ISoundChip.Write(int port, int r, int value) { Write(r, value); }
+    void ISoundChip.Generate(out int left, out int right) { left = right = Generate(); }
+    public void SetMute(int ch, bool mute) { if (ch >= 0 && ch < Channels) Mute[ch] = mute; }
+    public void SetPitch(int ch, double ratio) { if (ch >= 0 && ch < Channels) pitch[ch] = ratio > 0 ? ratio : 1.0; }
+    public bool ChannelActive(int ch) { return ch >= 0 && ch < Channels && NoiseOn(ch) >= 0 && ChannelLevel(ch) > 0; }
     private int NoisePeriod { get { int p = reg[6] & 0x1F; return p == 0 ? 1 : p; } }
     private int EnvPeriod { get { int p = reg[11] | (reg[12] << 8); return p == 0 ? 1 : p; } }
 
@@ -190,11 +210,19 @@ public sealed class PsgEmulator
     public double ChannelFrequency(int ch)
     {
         if ((reg[7] & (1 << ch)) != 0 || ChannelLevel(ch) <= 0) return 0;
-        return Clock / (16.0 * TonePeriod(ch));
+        int p = reg[ch * 2] | (reg[ch * 2 + 1] << 8);
+        return Clock / (16.0 * (p == 0 ? 1 : p));
     }
 
     /// <summary>채널 음량 0~1 (볼륨 레지스터 또는 엔벨로프 단계, 톤 · 노이즈 모두 꺼졌으면 0).</summary>
-    public float ChannelLevel(int ch) { return level[ch]; }
+    public float ChannelLevel(int ch)
+    {
+        // 레지스터에서 바로 (샘플을 만들지 않고 명령만 돌릴 때도 맞게)
+        int a = reg[8 + ch];
+        bool on = (reg[7] & (1 << ch)) == 0 || (reg[7] & (8 << ch)) == 0;
+        if (!on) return 0;
+        return (a & 0x10) != 0 ? EnvLevel / 31f : (a & 0x0F) / 15f;
+    }
 
     /// <summary>노이즈가 켜진 채널이 있으면 그 주기 (5비트), 없으면 -1.</summary>
     public int NoiseOn(int ch) { return (reg[7] & (8 << ch)) == 0 ? reg[6] & 0x1F : -1; }

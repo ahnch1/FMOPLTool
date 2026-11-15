@@ -2,16 +2,14 @@ using System;
 using System.Runtime.InteropServices;
 using System.Threading;
 
-namespace AdlibComposer.Audio;
+namespace AdlibComposer.Audio.Windows;
 
 /// <summary>
 /// winmm waveOut 기반 출력 (외부 NuGet 패키지 없이 동작). 16bit 모노 또는 스테레오.
 /// 짧은 버퍼 여러 개를 이벤트 콜백으로 채워 지연을 줄이고, <see cref="PlayedSamples"/>로 실제로 소리 난 위치를 알려준다.
 /// </summary>
-public sealed class WaveOutPlayer : IDisposable
+public sealed class WaveOutPlayer : IAudioOutput
 {
-    public delegate void FillBuffer(short[] buffer, int sampleCount);
-
     private const int BufferCount = 6;
     private const uint CALLBACK_EVENT = 0x00050000;
     private const uint TIME_BYTES = 0x0004;
@@ -63,7 +61,7 @@ public sealed class WaveOutPlayer : IDisposable
     private readonly int sampleRate;
     private readonly int samplesPerBuffer;
     private readonly int channels;
-    private readonly FillBuffer fill;
+    private readonly AudioFill fill;
     private readonly IntPtr[] headers = new IntPtr[BufferCount];
     private readonly IntPtr[] data = new IntPtr[BufferCount];
     private readonly short[] scratch;
@@ -75,11 +73,11 @@ public sealed class WaveOutPlayer : IDisposable
     private uint lastPos;
     private long posHigh;
 
-    public WaveOutPlayer(int sampleRate, int samplesPerBuffer, FillBuffer fill) : this(sampleRate, samplesPerBuffer, 1, fill) { }
+    public WaveOutPlayer(int sampleRate, int samplesPerBuffer, AudioFill fill) : this(sampleRate, samplesPerBuffer, 1, fill) { }
 
     /// <param name="samplesPerBuffer">버퍼 하나의 프레임 수.</param>
     /// <param name="channels">1 = 모노, 2 = 스테레오 (fill에는 왼쪽/오른쪽 번갈아 2 × 프레임 수 샘플).</param>
-    public WaveOutPlayer(int sampleRate, int samplesPerBuffer, int channels, FillBuffer fill)
+    public WaveOutPlayer(int sampleRate, int samplesPerBuffer, int channels, AudioFill fill)
     {
         this.sampleRate = sampleRate;
         this.samplesPerBuffer = samplesPerBuffer;

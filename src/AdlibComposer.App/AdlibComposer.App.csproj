@@ -35,5 +35,6 @@
     <ProjectReference Include="..\AdlibComposer.Formats\AdlibComposer.Formats.csproj" />
     <ProjectReference Include="..\AdlibComposer.Audio\AdlibComposer.Audio.csproj" />
     <ProjectReference Include="..\AdlibComposer.Notation\AdlibComposer.Notation.csproj" />
+    <ProjectReference Include="..\AdlibComposer.Audio.Windows\AdlibComposer.Audio.Windows.csproj" />
   </ItemGroup>
 </Project>

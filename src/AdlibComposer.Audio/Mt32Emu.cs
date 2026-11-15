@@ -15,7 +15,8 @@ namespace AdlibComposer.Audio;
 /// </summary>
 public sealed class Mt32Emu : IDisposable
 {
-    private const string Dll = "mt32emu.dll";
+    /// <summary>확장자 없이: Windows = mt32emu.dll, 안드로이드 · 리눅스 = libmt32emu.so (Munt는 여러 플랫폼용으로 빌드된다).</summary>
+    private const string Dll = "mt32emu";
 
     [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)] private static extern IntPtr mt32emu_get_library_version_string();
     [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)] private static extern IntPtr mt32emu_create_context(IntPtr reportHandler, IntPtr instanceData);

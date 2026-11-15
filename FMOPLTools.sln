@@ -21,6 +21,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AdlibComposer.SelfTest", "t
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AdlibComposer.Nuked", "src\AdlibComposer.Nuked\AdlibComposer.Nuked.csproj", "{74C758F6-3B30-4129-A468-9AB9BC1BA386}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AdlibComposer.Audio.Windows", "src\AdlibComposer.Audio.Windows\AdlibComposer.Audio.Windows.csproj", "{E27A5F93-B64B-407A-9B7E-6894BC7B5A4A}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -115,6 +117,18 @@ Global
 		{74C758F6-3B30-4129-A468-9AB9BC1BA386}.Release|x64.Build.0 = Release|Any CPU
 		{74C758F6-3B30-4129-A468-9AB9BC1BA386}.Release|x86.ActiveCfg = Release|Any CPU
 		{74C758F6-3B30-4129-A468-9AB9BC1BA386}.Release|x86.Build.0 = Release|Any CPU
+		{E27A5F93-B64B-407A-9B7E-6894BC7B5A4A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E27A5F93-B64B-407A-9B7E-6894BC7B5A4A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E27A5F93-B64B-407A-9B7E-6894BC7B5A4A}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{E27A5F93-B64B-407A-9B7E-6894BC7B5A4A}.Debug|x64.Build.0 = Debug|Any CPU
+		{E27A5F93-B64B-407A-9B7E-6894BC7B5A4A}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{E27A5F93-B64B-407A-9B7E-6894BC7B5A4A}.Debug|x86.Build.0 = Debug|Any CPU
+		{E27A5F93-B64B-407A-9B7E-6894BC7B5A4A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E27A5F93-B64B-407A-9B7E-6894BC7B5A4A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E27A5F93-B64B-407A-9B7E-6894BC7B5A4A}.Release|x64.ActiveCfg = Release|Any CPU
+		{E27A5F93-B64B-407A-9B7E-6894BC7B5A4A}.Release|x64.Build.0 = Release|Any CPU
+		{E27A5F93-B64B-407A-9B7E-6894BC7B5A4A}.Release|x86.ActiveCfg = Release|Any CPU
+		{E27A5F93-B64B-407A-9B7E-6894BC7B5A4A}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -127,5 +141,6 @@ Global
 		{92C9B8CA-F20A-4A4F-BE0E-130098C491E8} = {F22A578A-F284-462C-B713-534B78CF6EB3}
 		{6662D205-D3A5-40F7-9228-EBE971C9B6C3} = {2CD5375E-7183-47F0-B2F5-09D7D4CFE189}
 		{74C758F6-3B30-4129-A468-9AB9BC1BA386} = {F22A578A-F284-462C-B713-534B78CF6EB3}
+		{E27A5F93-B64B-407A-9B7E-6894BC7B5A4A} = {F22A578A-F284-462C-B713-534B78CF6EB3}
 	EndGlobalSection
 EndGlobal

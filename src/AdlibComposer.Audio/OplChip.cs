@@ -18,7 +18,7 @@ public enum OplCore
 /// 바꿀 때는 지금까지 쓴 레지스터를 새 코어에 다시 써서 악기 · 음높이를 이어 간다 (울리던 음은 처음부터 다시 울린다).
 /// 쓰기 · 샘플은 오디오 엔진 락 안에서만 불리므로 바꾸는 것도 그 안에서 일어난다.
 /// </summary>
-public sealed class OplChip : IOplChip
+public sealed class OplChip : IOplChip, ISoundChip
 {
     private static volatile OplCore globalCore = OplCore.Builtin;
 
@@ -74,6 +74,9 @@ public sealed class OplChip : IOplChip
         SyncCore();
         Array.Clear(regs, 0, regs.Length);
         Array.Clear(written, 0, written.Length);
+        Array.Clear(mute, 0, mute.Length);
+        Array.Clear(pitch, 0, pitch.Length);
+        adjusted = false;
         builtin.Reset();
         if (nuked != null) nuked.Reset();
     }
@@ -88,8 +91,95 @@ public sealed class OplChip : IOplChip
         WriteHook?.Invoke(register, value & 0xFF);
         regs[register] = (byte)value;
         written[register] = true;
+        int lo = register & 0xFF;
+        if (adjusted && ((lo >= 0xA0 && lo <= 0xA8) || (lo >= 0xB0 && lo <= 0xB8))) { WriteFreq(register >> 8, lo & 0x0F); return; }
+        CoreWrite(register, value);
+    }
+
+    private void CoreWrite(int register, int value)
+    {
         if (core == OplCore.Nuked) nuked.WriteReg(register, value);
         else builtin.Write(register, value);
+    }
+
+    // ------------------------------------------------------------ ISoundChip (채널 = 뱅크 × 9 + 채널)
+
+    private readonly bool[] mute = new bool[18];
+    private readonly double[] pitch = new double[18];
+    private bool adjusted;
+
+    public string Name { get { return opl3 ? "YMF262 (OPL3)" : "YM3812 (OPL2)"; } }
+    public int ChannelCount { get { return opl3 ? 18 : 9; } }
+    public string ChannelLabel(int ch) { return "F" + (ch + 1); }
+    void ISoundChip.Write(int port, int reg, int value) { Write(((port & 1) << 8) | (reg & 0xFF), value); }
+    void ISoundChip.Generate(out int left, out int right) { GenerateStereo(out left, out right); }
+
+    public void SetMute(int ch, bool on)
+    {
+        if (ch < 0 || ch >= ChannelCount || mute[ch] == on) return;
+        mute[ch] = on;
+        RefreshAdjust(ch);
+    }
+
+    public void SetPitch(int ch, double ratio)
+    {
+        if (ch < 0 || ch >= ChannelCount) return;
+        if (ratio <= 0) ratio = 1.0;
+        if (pitch[ch] == ratio || (pitch[ch] == 0 && ratio == 1.0)) return;
+        pitch[ch] = ratio;
+        RefreshAdjust(ch);
+    }
+
+    private void RefreshAdjust(int ch)
+    {
+        adjusted = false;
+        for (int i = 0; i < 18; i++) if (mute[i] || (pitch[i] != 0 && pitch[i] != 1.0)) adjusted = true;
+        WriteFreq(ch / 9, ch % 9);
+    }
+
+    /// <summary>원래 A0 · B0 값에 음높이 배수 · 끄기를 적용해 코어에 쓴다.</summary>
+    private void WriteFreq(int bank, int ch)
+    {
+        int b = bank << 8, v = bank * 9 + ch;
+        int fnum = regs[b + 0xA0 + ch] | ((regs[b + 0xB0 + ch] & 3) << 8);
+        int block = (regs[b + 0xB0 + ch] >> 2) & 7;
+        int key = regs[b + 0xB0 + ch] & 0x20;
+        double r = pitch[v] == 0 ? 1.0 : pitch[v];
+        if (r != 1.0 && fnum > 0)
+        {
+            double f = fnum * r;
+            while (f >= 1023.5 && block < 7) { f /= 2; block++; }
+            while (f < 256 && block > 0) { f *= 2; block--; }
+            fnum = SoundChips.Clamp((int)Math.Round(f), 1, 1023);
+        }
+        if (mute[v]) key = 0;
+        CoreWrite(b + 0xA0 + ch, fnum & 0xFF);
+        CoreWrite(b + 0xB0 + ch, key | (block << 2) | (fnum >> 8));
+    }
+
+    public double ChannelFrequency(int ch)
+    {
+        if (ch < 0 || ch >= ChannelCount) return 0;
+        int b = (ch / 9) << 8, c = ch % 9;
+        if ((regs[b + 0xB0 + c] & 0x20) == 0) return 0;
+        int fnum = regs[b + 0xA0 + c] | ((regs[b + 0xB0 + c] & 3) << 8);
+        int block = (regs[b + 0xB0 + c] >> 2) & 7;
+        return fnum * 49716.0 / Math.Pow(2, 20 - block);
+    }
+
+    public float ChannelLevel(int ch)
+    {
+        if (ch < 0 || ch >= ChannelCount) return 0;
+        int b = (ch / 9) << 8, c = ch % 9;
+        int car = (c / 3) * 8 + c % 3 + 3;
+        return 1f - (regs[b + 0x40 + car] & 0x3F) / 63f;
+    }
+
+    public bool ChannelActive(int ch)
+    {
+        if (ch < 6 || ch > 8 || (regs[0xBD] & 0x20) == 0) return false;
+        int bd = regs[0xBD];
+        return ch == 6 ? (bd & 0x10) != 0 : ch == 7 ? (bd & 0x09) != 0 : (bd & 0x06) != 0;
     }
 
     /// <summary>모노 샘플 1개 (스테레오 코어는 좌우 평균).</summary>
@@ -142,6 +232,7 @@ public sealed class OplChip : IOplChip
             builtin.Reset();
             Replay((r, v) => builtin.Write(r, v));
         }
+        if (adjusted) for (int ch = 0; ch < ChannelCount; ch++) WriteFreq(ch / 9, ch % 9);
     }
 
     /// <summary>

@@ -11,7 +11,7 @@ namespace AdlibComposer.Audio;
 /// <see cref="WritePort"/> (VGM 0xD2 pp aa dd: 0 = 파형, 1 = 주파수, 2 = 볼륨, 3 = 켜기, 4 = SCC+ 파형, 5 = 시험 레지스터).</para>
 /// <para>방식은 emu2212 (Mitsutaka Okazaki, MIT)를 따른다: 위상 누산 + 출력 샘플 하나 동안 지나간 파형을 평균 (높은 음에서 거친 겹침을 줄인다).</para>
 /// </summary>
-public sealed class SccEmulator
+public sealed class SccEmulator : ISoundChip
 {
     public const double MsxClock = 3579545.0;
     public const int Channels = 5;
@@ -111,7 +111,7 @@ public sealed class SccEmulator
             int n = freq[c];
             if (n <= 8) continue;
             // 이 샘플 동안 파형 위치가 나아가는 양 (칸)
-            double step = Clock / ((n + 1) * (double)Rate);
+            double step = Clock / ((n + 1) * (double)Rate) * pitch[c];
             double p0 = phase[c];
             double p1 = p0 + step;
             phase[c] = p1 % 32.0;
@@ -156,4 +156,17 @@ public sealed class SccEmulator
     public float ChannelLevel(int ch) { return (enable & (1 << ch)) == 0 || freq[ch] <= 8 ? 0 : volume[ch] / 15f; }
 
     public sbyte WaveSample(int ch, int i) { return wave[ch % Channels, i & 31]; }
+
+    // ------------------------------------------------------------ ISoundChip
+
+    private readonly double[] pitch = { 1.0, 1.0, 1.0, 1.0, 1.0 };
+    public string Name { get { return IsSccPlus ? "K052539 (SCC+)" : "K051649 (SCC)"; } }
+    int ISoundChip.NativeRate { get { return Rate; } }
+    public int ChannelCount { get { return Channels; } }
+    public string ChannelLabel(int ch) { return "S" + (ch + 1); }
+    void ISoundChip.Write(int port, int r, int value) { WritePort(port, r, value); }
+    void ISoundChip.Generate(out int left, out int right) { left = right = Generate(); }
+    public void SetMute(int ch, bool mute) { if (ch >= 0 && ch < Channels) Mute[ch] = mute; }
+    public void SetPitch(int ch, double ratio) { if (ch >= 0 && ch < Channels) pitch[ch] = ratio > 0 ? ratio : 1.0; }
+    public bool ChannelActive(int ch) { return false; }
 }

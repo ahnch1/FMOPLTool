@@ -487,6 +487,7 @@ internal sealed class MainForm : Form
             Item("Import Instrument (.INS)...", delegate { ImportInstrument(); }),
             Item("Export Instrument (.INS)...", delegate { ExportInstrument(); }),
             Item("Export Score (text)...", delegate { ExportScoreText(); }),
+            Item("Export VGM (chip log)...", delegate { ExportVgm(); }),
             new ToolStripSeparator(),
             Item("Preferences...", delegate { ShowPreferences(); }, Keys.Control | Keys.Oemcomma),
             new ToolStripSeparator(),
@@ -1216,6 +1217,29 @@ internal sealed class MainForm : Form
                 using (var fs = File.Create(dlg.FileName)) new TextScoreExporter().Export(score, fs);
             }
             catch (Exception ex) { Fail("악보를 내보낼 수 없습니다.", ex); }
+        }
+    }
+
+    /// <summary>작업 곡을 VGM으로: ROL · IMS = OPL2, SOP = OPL3 레지스터 기록 (다른 VGM 플레이어에서 재생).</summary>
+    private void ExportVgm()
+    {
+        if (ws.Song.LengthTicks <= 0) { MessageBox.Show(this, "내보낼 노트가 없습니다.", "Export VGM"); return; }
+        using (var dlg = new SaveFileDialog
+        {
+            Filter = "VGM (*.vgm)|*.vgm|VGM gzip (*.vgz)|*.vgz", DefaultExt = "vgm", AddExtension = true,
+            FileName = ws.Song.Title, Title = "Export VGM", InitialDirectory = StartDir(ws.Song.FilePath)
+        })
+        {
+            if (dlg.ShowDialog(this) != DialogResult.OK) return;
+            try
+            {
+                Cursor = Cursors.WaitCursor;
+                var w = VgmExport.FromSong(ws.Song, ws.Bank);
+                w.Save(dlg.FileName);
+                AppLog.Info("곡", "VGM 내보내기: " + dlg.FileName + " (" + (ws.Song.IsSop ? "OPL3" : "OPL2") + ", " + (w.TotalSamples / 44100.0).ToString("0.0") + "초)");
+            }
+            catch (Exception ex) { Fail("VGM으로 내보낼 수 없습니다.", ex); }
+            finally { Cursor = Cursors.Default; }
         }
     }
 

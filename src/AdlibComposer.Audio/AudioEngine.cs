@@ -7,7 +7,9 @@ namespace AdlibComposer.Audio;
 
 /// <summary>
 /// 오디오 엔진: OplSynth + Sequencer (ROL/IMS, OPL2), SopPlayer (SOP, OPL3), MusicBoxPlayer (오르골 시험 연주) 중 하나 + 출력 장치(스테레오).
-/// UI 스레드와 오디오 스레드가 같은 락을 쓴다.
+/// 명령(재생 · 멈춤 · 조절)은 UI 스레드와 오디오 스레드가 같은 락(sync)을 쓴다.
+/// UI가 자주 묻는 값(재생 중 · 위치 · 채널 상태 · 템포)은 오디오 스레드가 블록마다(그리고 명령마다) 남기는 스냅샷에서 읽어,
+/// 렌더하는 동안(버퍼 하나 ≈ 12ms) UI가 기다리지 않는다. 스냅샷 락(snap)은 복사하는 동안만 잡는다.
 /// Render()만 단독으로 호출하면 장치 없이 오프라인 렌더링도 가능 (테스트용).
 /// </summary>
 public sealed class AudioEngine : IDisposable
@@ -106,7 +108,31 @@ public sealed class AudioEngine : IDisposable
     public OplMapping Mapping { get { return synth.Mapping; } }
     public double MasterVolume { get; set; } = 1.5;
     public bool IsDeviceOpen { get { return player != null && player.IsOpen; } }
-    public bool IsPlaying { get { lock (sync) { return SourcePlaying; } } }
+    public bool IsPlaying { get { lock (snap) { return snapPlaying; } } }
+
+    // ---------------------------------------------------------------- 스냅샷 (UI가 읽는 값)
+
+    private readonly object snap = new object();
+    private bool snapPlaying, snapTrackerPlaying;
+    private double snapTick, snapTempo = 1.0;
+    private int snapOrder, snapPattern, snapRow;
+    private readonly VoiceState[] snapStates = new VoiceState[PlaybackOptions.Voices];
+    private readonly VoiceState[] workStates = new VoiceState[PlaybackOptions.Voices];
+
+    /// <summary>sync 안에서: 지금 상태를 스냅샷으로 남긴다 (배열 복사만, 할당 없음).</summary>
+    private void Publish()
+    {
+        bool playing = SourcePlaying;
+        double tick = SourceTick, tempo = TempoMultiplierLocked;
+        CopyStatesLocked(workStates);
+        bool trk = source == Source.Tracker && tracker.IsSongPlaying;
+        lock (snap)
+        {
+            snapPlaying = playing; snapTick = tick; snapTempo = tempo;
+            snapOrder = tracker.CurrentOrder; snapPattern = tracker.CurrentPattern; snapRow = tracker.CurrentRow; snapTrackerPlaying = trk;
+            Array.Copy(workStates, snapStates, snapStates.Length);
+        }
+    }
 
     private bool SourcePlaying
     {
@@ -148,16 +174,16 @@ public sealed class AudioEngine : IDisposable
         get
         {
             long played = player != null ? player.PlayedSamples : -1;
-            lock (sync)
+            lock (snap)
             {
-                if (played < 0) return SourceTick;
+                if (played < 0) return snapTick;
                 long at = deviceBase + played;
                 for (int k = 1; k <= marks.Length; k++)
                 {
                     var m = marks[(markNext - k + marks.Length) % marks.Length];
                     if (m.Count == 0) break;
                     if (at < m.Start) continue;
-                    if (at >= m.Start + m.Count) return SourceTick;                // 기록보다 앞: 거의 없음
+                    if (at >= m.Start + m.Count) return snapTick;                  // 기록보다 앞: 거의 없음
                     if (m.Gen != generation || !m.Playing) return startTick;       // 아직 이전 버퍼(무음)가 나오는 중
                     if (m.T1 < m.T0) return m.T0;                                  // 루프 되감기 블록
                     return m.T0 + (m.T1 - m.T0) * (at - m.Start) / m.Count;
@@ -171,7 +197,7 @@ public sealed class AudioEngine : IDisposable
     public void OpenDevice()
     {
         if (player != null) return;
-        lock (sync) deviceBase = renderedSamples;
+        lock (snap) deviceBase = renderedSamples;
         player = new WaveOutPlayer(OutputRate, 512, 2, RenderStereo);   // 6 x 512 프레임 ≈ 70ms
         player.Start();
     }
@@ -192,6 +218,7 @@ public sealed class AudioEngine : IDisposable
             sequencer.Start(song, resolver, startTick, loopStart, loopEnd, onlyVoice, options);
             generation++;
             this.startTick = Math.Max(0, startTick);
+            Publish();
         }
     }
 
@@ -206,6 +233,7 @@ public sealed class AudioEngine : IDisposable
             sop.Start(song, Math.Max(0, startTick), options);
             generation++;
             this.startTick = Math.Max(0, startTick);
+            Publish();
         }
     }
 
@@ -220,6 +248,7 @@ public sealed class AudioEngine : IDisposable
             midi.Start(song, Math.Max(0, startTick), options);
             generation++;
             this.startTick = Math.Max(0, startTick);
+            Publish();
         }
     }
 
@@ -236,6 +265,7 @@ public sealed class AudioEngine : IDisposable
             pcm.Start(samples, rate, melody, startSeconds, original, melodyOn);
             generation++;
             this.startTick = startSeconds * 1000;
+            Publish();
         }
     }
 
@@ -250,6 +280,7 @@ public sealed class AudioEngine : IDisposable
             vgm.Start(song, Math.Max(0, startMs), options);
             generation++;
             this.startTick = Math.Max(0, startMs);
+            Publish();
         }
     }
 
@@ -309,6 +340,7 @@ public sealed class AudioEngine : IDisposable
             musicBox.Start(hits, ticksPerSecond, Math.Max(0, startTick), endTick);
             generation++;
             this.startTick = Math.Max(0, startTick);
+            Publish();
         }
     }
 
@@ -326,6 +358,7 @@ public sealed class AudioEngine : IDisposable
             tracker.Start(module, startOrder, startRow, singlePattern, loop, options, skipMs);
             generation++;
             this.startTick = skipMs;
+            Publish();
         }
     }
 
@@ -340,6 +373,7 @@ public sealed class AudioEngine : IDisposable
             vgm.Stop();
             source = Source.Tracker;
             tracker.Jam(module, sampleNo, note, channel);
+            Publish();
         }
     }
 
@@ -348,10 +382,10 @@ public sealed class AudioEngine : IDisposable
     /// <summary>트래커 재생 위치 (렌더 위치 기준, 출력 버퍼만큼 앞설 수 있다).</summary>
     public bool GetTrackerPosition(out int order, out int pattern, out int row)
     {
-        lock (sync)
+        lock (snap)
         {
-            order = tracker.CurrentOrder; pattern = tracker.CurrentPattern; row = tracker.CurrentRow;
-            return source == Source.Tracker && tracker.IsSongPlaying;
+            order = snapOrder; pattern = snapPattern; row = snapRow;
+            return snapTrackerPlaying;
         }
     }
 
@@ -360,7 +394,7 @@ public sealed class AudioEngine : IDisposable
 
     public void Stop()
     {
-        lock (sync) { sequencer.Stop(); sop.Stop(); musicBox.Stop(); tracker.Stop(); midi.Stop(); pcm.Stop(); vgm.Stop(); }
+        lock (sync) { sequencer.Stop(); sop.Stop(); musicBox.Stop(); tracker.Stop(); midi.Stop(); pcm.Stop(); vgm.Stop(); Publish(); }
     }
 
     // ---------------------------------------------------------------- 재생 조절 (Jukebox)
@@ -377,11 +411,12 @@ public sealed class AudioEngine : IDisposable
     public void SetGain(double gain) { lock (sync) { CurrentOptions.Gain = gain; } }
 
     /// <summary>지금 템포 배수 (곡의 템포 이벤트). SOP는 지금 템포 / 기본 템포.</summary>
-    public double TempoMultiplier
+    public double TempoMultiplier { get { lock (snap) return snapTempo; } }
+
+    private double TempoMultiplierLocked
     {
         get
         {
-            lock (sync)
             {
                 if (sopMode) return sop.Song != null && sop.Song.BasicTempo > 0 ? (double)sop.Tempo / sop.Song.BasicTempo : 1.0;
                 if (source == Source.Tracker) return tracker.Module != null && tracker.Module.Kind == TrackerKind.S3m && tracker.Module.Tempo > 0 ? (double)tracker.Tempo / tracker.Module.Tempo : 1.0;
@@ -393,7 +428,13 @@ public sealed class AudioEngine : IDisposable
     }
 
     /// <summary>보이스별 상태 (울리는 음, 볼륨, 악기). ROL/IMS는 11개, SOP는 트랙 20개.</summary>
-    public void GetVoiceStates(VoiceState[] dst) { lock (sync) { if (sopMode) sop.CopyStates(dst); else if (source == Source.Tracker) tracker.CopyStates(dst); else if (source == Source.Midi) midi.CopyStates(dst); else if (source == Source.Vgm) vgm.CopyStates(dst); else sequencer.CopyStates(dst); } }
+    public void GetVoiceStates(VoiceState[] dst)
+    {
+        lock (snap) Array.Copy(snapStates, dst, Math.Min(dst.Length, snapStates.Length));
+        for (int v = snapStates.Length; v < dst.Length; v++) dst[v] = new VoiceState { Note = -1 };
+    }
+
+    private void CopyStatesLocked(VoiceState[] dst) { { if (sopMode) sop.CopyStates(dst); else if (source == Source.Tracker) tracker.CopyStates(dst); else if (source == Source.Midi) midi.CopyStates(dst); else if (source == Source.Vgm) vgm.CopyStates(dst); else sequencer.CopyStates(dst); } }
 
     // ---------------------------------------------------------------- 시음 (Instrument Maker / 건반 클릭)
 
@@ -480,9 +521,13 @@ public sealed class AudioEngine : IDisposable
             var mark = new Mark { Start = renderedSamples, Count = count, T0 = SourceTick, Playing = SourcePlaying, Gen = generation };
             RenderLocked(buffer, count, stereo);
             mark.T1 = SourceTick;
-            renderedSamples += count;
-            marks[markNext] = mark;
-            markNext = (markNext + 1) % marks.Length;
+            lock (snap)
+            {
+                renderedSamples += count;
+                marks[markNext] = mark;
+                markNext = (markNext + 1) % marks.Length;
+            }
+            Publish();
         }
     }
 

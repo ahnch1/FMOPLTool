@@ -78,10 +78,14 @@ public sealed class OplChip : IOplChip
         if (nuked != null) nuked.Reset();
     }
 
+    /// <summary>레지스터 쓰기를 엿듣는 쪽 (VGM 내보내기). 코어를 바꿀 때 다시 쓰는 것은 알리지 않는다.</summary>
+    public Action<int, int> WriteHook { get; set; }
+
     public void Write(int register, int value)
     {
         SyncCore();
         register &= opl3 ? 0x1FF : 0xFF;
+        WriteHook?.Invoke(register, value & 0xFF);
         regs[register] = (byte)value;
         written[register] = true;
         if (core == OplCore.Nuked) nuked.WriteReg(register, value);

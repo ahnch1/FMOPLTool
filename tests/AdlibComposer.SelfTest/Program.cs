@@ -44,6 +44,7 @@ public static class Program
         TrackerTests.Run(Check);
         ChipTests.Run(Check);
         VgmTests.Run(Check);
+        VgmExportTests.Run(Check);
         MidiSysExTests.Run(Check);
         ChipMidiTests.Run(Check);
         SongChipTests.Run(Check);

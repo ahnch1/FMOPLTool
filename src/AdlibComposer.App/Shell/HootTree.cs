@@ -112,7 +112,8 @@ internal sealed class HootTree : UserControl
         zipIndex = null;
         zipTask = Task.Run(() => IndexZips(hootRoot));
         var errors = new List<string>();
-        Task.Run(() => HootLists.ReadFolder(dir, null, 0, errors)).ContinueWith(t =>
+        var zips = zipTask;
+        Task.Run(() => { var l = HootLists.ReadFolder(dir, null, 0, errors); zips.Wait(); return l; }).ContinueWith(t =>
         {
             if (IsDisposed || id != loadId) return;
             BeginInvoke(new Action(() =>
@@ -120,8 +121,10 @@ internal sealed class HootTree : UserControl
                 if (id != loadId) return;
                 if (t.IsFaulted) { ShowStatus("읽지 못했습니다: " + t.Exception?.GetBaseException().Message); SetSummary("hoot: 읽기 실패"); return; }
                 games = t.Result;
+                zipIndex = zips.Result;
                 if (errors.Count > 0) AppLog.Warn("hoot", "읽지 못한 목록 파일 " + errors.Count + "개", string.Join("\n", errors.Take(20)));
-                AppLog.Info("hoot", "hoot 목록: " + dir, "제작사 " + games.Select(g => g.File).Distinct().Count() + " · 게임 " + games.Count);
+                AppLog.Info("hoot", "hoot 목록: " + dir, "제작사 " + games.Select(g => g.File).Distinct().Count() + " · 게임 " + games.Count
+                    + " · 곡 파일(zip) 없음 " + games.Count(g => !Has(g)) + " (찾은 곳: " + hootRoot + " 아래)");
                 Rebuild();
             }));
         });
@@ -140,6 +143,26 @@ internal sealed class HootTree : UserControl
         }
         catch (Exception) { }
         return d;
+    }
+
+    /// <summary>빨간색: 목록에는 있지만 곡 파일(아카이브 zip)이 없는 것.</summary>
+    private static readonly Color MissingColor = Color.FromArgb(200, 40, 40);
+
+    /// <summary>게임의 곡 파일(아카이브 zip)이 있는가 (곡 목록이 비어도 없음으로 본다).</summary>
+    private bool Has(HootGame g)
+    {
+        return g.Titles.Count > 0 && g.Archive.Length > 0 && zipIndex != null && zipIndex.ContainsKey(g.Archive);
+    }
+
+    /// <summary>묶음 줄 글자 · 색: "이름  (n)", 일부 없으면 "(n, 없음 m)", 모두 없으면 빨간색.</summary>
+    private TreeNode GroupNode(string name, List<HootGame> list, string image)
+    {
+        int missing = list.Count(g => !Has(g));
+        var n = new TreeNode(name + "  (" + list.Count + (missing > 0 && missing < list.Count ? ", 없음 " + missing : "") + ")") { ImageKey = image, SelectedImageKey = image, Tag = list };
+        if (missing == list.Count) { n.ForeColor = MissingColor; n.ToolTipText = "목록에는 있지만 곡 파일(zip)이 하나도 없음"; }
+        else if (missing > 0) n.ToolTipText = "곡 파일(zip)이 없는 게임 " + missing + "개 (빨간색)";
+        n.Nodes.Add(new TreeNode(""));   // 펼침 표시 (펼칠 때 채움)
+        return n;
     }
 
     private static string MakerOf(HootGame g) { return Path.GetFileNameWithoutExtension(g.File); }
@@ -168,8 +191,8 @@ internal sealed class HootTree : UserControl
         foreach (var grp in shown.GroupBy(MakerOf, StringComparer.OrdinalIgnoreCase).OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase))
         {
             var list = grp.ToList();
-            var n = new TreeNode(grp.Key + "  (" + list.Count + ")") { ImageKey = "maker", SelectedImageKey = "maker", Tag = list, ToolTipText = grp.First().File };
-            n.Nodes.Add(new TreeNode(""));   // 펼침 표시 (펼칠 때 채움)
+            var n = GroupNode(grp.Key, list, "maker");
+            n.ToolTipText = grp.First().File + (n.ToolTipText.Length > 0 ? "\n" + n.ToolTipText : "");
             tree.Nodes.Add(n);
         }
         // 찾은 게 적으면 다 펼쳐 보인다
@@ -179,7 +202,8 @@ internal sealed class HootTree : UserControl
         status.Visible = false;
         if (tree.Nodes.Count == 0) ShowStatus(games.Count == 0 ? "이 폴더에 hoot 목록(.xml)이 없습니다" : "찾는 게임이 없습니다");
         int makers = shown.Select(MakerOf).Distinct(StringComparer.OrdinalIgnoreCase).Count();
-        SetSummary("hoot: " + Path.GetFileName(listDir.TrimEnd('\\')) + " — 제작사 " + makers + " · 게임 " + shown.Count + (q.Length > 0 ? " (찾기 '" + q + "')" : ""));
+        int missingAll = shown.Count(g => !Has(g));
+        SetSummary("hoot: " + Path.GetFileName(listDir.TrimEnd('\\')) + " — 제작사 " + makers + " · 게임 " + shown.Count + (missingAll > 0 ? " (곡 없음 " + missingAll + ")" : "") + (q.Length > 0 ? " (찾기 '" + q + "')" : ""));
     }
 
     /// <summary>펼칠 때 아래 단계를 채운다: 제작사 → 장비, 장비 → 게임, 게임 → 곡.</summary>
@@ -193,9 +217,7 @@ internal sealed class HootTree : UserControl
             foreach (var grp in list.GroupBy(MachineOf, StringComparer.OrdinalIgnoreCase).OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase))
             {
                 var sub = grp.ToList();
-                var n = new TreeNode(grp.Key + "  (" + sub.Count + ")") { ImageKey = "machine", SelectedImageKey = "machine", Tag = sub };
-                n.Nodes.Add(new TreeNode(""));
-                node.Nodes.Add(n);
+                node.Nodes.Add(GroupNode(grp.Key, sub, "machine"));
             }
         }
         else if (node.Tag is List<HootGame> games2)
@@ -204,6 +226,7 @@ internal sealed class HootTree : UserControl
             {
                 int songs = g.Titles.Count(t => !t.Code.StartsWith("range:"));
                 var n = new TreeNode(GameText(g) + "  (" + songs + ")") { ImageKey = "game", SelectedImageKey = "game", Tag = g, ToolTipText = GameTip(g) };
+                if (!Has(g)) n.ForeColor = MissingColor;
                 if (g.Titles.Count > 0) n.Nodes.Add(new TreeNode(""));
                 node.Nodes.Add(n);
             }
@@ -220,16 +243,20 @@ internal sealed class HootTree : UserControl
                     continue;
                 }
                 var tag = new SongTag { Game = g, Index = i++, Code = code };
-                var n = new TreeNode(code + "  " + text) { ImageKey = "song", SelectedImageKey = "song", Tag = tag, ToolTipText = "두 번 클릭 / Enter: 재생" };
+                bool has = Has(g);
+                var n = new TreeNode(code + "  " + text) { ImageKey = "song", SelectedImageKey = "song", Tag = tag, ToolTipText = has ? "두 번 클릭 / Enter: 재생" : "곡 파일 없음: " + g.Archive + ".zip" };
+                if (!has) n.ForeColor = MissingColor;
                 node.Nodes.Add(n);
             }
         }
         tree.EndUpdate();
     }
 
-    private static string GameTip(HootGame g)
+    private string GameTip(HootGame g)
     {
-        var l = new List<string> { g.Name, "드라이버: " + g.Driver + (g.DriverType.Length > 0 ? " / " + g.DriverType : ""), "아카이브: " + (g.Archive.Length > 0 ? g.Archive + ".zip" : "없음") };
+        string zip = g.Archive.Length == 0 ? "없음 (romlist archive 없음)" : g.Archive + ".zip" + (zipIndex != null && zipIndex.TryGetValue(g.Archive, out var zp) ? " — " + zp : " — 파일 없음");
+        var l = new List<string> { g.Name, "드라이버: " + g.Driver + (g.DriverType.Length > 0 ? " / " + g.DriverType : ""), "아카이브: " + zip };
+        if (g.Titles.Count == 0) l.Add("곡 목록(titlelist) 없음");
         if (g.Alias.Length > 0) l.Add("별칭: " + g.Alias + (g.AliasType.Length > 0 ? " (" + g.AliasType + ")" : ""));
         if (g.Options.Count > 0) l.Add("옵션: " + string.Join(", ", g.Options.Select(o => o.Key + "=" + o.Value)));
         l.Add(Playable(g) ? "재생: PC-98 DOS 흉내" : "재생: zip을 폴더 목록에서 열기 (이 기종은 hoot 항목으로 아직 재생하지 않음)");

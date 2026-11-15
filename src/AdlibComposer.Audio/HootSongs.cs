@@ -16,6 +16,17 @@ public static class HootSongs
 {
     public static readonly string[] Extensions = { HootArchive.Extension };
 
+    /// <summary>MIDI로 내는 hoot 항목 (pc98dos · pcatdos + midiout): Jukebox는 MIDI 재생으로 (<see cref="LoadMidi"/>).</summary>
+    public static bool IsMidi(string path)
+    {
+        string file = ChipSongs.FilePart(path);
+        if (file == null || !Extensions.Any(x => string.Equals(Path.GetExtension(file), x, StringComparison.OrdinalIgnoreCase)) || !File.Exists(file)) return false;
+        try { return Dos.HootPc98.IsMidiEntry(HootArchive.Load(file)); }
+        catch (Exception) { return false; }
+    }
+
+    public static MidiSong LoadMidi(string path) { return Dos.HootPc98.LoadMidi(path); }
+
     public static List<(int Code, string Title)> Tracks(string path)
     {
         return HootArchive.Load(ChipSongs.FilePart(path)).Titles.ToList();

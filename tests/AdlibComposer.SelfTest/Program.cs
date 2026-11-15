@@ -69,6 +69,8 @@ public static class Program
             return HootPc98Tests.TraceEntry(args[1], args.Length > 2 ? int.Parse(args[2]) : 0, args.Length > 3 ? double.Parse(args[3], System.Globalization.CultureInfo.InvariantCulture) : 3);
         if (args.Length > 1 && args[0] == "--hootatsurvey")
             return HootPc98Tests.SurveyAt(args[1], args.Length > 2 ? int.Parse(args[2]) : 50, args.Length > 3 ? double.Parse(args[3], System.Globalization.CultureInfo.InvariantCulture) : 6);
+        if (args.Length > 1 && args[0] == "--hootmidisurvey")
+            return HootPc98Tests.SurveyMidi(args[1], args.Length > 2 ? int.Parse(args[2]) : 50, args.Length > 3 ? double.Parse(args[3], System.Globalization.CultureInfo.InvariantCulture) : 6);
         if (args.Length > 1 && args[0] == "--hoottree") return HootPc98Tests.TreeStats(args[1]);
         if (args.Length > 1 && args[0] == "--hoot98survey")
         {

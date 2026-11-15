@@ -157,6 +157,7 @@ public sealed class MidiPlayer : IDisposable
         }
         tempo = MidiSong.DefaultTempo;
         next = 0;
+        if (s.Extend != null && startTick + LiveAhead(s) > s.RenderedTicks) s.Extend((int)startTick + 2 * LiveAhead(s));
         // 앞으로 감기: 노트는 건너뛰고 템포 · 프로그램 · 컨트롤 · 벤드만
         while (next < s.Events.Count && s.Events[next].Tick < startTick)
         {
@@ -170,6 +171,9 @@ public sealed class MidiPlayer : IDisposable
         SetTempo(tempo);
         playing = true;
     }
+
+    /// <summary>살아 있는 곡을 미리 채워 둘 만큼 (4분음표 둘 = 120 BPM에서 1초).</summary>
+    private static int LiveAhead(MidiSong s) { return s.Division * 2; }
 
     public void Stop()
     {
@@ -231,6 +235,7 @@ public sealed class MidiPlayer : IDisposable
     public bool Step()
     {
         if (!playing) return false;
+        if (song.Extend != null && tick + LiveAhead(song) > song.RenderedTicks) song.Extend((int)tick + 2 * LiveAhead(song));
         var ev = song.Events;
         while (next < ev.Count && ev[next].Tick <= tick)
         {

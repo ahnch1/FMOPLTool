@@ -61,6 +61,26 @@ public sealed class MidiSong
     /// <summary>채널의 첫 프로그램 (없으면 -1).</summary>
     public int[] FirstProgram { get; } = Enumerable.Repeat(-1, Channels).ToArray();
 
+    /// <summary>
+    /// 살아 있는 곡 (기계를 돌려 만드는 MIDI: hoot MPU-401 등): 재생기가 그 틱까지 이벤트를 채워 달라고 부른다 (재생 스레드에서).
+    /// null이면 보통 곡 (이벤트가 다 있음).
+    /// </summary>
+    public Action<int> Extend { get; set; }
+    /// <summary>살아 있는 곡에서 지금까지 채운 틱 (<see cref="Extend"/>가 올린다). 보통 곡은 int.MaxValue.</summary>
+    public int RenderedTicks { get; set; } = int.MaxValue;
+
+    /// <summary>살아 있는 곡 준비: 길이 · 규격을 정하고 (템포 = 기본 120 BPM 고정), 채널은 모두 쓰는 것으로.</summary>
+    public void PrepareLive(int lengthTicks, MidiStandard standard)
+    {
+        LengthTicks = lengthTicks;
+        Standard = standard;
+        for (int c = 0; c < Channels; c++) ChannelUsed[c] = true;
+        tempoTicks = new[] { 0 };
+        tempoValues = new[] { DefaultTempo };
+        tempoSeconds = new[] { 0.0 };
+        RenderedTicks = 0;
+    }
+
     private int[] tempoTicks = new int[0];
     private double[] tempoSeconds = new double[0];
     private int[] tempoValues = new int[0];

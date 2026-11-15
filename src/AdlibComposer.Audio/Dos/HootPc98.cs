@@ -115,6 +115,95 @@ public static class HootPc98
         return v;
     }
 
+    // ------------------------------------------------------------ MIDI 판 (midiout)
+
+    /// <summary>MIDI로 내는 항목 (옵션 midiout): 기계의 MPU-401 / MPU-PC98 출력을 MIDI 곡으로.</summary>
+    public static bool IsMidiEntry(HootArchive.Entry e)
+    {
+        return e.Options.ContainsKey("midiout") && (IsPcAt(e) || e.Driver.Equals("pc98dos", StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>hoot midiout_type → 규격: 1 (Munt) · 2 MT-32 · 3 CM-64 → MT-32, 4 SC-55 · 6 Vermouth · 7 SC-88 · 9 SC-88Pro → GS, 8 → GM.</summary>
+    public static MidiStandard StandardOf(HootArchive.Entry e)
+    {
+        switch (e.Option("midiout_type", 0))
+        {
+            case 1: case 2: case 3: return MidiStandard.Mt32;
+            case 4: case 6: case 7: case 9: return MidiStandard.Gs;
+            case 8: return MidiStandard.Gm;
+        }
+        return MidiStandard.None;
+    }
+
+    /// <summary>살아 있는 MIDI 곡의 틱 속도: 4분음표 480틱 · 120 BPM = 1초에 960틱.</summary>
+    public const int MidiDivision = 480, MidiTicksPerSecond = 960;
+
+    /// <summary>
+    /// "항목.hoot::n" (MIDI 판) → 살아 있는 MIDI 곡: 재생기가 틱을 달라고 할 때마다 (<see cref="MidiSong.Extend"/>) 기계를 그만큼 돌려
+    /// MPU로 나간 바이트를 이벤트로 붙인다. 기계는 곡을 열 때 뒤에서 세운다.
+    /// </summary>
+    public static MidiSong LoadMidi(string path)
+    {
+        string file = ChipSongs.FilePart(path);
+        NezM3u.SplitTrack(path, out int n);
+        var e = HootArchive.Load(file);
+        if (!IsMidiEntry(e)) throw new InvalidDataException("MIDI 판 hoot 항목이 아닙니다.");
+        if (e.Titles.Count == 0) throw new InvalidDataException("hoot 항목에 곡 목록(titlelist)이 없습니다.");
+        n = Math.Max(0, Math.Min(n, e.Titles.Count - 1));
+        var (code, title) = e.Titles[n];
+        string dir = Path.GetDirectoryName(Path.GetFullPath(file));
+        var song = new MidiSong
+        {
+            FilePath = path, Title = title, Division = MidiDivision,
+            FormatName = "hoot " + e.Driver + " MIDI (" + (IsPcAt(e) ? "MPU-401" : "MPU-PC98") + ")",
+            Comment = e.Name,
+        };
+        song.PrepareLive((int)(DefaultSeconds * MidiTicksPerSecond), StandardOf(e));
+        var pre = System.Threading.Tasks.Task.Run(() => BootDirAny(dir, e, out _));
+        DosMachine m = null;
+        IHootMachine hm = null;
+        long t0 = 0;
+        int curTick = 0;
+        var parser = new MidiByteParser();
+        parser.Message = (st, a, b, sx) => song.Events.Add(new MidiEvent { Tick = curTick, Status = (byte)st, Data1 = (byte)a, Data2 = (byte)b, SysEx = sx });
+        song.Extend = target =>
+        {
+            try
+            {
+                if (m == null)
+                {
+                    m = pre.GetAwaiter().GetResult();
+                    hm = (IHootMachine)m;
+                    foreach (var x in hm.ChipLog) if (x.kind == 4) parser.Feed(x.val);   // 드라이버 초기화 (리셋 SysEx · 음색) = 0틱
+                    hm.ChipLog.Clear();
+                    t0 = m.Cpu.Cycles;
+                    hm.Play(code);
+                }
+                target = Math.Min(target, song.LengthTicks + MidiTicksPerSecond);
+                long until = t0 + (long)(target / (double)MidiTicksPerSecond * hm.ClockHz);
+                while (m.Cpu.Cycles < until)
+                {
+                    long before = m.Cpu.Cycles;
+                    m.Run(Math.Min(until - m.Cpu.Cycles, (long)(hm.ClockHz * 0.05)));
+                    if (m.Cpu.Cycles == before) break;
+                }
+                foreach (var x in hm.ChipLog)
+                {
+                    if (x.kind != 4) continue;
+                    curTick = Math.Max(curTick, (int)((x.t - t0) / hm.ClockHz * MidiTicksPerSecond));
+                    parser.Feed(x.val);
+                }
+                hm.ChipLog.Clear();
+                song.RenderedTicks = Math.Max(song.RenderedTicks, target);
+            }
+            catch (Exception)
+            {
+                song.RenderedTicks = int.MaxValue;   // 기계가 멈춤: 더 채우지 않는다
+            }
+        };
+        return song;
+    }
+
     /// <summary>항목대로 PC-98 기계를 세우고 셸을 돌린다 (재생 요청 전까지).</summary>
     public static Pc98Machine Boot(DosFileSystem fs, HootArchive.Entry e) { return Boot(fs, e, out _); }
 

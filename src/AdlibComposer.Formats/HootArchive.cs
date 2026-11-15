@@ -18,8 +18,8 @@ namespace AdlibComposer.Formats;
 public static class HootArchive
 {
     public const string Extension = ".hoot";
-    /// <summary>항목을 써 둔 표시 (재생할 수 있는 드라이버가 늘면 이름을 바꿔 이미 푼 zip에도 다시 쓴다: 2 = SPC · KSS · NSF · GBS 더함, 3 = PC/AT DOS).</summary>
-    private const string Mark = ".fmopl_hoot3";
+    /// <summary>항목을 써 둔 표시 (재생할 수 있는 드라이버가 늘면 이름을 바꿔 이미 푼 zip에도 다시 쓴다: 2 = SPC · KSS · NSF · GBS 더함, 3 = PC/AT DOS, 4 = MIDI 판).</summary>
+    private const string Mark = ".fmopl_hoot4";
 
     /// <summary>
     /// 재생할 수 있는 hoot 드라이버 · 형식: pc98dos opn · opna · 86 · beep · pcatdos adlib · soundblaster16 · beep (기계 흉내), 그리고 이미 읽는 파일을 곡 코드로 고르는 것 —
@@ -39,6 +39,19 @@ public static class HootArchive
             case "gb": return t == "gbs";
         }
         return false;
+    }
+
+    /// <summary>MIDI 판(옵션 midiout)을 낼 수 있는 드라이버: DOS 기계 (pc98dos · pcatdos)의 MPU-401 · MPU-PC98.</summary>
+    public static bool MidiPlayable(string driver)
+    {
+        string d = (driver ?? "").Trim().ToLowerInvariant();
+        return d == "pc98dos" || d == "pcatdos";
+    }
+
+    /// <summary>항목 하나를 재생할 수 있는가 (드라이버 · 형식 · MIDI 판).</summary>
+    public static bool PlayableGame(string driver, string type, bool midiOut)
+    {
+        return midiOut ? MidiPlayable(driver) : Playable(driver, type);
     }
 
     private static readonly object gate = new object();
@@ -80,8 +93,8 @@ public static class HootArchive
                 {
                     string g = t.Substring(at, len);
                     var dm = DriverRx.Match(g);
-                    if (!dm.Success || !Playable(dm.Groups[2].Value, dm.Groups[1].Value)) continue;
-                    if (MidiOutRx.IsMatch(g)) continue;   // MIDI로 내는 판 (GS · MT-32 · Vermouth …): MPU-PC98 흉내 전
+                    if (!dm.Success || !(Playable(dm.Groups[2].Value, dm.Groups[1].Value) || (MidiOutRx.IsMatch(g) && MidiPlayable(dm.Groups[2].Value)))) continue;
+                    if (MidiOutRx.IsMatch(g) && !MidiPlayable(dm.Groups[2].Value)) continue;   // MIDI로 내는 판: DOS 기계 (MPU-401 · MPU-PC98)만
                     var am = ArchiveRx.Match(g);
                     if (!am.Success) continue;
                     string a = am.Groups[1].Value.Trim();

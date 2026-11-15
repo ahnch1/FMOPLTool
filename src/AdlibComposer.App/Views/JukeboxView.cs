@@ -61,6 +61,8 @@ internal sealed class JukeboxView : UserControl, IShellPage
     private TrackerModule trackerSong;
     /// <summary>MIDI 곡(.mid / .wrk)이면 이것. 위치 = MIDI 틱.</summary>
     private MidiSong midiSong;
+    /// <summary>hoot MT-32 판 MIDI: 설정과 상관없이 MT-32 모듈로 (에뮬레이터 없으면 GM 번호로 바꿈).</summary>
+    private bool midiForceMt32;
     /// <summary>VGM 곡(.vgm / .vgz)이면 이것. 위치 = ms.</summary>
     private VgmSong vgmSong;
     private List<VgmPlayer.Channel> vgmChannels = new List<VgmPlayer.Channel>();
@@ -382,7 +384,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
         try { path = Path.GetFullPath(path); } catch (Exception) { }
         if (SopFormat.IsSop(path)) { PlaySopFile(path, fromList); return; }
         if (TrackerFiles.IsTracker(path)) { PlayTrackerFile(path, fromList); return; }
-        if (MidiFiles.IsMidi(path)) { PlayMidiFile(path, fromList); return; }
+        if (MidiFiles.IsMidi(path) || HootSongs.IsMidi(path)) { PlayMidiFile(path, fromList); return; }
         if (ChipSongs.IsChipSong(path)) { PlayVgmFile(path, fromList); return; }
         Song s;
         try
@@ -582,7 +584,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
     private void PlayMidiFile(string path, bool fromList)
     {
         MidiSong m;
-        try { m = MidiFiles.Load(path); }
+        try { m = HootSongs.IsMidi(path) ? HootSongs.LoadMidi(path) : MidiFiles.Load(path); }
         catch (Exception ex)
         {
             AppLog.Error("Jukebox", "곡을 열 수 없습니다: " + Path.GetFileName(path), ex);
@@ -601,7 +603,9 @@ internal sealed class JukeboxView : UserControl, IShellPage
         for (int v = 0; v < PlaybackOptions.Voices; v++) { options.VoiceMute[v] = false; options.VoiceTranspose[v] = 0; levels[v] = 0; voiceUsed[v] = v < MidiSong.Channels && m.ChannelUsed[v]; }
         bool chip = settings().MidiChipSynth;
         bool windows = !chip && settings().MidiWindowsSynth;
-        bool mt32 = settings().MidiMt32;
+        // hoot MT-32 판 (midiout_type 1~3): 설정과 상관없이 MT-32 (에뮬레이터가 없으면 MT-32 음색 번호 → GM)
+        midiForceMt32 = m.Extend != null && m.Standard == MidiStandard.Mt32;
+        bool mt32 = settings().MidiMt32 || midiForceMt32;
         string mt32Rom = null;
         if (mt32)
         {
@@ -912,7 +916,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
             ws.Audio.MidiBank = gmBank;
             ws.Audio.MidiSynth = settings().MidiChipSynth ? MidiSynth.Chip : settings().MidiWindowsSynth ? MidiSynth.Windows : MidiSynth.Fm;
             ws.Audio.MidiChipSound = ChipSoundSetting;
-            ws.Audio.MidiModule = settings().MidiMt32 && !settings().MidiChipSynth ? MidiModule.Mt32 : MidiModule.Gm;
+            ws.Audio.MidiModule = (settings().MidiMt32 || midiForceMt32) && !settings().MidiChipSynth ? MidiModule.Mt32 : MidiModule.Gm;
             ws.Audio.PlayMidi(midiSong, Math.Max(0, tick), options);
         }
         else if (settings().MidiChipSynth)

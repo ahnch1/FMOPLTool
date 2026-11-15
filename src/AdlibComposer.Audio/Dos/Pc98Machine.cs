@@ -38,7 +38,12 @@ public sealed class Pc98Machine : DosMachine, IHootMachine
 
     private int JumperBits { get { return SoundIrq == 13 ? 0x40 : SoundIrq == 10 ? 0x80 : SoundIrq == 12 ? 0xC0 : 0x00; } }
 
-    /// <summary>칩 쓰기: 시간 (CPU 클럭), 종류 (0 OPN/OPNA 포트 0, 1 OPNA 포트 1, 2 BEEP 켜기, 3 BEEP 카운터), 레지스터, 값.</summary>
+    /// <summary>MPU-PC98 (E0D0h 데이터 · E0D2h 상태 / 명령): 나간 MIDI 바이트는 기록 종류 4.</summary>
+    public readonly Mpu401 Mpu = new Mpu401();
+    /// <summary>MPU-PC98 인터럽트: INT2 = IRQ6 (벡터 0Eh, 보드 기본).</summary>
+    public int MpuIrq = 6;
+
+    /// <summary>칩 쓰기: 시간 (CPU 클럭), 종류 (0 OPN/OPNA 포트 0, 1 OPNA 포트 1, 2 BEEP 켜기, 3 BEEP 카운터, 4 MIDI 바이트), 레지스터, 값.</summary>
     public readonly List<(long t, int kind, int reg, int val)> Log = new List<(long, int, int, int)>();
     public int UnknownPortReads, UnknownPortWrites;
     public readonly HashSet<int> UnknownPorts = new HashSet<int>();
@@ -48,6 +53,7 @@ public sealed class Pc98Machine : DosMachine, IHootMachine
         Sound = sound;
         CpuHz = PitClock * Math.Max(1, clockMul);
         vsyncPeriod = (long)(CpuHz / VsyncHz);
+        Mpu.MidiOut = b => Log.Add((Cpu.Cycles, 4, 0, b));
         nextVsync = vsyncPeriod;
         // BIOS: 시스템 공통 영역 (0:0500~) 일부 — 86 / 26K가 있다고 알리는 값은 없음 (드라이버가 포트로 찾는다)
     }
@@ -82,7 +88,7 @@ public sealed class Pc98Machine : DosMachine, IHootMachine
             if (s < 0) { master.Irr &= ~0x80; return false; }
             vector = slave.Base + s;
             if (!Cpu.HardwareInterrupt(vector)) return false;
-            if (Trace) Count(TraceVectors, vector);
+            if (Trace) { Count(TraceVectors, vector); TraceIoAdd("IRQ>" + vector.ToString("X2")); }
             slave.Irr &= ~(1 << s); if (!slave.AutoEoi) slave.Isr |= 1 << s;
             master.Irr &= ~0x80; if (!master.AutoEoi) master.Isr |= 0x80;
             Interrupts++;
@@ -90,7 +96,7 @@ public sealed class Pc98Machine : DosMachine, IHootMachine
         }
         vector = master.Base + m;
         if (!Cpu.HardwareInterrupt(vector)) return false;
-        if (Trace) Count(TraceVectors, vector);
+        if (Trace) { Count(TraceVectors, vector); TraceIoAdd("IRQ>" + vector.ToString("X2")); }
         master.Irr &= ~(1 << m); if (!master.AutoEoi) master.Isr |= 1 << m;
         Interrupts++;
         return true;
@@ -240,6 +246,7 @@ public sealed class Pc98Machine : DosMachine, IHootMachine
     public bool HootInterruptEnabled { get { return hootEnabled; } }
 
     private bool InVsync { get { return Cpu.Cycles % vsyncPeriod < vsyncPeriod / 16; } }
+    private bool InHblank { get { long h = Math.Max(2, (long)(CpuHz / 24830)); return Cpu.Cycles % h < h / 5; } }
 
     /// <summary>곡 재생 요청 (hoot): 곡 코드 번호의 핸들을 표준 입력에 이중화하고 요인 0으로 hoot 인터럽트.</summary>
     public void Play(int code)
@@ -256,6 +263,8 @@ public sealed class Pc98Machine : DosMachine, IHootMachine
 
     /// <summary>진단: 넣은 하드웨어 인터럽트 벡터별 수 · 포트 읽기 / 쓰기 수 (쓰기는 포트 | 0x10000).</summary>
     public bool Trace;
+    /// <summary>진단: 명령마다 부름 (아주 느림, 시험 도구만).</summary>
+    public static Action<Pc98Machine> DebugStep;
     public readonly Dictionary<int, int> TraceVectors = new Dictionary<int, int>(), TracePorts = new Dictionary<int, int>();
     private static void Count(Dictionary<int, int> d, int k) { d[k] = d.TryGetValue(k, out int n) ? n + 1 : 1; }
 
@@ -267,9 +276,26 @@ public sealed class Pc98Machine : DosMachine, IHootMachine
             ", IF " + (Cpu.GetFlag(X86.IF) ? 1 : 0) + ", at " + Cpu.CS.ToString("X4") + ":" + Cpu.IP.ToString("X4") + (Cpu.Halted ? " HLT" : "");
     }
 
+    /// <summary>진단: MPU · PIC 포트 입출력 순서 (Trace일 때 600개까지).</summary>
+    public readonly List<string> TraceIo = new List<string>();
+    private void TraceIoAdd(string s) { if (Trace && TraceIo.Count < 600) TraceIo.Add(s); }
+
     public override byte In(int port)
     {
         if (Trace) Count(TracePorts, port);
+        if (Trace && (port == 0xE0D0 || port == 0xE0D2))
+        {
+            byte r = port == 0xE0D0 ? (byte)Mpu.ReadData() : (byte)Mpu.ReadStatus();
+            TraceIoAdd("r" + port.ToString("X") + "=" + r.ToString("X2") + (Cpu.GetFlag(X86.IF) ? "" : "!IF") + "@" + Cpu.CS.ToString("X4") + ":" + Cpu.IP.ToString("X4"));
+            return r;
+        }
+        if (Trace && (port == 0x00 || port == 0x02 || port == 0x08 || port == 0x0A || port == 0x60 || port == 0xA0 || port == 0x71) && TraceIo.Count >= 0 && TraceIo.Count < 600)
+        {
+            string last = TraceIo.Count > 0 ? TraceIo[TraceIo.Count - 1] : "";
+            string tag = "r" + port.ToString("X");
+            if (last.StartsWith(tag + "x")) { int n = int.Parse(last.Substring(tag.Length + 1)); TraceIo[TraceIo.Count - 1] = tag + "x" + (n + 1); }
+            else TraceIo.Add(tag + "x1");
+        }
         switch (port)
         {
             case 0x00: return (byte)master.ReadCmd();
@@ -279,8 +305,10 @@ public sealed class Pc98Machine : DosMachine, IHootMachine
             case 0x71: case 0x3FD9: return (byte)PitRead(0);
             case 0x73: case 0x3FDB: return (byte)PitRead(1);
             case 0x75: case 0x3FDD: return (byte)PitRead(2);
-            case 0x60: case 0xA0: return (byte)(0x04 | (InVsync ? 0x20 : 0));   // GDC 상태: FIFO 빔, 수직 귀선
+            case 0x60: case 0xA0: return (byte)(0x04 | (InVsync ? 0x20 : 0) | (InHblank ? 0x40 : 0));   // GDC 상태: FIFO 빔, 수직 귀선, 수평 귀선 (24.83kHz)
             case 0x31: case 0x33: case 0x35: return 0x00;
+            case 0xE0D0: return (byte)Mpu.ReadData();
+            case 0xE0D2: return (byte)Mpu.ReadStatus();
             case 0x42: return 0xDF;   // 프린터 8255 포트 B: bit5 = 0 → 5 · 10MHz 계열 (PIT 2.4576MHz)
             case 0x7FD9: return 0;    // 마우스: 움직임 없음
             case 0x7FDB: return 0xFF; // 버튼 안 눌림
@@ -308,6 +336,7 @@ public sealed class Pc98Machine : DosMachine, IHootMachine
     public override void Out(int port, byte value)
     {
         if (Trace) Count(TracePorts, port | 0x10000);
+        if (Trace && (port == 0xE0D0 || port == 0xE0D2 || port == 0x02 || port == 0x00 || port == 0x08 || port == 0x0A)) TraceIoAdd("w" + port.ToString("X") + "=" + value.ToString("X2") + (Cpu.GetFlag(X86.IF) ? "" : "!IF"));
         int v = value;
         switch (port)
         {
@@ -324,6 +353,8 @@ public sealed class Pc98Machine : DosMachine, IHootMachine
             case 0x64: vsyncArmed = true; return;
             case 0x60: case 0x62: case 0xA0: case 0xA2: case 0x68: case 0x6A: case 0x7C: case 0x7E: return;   // GDC · 표시 (무시)
             case 0x5F: return;   // 기다림
+            case 0xE0D0: Mpu.WriteData(v); return;
+            case 0xE0D2: Mpu.WriteCommand(v); return;
             case 0x7FDD: mouseC = v; MouseTimerChanged(); return;
             case 0x7FDF:
                 if ((v & 0x80) == 0) { int bit = (v >> 1) & 7; mouseC = (v & 1) != 0 ? mouseC | (1 << bit) : mouseC & ~(1 << bit); }
@@ -367,7 +398,13 @@ public sealed class Pc98Machine : DosMachine, IHootMachine
         else if (nextMouse == long.MaxValue) nextMouse = Cpu.Cycles + MousePeriod;
     }
 
-    private long NextEvent { get { return Math.Min(Math.Min(Math.Min(nextTimer0, nextVsync), Math.Min(nextTimerA, nextTimerB)), nextMouse); } }
+    private long NextEvent { get { return Math.Min(Math.Min(Math.Min(Math.Min(nextTimer0, nextVsync), Math.Min(nextTimerA, nextTimerB)), nextMouse), nextMpu); } }
+    // ------------------------------------------------------------ MPU 클럭 · 인터럽트
+
+    private long nextMpu = long.MaxValue;
+    private bool mpuIrqUp;
+    private long MpuPeriod { get { return Math.Max(1, (long)(Mpu.ClockSeconds * CpuHz)); } }
+
 
     // ------------------------------------------------------------ BIOS (기본 벡터 처리기)
 
@@ -409,6 +446,11 @@ public sealed class Pc98Machine : DosMachine, IHootMachine
             if (now >= nextTimerA) { TimerOverflow(0); nextTimerA += TimerAPeriod; }
             if (now >= nextTimerB) { TimerOverflow(1); nextTimerB += TimerBPeriod; }
             if (now >= nextMouse) { RaiseIrq(13); nextMouse += MousePeriod; }
+            if (Mpu.Running) { if (nextMpu == long.MaxValue) nextMpu = now + MpuPeriod; }
+            else nextMpu = long.MaxValue;
+            if (now >= nextMpu) { Mpu.Clock(); nextMpu += MpuPeriod; }
+            if (Mpu.IrqPending != mpuIrqUp) { mpuIrqUp = Mpu.IrqPending; if (mpuIrqUp) RaiseIrq(MpuIrq); else LowerIrq(MpuIrq); }
+            else if (mpuIrqUp) RaiseIrq(MpuIrq);
             if (hootPending && hootEnabled && Cpu.GetFlag(X86.IF)) { hootPending = false; Cpu.Vector(FuncVector); Interrupts++; HootDelivered++; }
             else DeliverIrq();
             if (Cpu.Halted)
@@ -422,7 +464,7 @@ public sealed class Pc98Machine : DosMachine, IHootMachine
             // 사건 사이를 한 번에 (인터럽트 검사를 줄인다)
             long until = Math.Min(end, NextEvent);
             int guard = 0;
-            do { Cpu.Step(); } while (Cpu.Cycles < until && !Cpu.Halted && !HostReturned && ++guard < 64);
+            do { DebugStep?.Invoke(this); Cpu.Step(); } while (Cpu.Cycles < until && !Cpu.Halted && !HostReturned && Mpu.IrqPending == mpuIrqUp && ++guard < 64);   // MPU가 읽을 데이터를 내면 바로 인터럽트 (드라이버가 ACK를 인터럽트로 기다림)
         }
     }
 

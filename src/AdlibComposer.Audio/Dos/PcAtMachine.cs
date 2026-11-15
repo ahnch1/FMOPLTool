@@ -30,7 +30,12 @@ public sealed class PcAtMachine : DosMachine, IHootMachine
     public int FuncVector = 0x7F;
     public bool AutoIdle;
 
-    /// <summary>칩 쓰기: 시간 (CPU 클럭), 종류 (0 OPL 포트 0, 1 OPL3 포트 1, 2 스피커 켜기, 3 스피커 카운터), 레지스터, 값.</summary>
+    /// <summary>MPU-401 (330h 데이터 · 331h 상태 / 명령): 나간 MIDI 바이트는 기록 종류 4.</summary>
+    public readonly Mpu401 Mpu = new Mpu401();
+    /// <summary>MPU-401 인터럽트: IRQ2 = AT에서 IRQ9 (벡터 71h, 카드 기본).</summary>
+    public int MpuIrq = 9;
+
+    /// <summary>칩 쓰기: 시간 (CPU 클럭), 종류 (0 OPL 포트 0, 1 OPL3 포트 1, 2 스피커 켜기, 3 스피커 카운터, 4 MIDI 바이트), 레지스터, 값.</summary>
     public readonly List<(long t, int kind, int reg, int val)> Log = new List<(long, int, int, int)>();
     public readonly HashSet<int> UnknownPorts = new HashSet<int>();
     public long Interrupts { get; private set; }
@@ -42,6 +47,7 @@ public sealed class PcAtMachine : DosMachine, IHootMachine
     {
         Sound = sound;
         CpuHz = PitClock * Math.Max(1, clockMul);
+        Mpu.MidiOut = b => Log.Add((Cpu.Cycles, 4, 0, b));
         // BIOS 데이터 (0040:xx): 장비 · 메모리 크기 · 틱
         Poke16(0x40, 0x10, 0x0021); Poke16(0x40, 0x13, 640);
         // INT 08h: PUSH AX; PUSH DS; MOV AX,40h; MOV DS,AX; INC WORD [6Ch]; JNZ +4; INC WORD [6Eh]; INT 1Ch; MOV AL,20h; OUT 20h,AL; POP DS; POP AX; IRET
@@ -64,6 +70,12 @@ public sealed class PcAtMachine : DosMachine, IHootMachine
     {
         if (irq < 8) master.Irr |= 1 << irq;
         else { slave.Irr |= 1 << (irq - 8); master.Irr |= 1 << 2; }
+    }
+
+    private void LowerIrq(int irq)
+    {
+        if (irq < 8) master.Irr &= ~(1 << irq);
+        else { slave.Irr &= ~(1 << (irq - 8)); if ((slave.Irr & ~slave.Imr) == 0) master.Irr &= ~0x04; }
     }
 
     private bool DeliverIrq()
@@ -235,6 +247,8 @@ public sealed class PcAtMachine : DosMachine, IHootMachine
             case 0x60: return 0;
             case 0x64: return 0x1C;   // 입력 버퍼 빔
             case 0x71: return 0;
+            case 0x330: return (byte)Mpu.ReadData();
+            case 0x331: return (byte)Mpu.ReadStatus();
             case 0x201: return 0xF0;  // 조이스틱 없음
             case 0x3DA: return (byte)((Cpu.Cycles / (long)(CpuHz / 60 / 16)) % 16 == 0 ? 0x09 : 0x00);   // CGA/VGA 수직 귀선
             case 0x7E0: return (byte)hootCause;
@@ -288,6 +302,8 @@ public sealed class PcAtMachine : DosMachine, IHootMachine
                     return;
                 }
             case 0x60: case 0x64: case 0x70: case 0x80: case 0x3D4: case 0x3D5: case 0x3C8: case 0x3C9: case 0x3CE: case 0x3CF: case 0x3C4: case 0x3C5: return;
+            case 0x330: Mpu.WriteData(v); return;
+            case 0x331: Mpu.WriteCommand(v); return;
             case 0x7E8:
                 if (v == 0x80) hootEnabled = false;
                 else if (v == 0x81) hootEnabled = true;
@@ -359,7 +375,13 @@ public sealed class PcAtMachine : DosMachine, IHootMachine
 
     // ------------------------------------------------------------ 돌리기
 
-    private long NextEvent { get { return Math.Min(nextTimer0, Math.Min(nextT1, nextT2)); } }
+    private long NextEvent { get { return Math.Min(Math.Min(nextTimer0, Math.Min(nextT1, nextT2)), nextMpu); } }
+    // ------------------------------------------------------------ MPU 클럭 · 인터럽트
+
+    private long nextMpu = long.MaxValue;
+    private bool mpuIrqUp;
+    private long MpuPeriod { get { return Math.Max(1, (long)(Mpu.ClockSeconds * CpuHz)); } }
+
 
     public override void Run(long cycles)
     {
@@ -375,6 +397,11 @@ public sealed class PcAtMachine : DosMachine, IHootMachine
             if (now >= nextTimer0) { RaiseIrq(0); var c = pit[0]; nextTimer0 = c.Mode == 0 ? long.MaxValue : nextTimer0 + Math.Max(1, PitTicksToCycles(c.Reload)); }
             if (now >= nextT1) { if ((oplCtl & 0x40) == 0) oplFlags |= 0x40; nextT1 += T1Period; }
             if (now >= nextT2) { if ((oplCtl & 0x20) == 0) oplFlags |= 0x20; nextT2 += T2Period; }
+            if (Mpu.Running) { if (nextMpu == long.MaxValue) nextMpu = now + MpuPeriod; }
+            else nextMpu = long.MaxValue;
+            if (now >= nextMpu) { Mpu.Clock(); nextMpu += MpuPeriod; }
+            if (Mpu.IrqPending != mpuIrqUp) { mpuIrqUp = Mpu.IrqPending; if (mpuIrqUp) RaiseIrq(MpuIrq); else LowerIrq(MpuIrq); }
+            else if (mpuIrqUp) RaiseIrq(MpuIrq);
             if (hootPending && hootEnabled && Cpu.GetFlag(X86.IF)) { hootPending = false; Cpu.Vector(FuncVector); Interrupts++; HootDelivered++; }
             else DeliverIrq();
             if (Cpu.Halted)
@@ -386,7 +413,7 @@ public sealed class PcAtMachine : DosMachine, IHootMachine
             }
             long until = Math.Min(end, NextEvent);
             int guard = 0;
-            do { Cpu.Step(); } while (Cpu.Cycles < until && !Cpu.Halted && !HostReturned && ++guard < 64);
+            do { Cpu.Step(); } while (Cpu.Cycles < until && !Cpu.Halted && !HostReturned && Mpu.IrqPending == mpuIrqUp && ++guard < 64);   // MPU가 읽을 데이터를 내면 바로 인터럽트 (드라이버가 ACK를 인터럽트로 기다림)
         }
     }
 

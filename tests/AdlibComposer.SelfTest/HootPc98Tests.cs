@@ -91,11 +91,11 @@ public static class HootPc98Tests
             using (var s = z.CreateEntry("SONG.DAT").Open()) { var d = Encoding.ASCII.GetBytes("song"); s.Write(d, 0, d.Length); }
             check("hoot archive: listing dir found next to the zip's folder (xml_new)", string.Equals(HootArchive.FindListDir(zip), Path.Combine(root, "xml_new"), StringComparison.OrdinalIgnoreCase), HootArchive.FindListDir(zip) ?? "null");
             string dir = ZipFolder.Extract(zip);
-            var hoots = Directory.GetFiles(dir, "*" + HootArchive.Extension);
-            check("hoot archive: unzipping writes one .hoot per playable pc98dos entry (not MIDI / midiout / other machines)",
-                hoots.Length == 1 && Path.GetFileName(hoots[0]) == "Tone Test (YM2203).hoot", string.Join(", ", hoots.Select(Path.GetFileName)));
-            if (hoots.Length == 0) return;
-            string hp = hoots[0];
+            var hoots = Directory.GetFiles(dir, "*" + HootArchive.Extension).OrderBy(x => x, StringComparer.Ordinal).ToArray();
+            check("hoot archive: unzipping writes one .hoot per playable entry (pc98dos FM, pc98dos MIDI version; not mpu type / other machines)",
+                hoots.Select(Path.GetFileName).SequenceEqual(new[] { "Tone Test (GS).hoot", "Tone Test (YM2203).hoot" }), string.Join(", ", hoots.Select(Path.GetFileName)));
+            string hp = hoots.FirstOrDefault(x => x.EndsWith("(YM2203).hoot"));
+            if (hp == null) return;
             var tracks = ChipSongs.Tracks(hp);
             check("hoot archive: .hoot lists titlelist songs (range = sound effects left out), shown as a multi-song file",
                 ChipSongs.HasTracks(hp) && tracks.Count == 2 && tracks[0].title == "Tone A" && tracks[1].path == hp + "::1", string.Join(" | ", tracks.Select(t => t.path.Substring(hp.Length) + "=" + t.title)));
@@ -209,8 +209,8 @@ public static class HootPc98Tests
             long ms = sw.ElapsedMilliseconds;
             var hoots = Directory.GetFiles(dir, "*" + HootArchive.Extension).OrderBy(x => x, StringComparer.Ordinal).ToArray();
             string opn = hoots.FirstOrDefault(h => h.Contains("YM2203")), opna = hoots.FirstOrDefault(h => h.Contains("YM2608"));
-            check("Real hoot archive: yumenosi_98.zip → .hoot entries for YM2203 and YM2608 (index of hoot lists)",
-                opn != null && opna != null && hoots.Length == 2, hoots.Length + " entries, " + ms + " ms incl. list index: " + string.Join(", ", hoots.Select(Path.GetFileName)));
+            check("Real hoot archive: yumenosi_98.zip → .hoot entries for YM2203 · YM2608 · GS · Vermouth (MIDI versions)",
+                opn != null && opna != null && hoots.Length == 4 && hoots.Count(HootSongs.IsMidi) == 2, hoots.Length + " entries, " + ms + " ms incl. list index: " + string.Join(", ", hoots.Select(Path.GetFileName)));
             if (opn == null || opna == null) return;
             foreach (var h in new[] { opn, opna })
             {
@@ -306,10 +306,27 @@ public static class HootPc98Tests
         Console.WriteLine(e.Name + "  " + e.Type + "  " + string.Join(", ", e.Options.Select(o => o.Key + "=" + o.Value)));
         foreach (var r in e.Roms.Where(r => r.Type != "file")) Console.WriteLine("  rom " + r.Type + " " + r.Offset + " " + r.Text);
         HootPc98.TraceBoot = true;
+        var steps = new System.Collections.Generic.List<string>();
+        bool armed = false;
+        if (Environment.GetEnvironmentVariable("HOOT_STEP") is string segText)
+        {
+            int seg = Convert.ToInt32(segText, 16);
+            Pc98Machine.DebugStep = mm =>
+            {
+                if (mm.Cpu.CS != seg || steps.Count > 3000000) return;
+                if (!armed && mm.Mpu.Commands.Contains(0xB9)) armed = true;
+                if (!armed) return;
+                steps.Add(mm.Cpu.IP.ToString("X4") + ":" + string.Join("", Enumerable.Range(0, 6).Select(i => mm.PeekByte(seg, mm.Cpu.IP + i).ToString("X2"))) + " ax" + mm.Cpu.AX.ToString("X4"));
+            };
+        }
         var m = HootPc98.BootDir(dir, e, out var shells);
         HootPc98.TraceBoot = false;
+        Pc98Machine.DebugStep = null;
+        if (steps.Count > 0) { var seen = new System.Collections.Generic.HashSet<string>(); foreach (var st in steps) if (seen.Add(st.Substring(0, 4))) Console.WriteLine("  step " + st); }
         Console.WriteLine("shells " + string.Join("/", shells) + " | " + m.Describe());
         Console.WriteLine("boot calls " + string.Join(" ", m.TraceVectors.OrderBy(k => k.Key).Select(k => (k.Key > 0xFFFF ? "int" + ((k.Key >> 8) & 0xFF).ToString("X2") + "/" + (k.Key & 0xFF).ToString("X2") : "irq" + k.Key.ToString("X2")) + ":" + k.Value)));
+        Console.WriteLine("boot io " + string.Join(" ", m.TraceIo.Take(260)));
+        m.TraceIo.Clear();
         Console.WriteLine("boot ports " + string.Join(" ", m.TracePorts.OrderByDescending(k => k.Value).Take(24).Select(k => (k.Key > 0xFFFF ? "w" : "r") + (k.Key & 0xFFFF).ToString("X") + ":" + k.Value)));
         m.TraceVectors.Clear(); m.TracePorts.Clear();
         Console.WriteLine("console: " + m.ConsoleText.Replace("\r", " ").Replace("\n", " | "));
@@ -327,6 +344,8 @@ public static class HootPc98Tests
                 (m.UnknownFunctions.Count > 0 ? " | dos " + string.Join(" ", m.UnknownFunctions.Select(k => k.Key.ToString("X") + ":" + k.Value)) : ""));
             m.TraceVectors.Clear(); m.TracePorts.Clear();
         }
+        if (Environment.GetEnvironmentVariable("HOOT_MIDI") != null)
+            Console.WriteLine("midi " + string.Join(" ", m.Log.Skip(log0).Where(x => x.kind == 4).Skip(int.Parse(Environment.GetEnvironmentVariable("HOOT_MIDI"))).Take(160).Select(x => x.val.ToString("X2"))));
         // 멈춰 도는 곳: CPU 위치를 여러 번 보아 가장 많은 곳 둘레의 바이트
         var at = new System.Collections.Generic.Dictionary<long, int>();
         for (int i = 0; i < 2000; i++) { m.Run(997); if (m.Cpu.CS != DosMachine.StubSeg) { long k = ((long)m.Cpu.CS << 16) | (uint)m.Cpu.IP; at[k] = at.TryGetValue(k, out int c) ? c + 1 : 1; } }
@@ -337,6 +356,7 @@ public static class HootPc98Tests
                 string.Join(" ", Enumerable.Range(-24, 48).Select(d => m.PeekByte(cs, (ip + d) & 0xFFFF).ToString("X2") + (d == -1 ? " |" : ""))));
         }
         Console.WriteLine("missing files: " + string.Join(", ", m.MissingFiles) + " | console: " + m.ConsoleText.Replace("\r", " ").Replace("\n", " | "));
+        Console.WriteLine("MPU commands: " + string.Join(" ", m.Mpu.Commands.Select(c => c.ToString("X2"))) + " | uart " + m.Mpu.Uart + ", bytes " + m.Mpu.BytesOut);
         Console.WriteLine("vec18 = " + m.PeekWord(0, 0x62).ToString("X4") + ":" + m.PeekWord(0, 0x60).ToString("X4") + ", regs AX " + m.Cpu.AX.ToString("X4"));
         return 0;
     }
@@ -389,6 +409,52 @@ public static class HootPc98Tests
         Console.WriteLine();
         foreach (var kv in stats) Console.WriteLine(kv.Key + ": sound " + kv.Value.sound + "/" + kv.Value.total);
         Console.WriteLine(zips.Count + " zips, " + sw.Elapsed.TotalSeconds.ToString("0") + " s");
+        return 0;
+    }
+
+    /// <summary>
+    /// 진단: --hootmidisurvey 폴더 [zip 수] [초] — MIDI 판 (pc98dos · pcatdos + midiout) 항목마다 첫 곡을 돌려 MPU로 나간 노트 수 · 바이트 · 모르는 포트.
+    /// </summary>
+    public static int SurveyMidi(string folder, int count, double seconds)
+    {
+        var zips = Directory.GetFiles(folder, "*.zip").OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToList();
+        var rnd = new Random(98);
+        zips = zips.OrderBy(_ => rnd.Next()).Take(count).ToList();
+        int total = 0, sound = 0;
+        var sw = Stopwatch.StartNew();
+        foreach (var zip in zips)
+        {
+            string dir;
+            try { dir = ZipFolder.Extract(zip); } catch (Exception) { continue; }
+            foreach (var h in Directory.GetFiles(dir, "*" + HootArchive.Extension))
+            {
+                var e = HootArchive.Load(h);
+                if (!HootPc98.IsMidiEntry(e)) continue;
+                total++;
+                string note;
+                try
+                {
+                    var m = HootPc98.BootDirAny(dir, e, out var shells);
+                    var hm = (IHootMachine)m;
+                    int bootBytes = hm.ChipLog.Count(x => x.kind == 4);
+                    hm.Play(e.Titles.Count > 0 ? e.Titles[0].Code : 0);
+                    m.Run((long)(hm.ClockHz * seconds));
+                    int noteOns = 0, bytes = 0;
+                    var parser = new MidiByteParser { Message = (st, a, b, sx) => { if ((st & 0xF0) == 0x90 && b > 0) noteOns++; } };
+                    foreach (var x in hm.ChipLog) if (x.kind == 4) { bytes++; parser.Feed(x.val); }
+                    bool ok = noteOns > 0;
+                    if (ok) sound++;
+                    var ports = m is Pc98Machine pm ? pm.UnknownPorts : ((PcAtMachine)m).UnknownPorts;
+                    note = (ok ? "SOUND " : "quiet ") + "notes " + noteOns + ", bytes " + bytes + " (boot " + bootBytes + "), type " + e.Option("midiout_type", 0) + ", shells " + string.Join("/", shells.Select(r => r.ToString().Substring(0, 3))) +
+                        (m.Cpu.UnknownOps > 0 ? ", unknown op" : "") + (m.MissingFiles.Count > 0 ? ", missing " + string.Join(" ", m.MissingFiles.Distinct().Take(3)) : "") +
+                        (ports.Count > 0 ? ", ports " + string.Join(" ", ports.Take(8).Select(q => (q > 0xFFFF ? "w" : "r") + (q & 0xFFFF).ToString("X"))) : "");
+                }
+                catch (Exception ex) { note = "ERROR " + ex.GetType().Name + " " + ex.Message; }
+                Console.WriteLine((e.Driver + "/" + e.Type).PadRight(16) + " " + Path.GetFileName(zip).PadRight(22) + " " + note);
+            }
+        }
+        Console.WriteLine();
+        Console.WriteLine("midi entries: sound " + sound + "/" + total + ", " + zips.Count + " zips, " + sw.Elapsed.TotalSeconds.ToString("0") + " s");
         return 0;
     }
 

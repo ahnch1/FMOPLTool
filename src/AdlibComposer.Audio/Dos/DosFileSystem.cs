@@ -29,6 +29,36 @@ public sealed class DosFileSystem
         return fs;
     }
 
+    /// <summary>
+    /// zip 안 모든 파일 (PC-98 zip: 이름을 Shift_JIS 바이트 그대로 — 풀어 둔 폴더는 이름을 한글 · CP437로 읽어 일본어 이름이 바뀐다).
+    /// UTF-8 깃발이 있는 이름은 그대로.
+    /// </summary>
+    public static DosFileSystem FromZip(string zipPath)
+    {
+        var fs = new DosFileSystem();
+        var sjis = AdlibComposer.Formats.KoreanText.ShiftJis;
+        using (var z = System.IO.Compression.ZipFile.Open(zipPath, System.IO.Compression.ZipArchiveMode.Read, System.Text.Encoding.Latin1))
+            foreach (var e in z.Entries)
+            {
+                if (e.FullName.EndsWith("/") || e.FullName.EndsWith("\\")) continue;
+                string name = e.FullName;
+                if (!name.Any(c => c > 0xFF)) name = sjis.GetString(name.Select(c => (byte)c).ToArray());
+                using (var s = e.Open()) using (var ms = new MemoryStream()) { s.CopyTo(ms); fs.Add(name, ms.ToArray()); }
+            }
+        return fs;
+    }
+
+    /// <summary>hoot 항목 폴더 (zip을 푼 곳)의 DOS 파일들: 원래 zip이 있으면 그 zip에서 (Shift_JIS 이름), 없으면 폴더에서.</summary>
+    public static DosFileSystem ForHootDir(string dir)
+    {
+        string zip = AdlibComposer.Formats.ZipFolder.SourceZip(dir);
+        if (zip != null)
+        {
+            try { return FromZip(zip); } catch (Exception) { }
+        }
+        return FromDirectory(dir);
+    }
+
     public void Add(string path, byte[] data) { files[Key(path, true)] = data; }
 
     /// <summary>DOS 경로 → 열쇠: 대문자, '/' → '\', 드라이브 · 앞 '\' 없앰, '.' · '..' 풀기. root가 아니면 현재 폴더 기준.</summary>

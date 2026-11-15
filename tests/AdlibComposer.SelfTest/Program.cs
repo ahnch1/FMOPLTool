@@ -65,6 +65,8 @@ public static class Program
             Console.WriteLine(AdlibComposer.Audio.Hes.Describe(b, song, sec));
             return 0;
         }
+        if (args.Length > 1 && args[0] == "--hoot98trace")
+            return HootPc98Tests.TraceEntry(args[1], args.Length > 2 ? int.Parse(args[2]) : 0, args.Length > 3 ? double.Parse(args[3], System.Globalization.CultureInfo.InvariantCulture) : 3);
         if (args.Length > 1 && args[0] == "--hoottree") return HootPc98Tests.TreeStats(args[1]);
         if (args.Length > 1 && args[0] == "--hoot98survey")
         {

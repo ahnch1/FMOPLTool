@@ -22,6 +22,19 @@ public static class ZipFolder
 
     public static string CacheBase { get; set; } = Path.Combine(Path.GetTempPath(), "FMOPLTool", "zip");
 
+    /// <summary>zip을 푼 폴더 → 원래 zip 경로 (푼 표시 파일에 적어 둔 것). 아니면 null.</summary>
+    public static string SourceZip(string dir)
+    {
+        try
+        {
+            string mark = Path.Combine(dir, DoneMark);
+            if (!File.Exists(mark)) return null;
+            string zip = File.ReadAllText(mark).Trim();
+            return File.Exists(zip) ? zip : null;
+        }
+        catch (Exception) { return null; }
+    }
+
     public static bool IsZip(string path)
     {
         return path != null && string.Equals(Path.GetExtension(path), ".zip", StringComparison.OrdinalIgnoreCase);

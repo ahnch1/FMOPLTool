@@ -51,16 +51,17 @@ public static class Pc98Tests
         }, (0x140, CountEoi)));
         check("PC-98 PIT counter 0 (2.4576 MHz / 24576) → IRQ0 → INT 08h, 100 per second (HLT waits)", Math.Abs(n - 100) <= 1, n + " / s, CPU " + (m.CpuHz / 1e6).ToString("0.00") + " MHz");
 
-        // OPN 타이머 B = 200 → 1152 × 56 / 3.9936MHz = 16.15ms → INT0 (IRQ3, INT 0Bh), 처리기에서 깃발 지움
+        // OPN 타이머 B = 200 → 1152 × 56 / 3.9936MHz = 16.15ms → INT5 (IRQ12 = 종 IR4, INT 14h), 처리기에서 깃발 지움 · 종 · 주 EOI
         (n, m) = CountFor(Com(new[]
         {
-            0xFA, 0xB8, 0x0B, 0x25, 0xBA, 0x40, 0x01, 0xCD, 0x21,
+            0xFA, 0xB8, 0x14, 0x25, 0xBA, 0x40, 0x01, 0xCD, 0x21,
             0xBA, 0x88, 0x01, 0xB0, 0x26, 0xEE, 0xBA, 0x8A, 0x01, 0xB0, 0xC8, 0xEE,
             0xBA, 0x88, 0x01, 0xB0, 0x27, 0xEE, 0xBA, 0x8A, 0x01, 0xB0, 0x2A, 0xEE,
-            0xE4, 0x02, 0x24, 0xF7, 0xE6, 0x02,
+            0xE4, 0x0A, 0x24, 0xEF, 0xE6, 0x0A,
             0xFB, 0xF4, 0xEB, 0xFD,
-        }, (0x140, Code(0x2E, 0xFF, 0x06, 0x60, 0x01, 0x50, 0x52, 0xBA, 0x88, 0x01, 0xB0, 0x27, 0xEE, 0xBA, 0x8A, 0x01, 0xB0, 0x2A, 0xEE, 0xB0, 0x20, 0xE6, 0x00, 0x5A, 0x58, 0xCF))));
-        check("PC-98 OPN timer B (NB=200) → status flag → INT0 (IRQ3) ≈ 61.9 per second", Math.Abs(n - 61.9) <= 1.5, n + " / s");
+        }, (0x140, Code(0x2E, 0xFF, 0x06, 0x60, 0x01, 0x50, 0x52, 0xBA, 0x88, 0x01, 0xB0, 0x27, 0xEE, 0xBA, 0x8A, 0x01, 0xB0, 0x2A, 0xEE, 0xB0, 0x20, 0xE6, 0x08, 0xE6, 0x00, 0x5A, 0x58, 0xCF))));
+        check("PC-98 OPN timer B (NB=200) → status flag → INT5 (IRQ12, slave) ≈ 61.9 per second", Math.Abs(n - 61.9) <= 1.5, n + " / s");
+        check("PC-98 board INT jumper read from SSG port A (reg 0Eh bits 6-7 = 11 → INT5)", (ReadReg(m, 0x0E) & 0xC0) == 0xC0, ReadReg(m, 0x0E).ToString("X2"));
         // 26K 보드에는 OPNA가 없다: 18Ch 읽기 = FF, YM2608 ID 없음
         check("PC-98 26K board: no OPNA extension port, OPN ID register = 0", m.In(0x18C) == 0xFF && ReadReg(m, 0xFF) == 0, m.In(0x18C).ToString("X2"));
         var (n2, m2) = CountFor(Com(new[] { 0xFA, 0xF4 }), Pc98Machine.Board.Opna, 0.01);
@@ -104,6 +105,42 @@ public static class Pc98Tests
         check("PC-98 hoot interrupt: funcvect 7Fh, 7E0h cause 0 / 2, 7E2h code, song handle duplicated onto stdin",
             hr == DosMachine.ShellResult.Running && h.HootInterruptEnabled && playOk && h.PeekByte(psp, 0x180) == 2, hr + " '" + got + "' cause " + h.PeekByte(psp, 0x180));
 
+        // 마우스 인터페이스 타이머: BFDBh = 0 (120Hz), 7FDFh ← 08h (포트 C bit4 = 0: 인터럽트 켬) → IRQ13 (종 IR5, INT 15h)
+        (n, m) = CountFor(Com(new[]
+        {
+            0xFA, 0xB8, 0x15, 0x25, 0xBA, 0x40, 0x01, 0xCD, 0x21,
+            0xBA, 0xDB, 0xBF, 0xB0, 0x00, 0xEE,
+            0xBA, 0xDF, 0x7F, 0xB0, 0x08, 0xEE,
+            0xE4, 0x0A, 0x24, 0xDF, 0xE6, 0x0A,
+            0xFB, 0xF4, 0xEB, 0xFD,
+        }, (0x140, Code(0x2E, 0xFF, 0x06, 0x60, 0x01, 0x50, 0xB0, 0x20, 0xE6, 0x08, 0xE6, 0x00, 0x58, 0xCF))));
+        check("PC-98 mouse interface timer (BFDBh 120 Hz, 7FDFh bit4 enable) → IRQ13 (INT 15h) ≈ 120 per second", Math.Abs(n - 120) <= 2, n + " / s");
+        check("PC-98 port 42h bit5 = 0 (5 / 10 MHz series: PIT 2.4576 MHz)", (m.In(0x42) & 0x20) == 0, m.In(0x42).ToString("X2"));
+        var (n3, m3) = CountFor(Com(new[] { 0xFB, 0xF4 }), Pc98Machine.Board.Opna, 0.01);
+        check("PC-98 OPNA extended status (18Ch): ADPCM BRDY always ready", (m3.In(0x18C) & 0x08) != 0, m3.In(0x18C).ToString("X2"));
+
+        // 셸 프로그램이 끝나도 (재생 중) 멈추지 않는다: AutoIdle = 쉬는 고리에서 계속
+        var fsx = new DosFileSystem();
+        fsx.Add("X.COM", Com(new[] { 0xB8, 0x00, 0x4C, 0xCD, 0x21 }));
+        var mx = new Pc98Machine(fsx, Pc98Machine.Board.Opn, 8);
+        var rx = mx.Shell("X", 1000000);
+        mx.AutoIdle = true;
+        long c0 = mx.Cpu.Cycles;
+        mx.Run(2_000_000);
+        check("PC-98 AutoIdle: a program exiting during playback drops to the idle loop (machine keeps running)",
+            rx == DosMachine.ShellResult.Exited && !mx.HostReturned && mx.Cpu.Cycles - c0 >= 2_000_000 && mx.Cpu.GetFlag(AdlibComposer.Audio.Cpu.X86.IF), rx + ", +" + (mx.Cpu.Cycles - c0) + " cycles");
+
+        // zip 안 Shift_JIS 이름 (UTF-8 깃발 없음) → DOS 이름 그대로
+        string tmp = Path.Combine(Path.GetTempPath(), "fmopl_sjis_" + Guid.NewGuid().ToString("N").Substring(0, 8) + ".zip");
+        try
+        {
+            using (var z = ZipFile.Open(tmp, ZipArchiveMode.Create, KoreanText.ShiftJis))
+            using (var s = z.CreateEntry("曲データ/殺し.MUS").Open()) s.Write(new byte[] { 1, 2, 3 }, 0, 3);
+            var fz = DosFileSystem.FromZip(tmp);
+            check("DOS file system from zip: Shift_JIS entry names (no UTF-8 flag) keep their Japanese names", fz.TryGet("曲データ\\殺し.MUS", out var d3) && d3.Length == 3, string.Join(", ", fz.Names));
+        }
+        finally { try { File.Delete(tmp); } catch (Exception) { } }
+
         Real(check);
     }
 
@@ -136,7 +173,7 @@ public static class Pc98Tests
             double rms = Math.Sqrt(sum / n);
             string con = m.ConsoleText;
             check("Real PC-98: " + (opna ? "PMDB2 on 86 (YM2608)" : "PMD on 26K (YM2203)") + " + hoot PMD_98 plays song 0x14 (key-ons, audible VGM)",
-                r1 == DosMachine.ShellResult.Resident && r2 == DosMachine.ShellResult.Running && con.Contains("Int 0") && keyons > 20 && rms > 300 && v.ChipSummary == (opna ? "YM2608" : "YM2203") && m.Cpu.UnknownOps == 0,
+                r1 == DosMachine.ShellResult.Resident && r2 == DosMachine.ShellResult.Running && con.Contains("Int 5") && keyons > 20 && rms > 300 && v.ChipSummary == (opna ? "YM2608" : "YM2203") && m.Cpu.UnknownOps == 0,
                 keyons + " key-ons / 8 s, rms " + rms.ToString("0") + ", " + speed.ToString("0") + "x realtime");
         }
     }

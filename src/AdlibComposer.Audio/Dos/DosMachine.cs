@@ -34,6 +34,8 @@ public class DosMachine : IX86Bus
     public readonly List<byte> ConsoleBytes = new List<byte>();
     /// <summary>처리하지 못한 INT 21h 기능 (AH, 횟수) — 진단.</summary>
     public readonly Dictionary<int, int> UnknownFunctions = new Dictionary<int, int>();
+    /// <summary>열지 못한 파일 이름 (진단, 64개까지).</summary>
+    public readonly List<string> MissingFiles = new List<string>();
     public int ReturnCode { get; private set; }
     /// <summary>마지막으로 읽은 프로그램의 PSP (진단 · 시험).</summary>
     public int LastLoadedPsp { get; private set; }
@@ -729,7 +731,7 @@ public class DosMachine : IX86Bus
             Cpu.AX = h; Ok(); return;
         }
         string key = Fs.ResolveExisting(name);
-        if (key == null || !Fs.TryGet(key, out var d)) { Fail(Fs.DirectoryExists(name) ? 5 : 2); return; }
+        if (key == null || !Fs.TryGet(key, out var d)) { if (MissingFiles.Count < 64) MissingFiles.Add(name); Fail(Fs.DirectoryExists(name) ? 5 : 2); return; }
         handles[h] = new OpenFile { Name = name, Key = key, Data = d, Length = d.Length };
         Cpu.AX = h; Ok();
     }

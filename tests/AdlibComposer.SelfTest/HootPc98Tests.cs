@@ -80,10 +80,15 @@ public static class HootPc98Tests
                 Game("[PC-9801] Tone Test (YM2203)", "pc98dos", "opn", "tone_98", roms, "\t\t\t<title code=\"0x10\">Tone A</title>\n\t\t\t<title code=\"0x11\">Tone B</title>\n\t\t\t<range min=\"0x0800\" max=\"0x0801\" extcode=\"0\">SE %02X</range>\n") +
                 Game("[PC-9801] Tone Test (MIDI)", "pc98dos", "mpu", "tone_98", roms, "\t\t\t<title code=\"0x10\">Tone A</title>\n") +
                 Game("[PC-9801] Tone Test (GS)", "pc98dos", "beep", "tone_98", roms, "\t\t\t<title code=\"0x10\">Tone A</title>\n").Replace("<options>", "<options>\n\t\t\t<option name=\"midiout\" value=\"0\"/>") +
+                Game("[PC-9801] Shared Driver Test (YM2203)", "pc98dos", "opn", "shared_98", roms, "\t\t\t<title code=\"0x10\">Shared</title>\n") +
                 Game("[X68000] Tone Test", "x68k", "mdx", "tone_98", roms, "\t\t\t<title code=\"0x10\">Tone A</title>\n") +
                 "</gamelist>\n";
             File.WriteAllText(Path.Combine(root, "xml_new", "tone.xml"), xml, new UTF8Encoding(true));
 
+            // 드라이버(DRV.COM)가 없는 zip: 같은 폴더의 다른 zip(tone_98)에서 가져온다
+            string sharedZip = Path.Combine(root, "pc98", "shared_98.zip");
+            using (var z = ZipFile.Open(sharedZip, ZipArchiveMode.Create))
+            using (var s = z.CreateEntry("SONG.DAT").Open()) { var d = Encoding.ASCII.GetBytes("song"); s.Write(d, 0, d.Length); }
             check("hoot archive: listing dir found next to the zip's folder (xml_new)", string.Equals(HootArchive.FindListDir(zip), Path.Combine(root, "xml_new"), StringComparison.OrdinalIgnoreCase), HootArchive.FindListDir(zip) ?? "null");
             string dir = ZipFolder.Extract(zip);
             var hoots = Directory.GetFiles(dir, "*" + HootArchive.Extension);
@@ -112,14 +117,20 @@ public static class HootPc98Tests
                 w1 == hp && Path.GetFileName(w2) == "Tone Test (YM2203) (2).hoot" && ChipSongs.Tracks(w2)[1].title == "Tone C", Path.GetFileName(w1) + ", " + Path.GetFileName(w2));
             File.Delete(w2);
             var e = HootArchive.Load(hp);
-            var m = HootPc98.Boot(DosFileSystem.FromDirectory(dir), e, out var shells);
+            var m = HootPc98.BootDir(dir, e, out var shells);
             m.Play(0x11);
             m.Run((long)(m.CpuHz * 0.1));
             int keyOns = m.Log.Count(x => x.kind == 0 && x.reg == 0x28 && x.val == 0xF0);
             check("hoot pc98dos boot: file roms bound to handles, resident shell → idle loop keeps taking hoot interrupts",
                 shells.Count == 1 && shells[0] == DosMachine.ShellResult.Resident && keyOns == 1 && m.HandleOpen(0x10), shells.FirstOrDefault() + ", key-ons " + keyOns);
+            string sdir = ZipFolder.Extract(sharedZip);
+            var sh = Directory.GetFiles(sdir, "*" + HootArchive.Extension).FirstOrDefault();
+            var sm = sh == null ? null : HootPc98.BootDir(sdir, HootArchive.Load(sh), out var sshells);
+            if (sm != null) { sm.Play(0x10); sm.Run((long)(sm.CpuHz * 0.1)); }
+            check("hoot pc98dos: a shell program missing from the zip is taken from another zip in the same folder (shared drivers)",
+                sm != null && sm.Log.Any(x => x.kind == 0 && x.reg == 0x28 && x.val == 0xF0), sh == null ? "no .hoot" : sm.Log.Count + " writes");
             var used = VgmPlayer.ScanUsed(v);
-            var chip = new Pc98Chip(() => HootPc98.Boot(DosFileSystem.FromDirectory(dir), e), Pc98Machine.Board.Opn, 0x10);
+            var chip = new Pc98Chip(() => HootPc98.BootDir(dir, e, out _), Pc98Machine.Board.Opn, 0x10);
             chip.Skip(0.5);
             check("hoot pc98dos: mixer shows every channel without booting (UI thread), chip itself reports FM 1 as used after running",
                 used.Take(VgmPlayer.ChannelsOf(v).Count).All(u => u) && chip.VoicesUsed == 1 && chip.ChannelCount == 7 && chip.ChannelLabel(6) == "BEEP", "voices " + chip.VoicesUsed + ", " + chip.ChannelCount + " ch");
@@ -229,6 +240,7 @@ public static class HootPc98Tests
         var rnd = new Random(98);
         zips = zips.OrderBy(_ => rnd.Next()).Take(count).ToList();
         var stats = new System.Collections.Generic.SortedDictionary<string, (int total, int sound, int halted)>();
+        var causes = new System.Collections.Generic.SortedDictionary<string, int>();
         var sw = Stopwatch.StartNew();
         foreach (var zip in zips)
         {
@@ -237,19 +249,40 @@ public static class HootPc98Tests
             foreach (var h in Directory.GetFiles(dir, "*" + HootArchive.Extension))
             {
                 var e = HootArchive.Load(h);
+                if (!e.Driver.Equals("pc98dos", StringComparison.OrdinalIgnoreCase)) continue;
                 string key = e.Type.ToLowerInvariant();
                 stats.TryGetValue(key, out var st);
                 st.total++;
                 string note;
                 try
                 {
-                    HootPc98.ToVgm(h, 0, seconds, out var m);
-                    int keyOns = m.Log.Count(x => x.kind == 0 && x.reg == 0x28 && (x.val & 0xF0) != 0), beeps = m.Log.Count(x => x.kind == 2 && x.val != 0);
+                    var m = HootPc98.BootDir(dir, e, out var shells);
+                    int vec = m.FuncVector;
+                    bool hooked = m.PeekWord(0, vec * 4 + 2) != DosMachine.StubSeg;
+                    int logBoot = m.Log.Count;
+                    m.Play(e.Titles.Count > 0 ? e.Titles[0].Code : 0);
+                    m.Run((long)(m.CpuHz * seconds));
+                    int keyOns = m.Log.Count(x => x.kind == 0 && ((x.reg == 0x28 && (x.val & 0xF0) != 0) || (x.reg == 0x10 && (x.val & 0xBF) != 0 && (x.val & 0x80) == 0) || (x.reg >= 8 && x.reg <= 10 && (x.val & 0x1F) != 0))), beeps = m.Log.Count(x => x.kind == 2 && x.val != 0);
+                    int fmWrites = m.Log.Count(x => x.kind <= 1);
                     bool sound = keyOns > 0 || beeps > 0;
                     if (sound) st.sound++;
                     if (m.Cpu.UnknownOps > 0) st.halted++;
-                    note = (sound ? "SOUND " : "quiet ") + "key-ons " + keyOns + ", beeps " + beeps + (m.Cpu.UnknownOps > 0 ? ", unknown op" : "") +
-                        (m.UnknownPorts.Count > 0 ? ", ports " + string.Join(" ", m.UnknownPorts.Take(6).Select(p => (p > 0xFFFF ? "w" : "r") + (p & 0xFFFF).ToString("X")) ) : "");
+                    string cause = sound ? "sound"
+                        : m.Cpu.UnknownOps > 0 ? "unknown-op"
+                        : shells.Any(r => r == DosMachine.ShellResult.NotFound) ? "shell-not-found"
+                        : shells.Any(r => r == DosMachine.ShellResult.NoMemory) ? "no-memory"
+                        : !hooked ? "vector-not-hooked"
+                        : m.HootDelivered == 0 ? (m.HootInterruptEnabled ? "hoot-not-delivered(IF)" : "hoot-disabled")
+                        : m.UnknownFunctions.Count > 0 ? "unknown-dos"
+                        : fmWrites == 0 && m.Log.Count == 0 ? "no-chip-writes"
+                        : "writes-no-keyon";
+                    causes.TryGetValue(key + " " + cause, out int cn); causes[key + " " + cause] = cn + 1;
+                    note = cause.PadRight(22) + " key-ons " + keyOns + ", beeps " + beeps + ", fm " + fmWrites + " (boot " + logBoot + "), hoot " + m.HootDelivered + (m.HootInterruptEnabled ? "" : " off") +
+                        ", vec " + vec.ToString("X2") + (hooked ? "" : " stub") + ", shells " + string.Join("/", shells.Select(r => r.ToString().Substring(0, 3))) +
+                        (m.UnknownFunctions.Count > 0 ? ", dos " + string.Join(" ", m.UnknownFunctions.Keys.Take(5).Select(k => k.ToString("X")) ) : "") +
+                        (m.Cpu.UnknownOps > 0 ? ", op@" + m.Cpu.CS.ToString("X4") + ":" + m.Cpu.IP.ToString("X4") : "") +
+                        (m.UnknownPorts.Count > 0 ? ", ports " + string.Join(" ", m.UnknownPorts.Take(8).Select(p => (p > 0xFFFF ? "w" : "r") + (p & 0xFFFF).ToString("X")) ) : "") +
+                        " | " + m.ConsoleText.Replace("\r", " ").Replace("\n", " ").Trim().Split(' ').Where(x => x.Length > 0).TakeLast(12).Aggregate("", (a, b) => a + " " + b);
                 }
                 catch (Exception ex) { note = "ERROR " + ex.Message; }
                 stats[key] = st;
@@ -258,7 +291,53 @@ public static class HootPc98Tests
         }
         Console.WriteLine();
         foreach (var kv in stats) Console.WriteLine(kv.Key + ": sound " + kv.Value.sound + "/" + kv.Value.total + (kv.Value.halted > 0 ? ", unknown op " + kv.Value.halted : ""));
+        foreach (var kv in causes) Console.WriteLine("  " + kv.Key + ": " + kv.Value);
         Console.WriteLine(zips.Count + " zips, " + sw.Elapsed.TotalSeconds.ToString("0") + " s");
+        return 0;
+    }
+
+    /// <summary>진단: --hoot98trace zip [항목 번호] [초] — 항목을 세우고 첫 곡을 재생하며 1초마다 기계 상태 · 인터럽트 · 포트를 찍는다.</summary>
+    public static int TraceEntry(string zip, int which, double seconds)
+    {
+        string dir = ZipFolder.Extract(zip);
+        var hoots = Directory.GetFiles(dir, "*" + HootArchive.Extension).Where(h => HootArchive.Load(h).Driver == "pc98dos").OrderBy(x => x, StringComparer.Ordinal).ToList();
+        if (hoots.Count == 0) { Console.WriteLine("no pc98dos entry"); return 1; }
+        var e = HootArchive.Load(hoots[Math.Min(which, hoots.Count - 1)]);
+        Console.WriteLine(e.Name + "  " + e.Type + "  " + string.Join(", ", e.Options.Select(o => o.Key + "=" + o.Value)));
+        foreach (var r in e.Roms.Where(r => r.Type != "file")) Console.WriteLine("  rom " + r.Type + " " + r.Offset + " " + r.Text);
+        HootPc98.TraceBoot = true;
+        var m = HootPc98.BootDir(dir, e, out var shells);
+        HootPc98.TraceBoot = false;
+        Console.WriteLine("shells " + string.Join("/", shells) + " | " + m.Describe());
+        Console.WriteLine("boot calls " + string.Join(" ", m.TraceVectors.OrderBy(k => k.Key).Select(k => (k.Key > 0xFFFF ? "int" + ((k.Key >> 8) & 0xFF).ToString("X2") + "/" + (k.Key & 0xFF).ToString("X2") : "irq" + k.Key.ToString("X2")) + ":" + k.Value)));
+        Console.WriteLine("boot ports " + string.Join(" ", m.TracePorts.OrderByDescending(k => k.Value).Take(24).Select(k => (k.Key > 0xFFFF ? "w" : "r") + (k.Key & 0xFFFF).ToString("X") + ":" + k.Value)));
+        m.TraceVectors.Clear(); m.TracePorts.Clear();
+        Console.WriteLine("console: " + m.ConsoleText.Replace("\r", " ").Replace("\n", " | "));
+        m.Trace = true;
+        int code = e.Titles.Count > 0 ? e.Titles[0].Code : 0;
+        m.Play(code);
+        int log0 = m.Log.Count;
+        for (int s = 0; s < seconds; s++)
+        {
+            m.Run((long)m.CpuHz);
+            int keyOns = m.Log.Skip(log0).Count(x => x.kind == 0 && x.reg == 0x28 && (x.val & 0xF0) != 0);
+            Console.WriteLine((s + 1) + "s: key-ons " + keyOns + ", writes " + (m.Log.Count - log0) + ", hoot " + m.HootDelivered + (m.HootPending ? " pending" : "") + " | " + m.Describe());
+            Console.WriteLine("   vectors " + string.Join(" ", m.TraceVectors.OrderBy(k => k.Key).Select(k => (k.Key > 0xFFFF ? "bios" + ((k.Key >> 8) & 0xFF).ToString("X2") + "/" + (k.Key & 0xFF).ToString("X2") : k.Key.ToString("X2")) + ":" + k.Value)) +
+                " | ports " + string.Join(" ", m.TracePorts.OrderByDescending(k => k.Value).Take(14).Select(k => (k.Key > 0xFFFF ? "w" : "r") + (k.Key & 0xFFFF).ToString("X") + ":" + k.Value)) +
+                (m.UnknownFunctions.Count > 0 ? " | dos " + string.Join(" ", m.UnknownFunctions.Select(k => k.Key.ToString("X") + ":" + k.Value)) : ""));
+            m.TraceVectors.Clear(); m.TracePorts.Clear();
+        }
+        // 멈춰 도는 곳: CPU 위치를 여러 번 보아 가장 많은 곳 둘레의 바이트
+        var at = new System.Collections.Generic.Dictionary<long, int>();
+        for (int i = 0; i < 2000; i++) { m.Run(997); if (m.Cpu.CS != DosMachine.StubSeg) { long k = ((long)m.Cpu.CS << 16) | (uint)m.Cpu.IP; at[k] = at.TryGetValue(k, out int c) ? c + 1 : 1; } }
+        foreach (var kv in at.OrderByDescending(x => x.Value).Take(3))
+        {
+            int cs = (int)(kv.Key >> 16), ip = (int)(kv.Key & 0xFFFF);
+            Console.WriteLine("hot " + cs.ToString("X4") + ":" + ip.ToString("X4") + " x" + kv.Value + "  " +
+                string.Join(" ", Enumerable.Range(-24, 48).Select(d => m.PeekByte(cs, (ip + d) & 0xFFFF).ToString("X2") + (d == -1 ? " |" : ""))));
+        }
+        Console.WriteLine("missing files: " + string.Join(", ", m.MissingFiles) + " | console: " + m.ConsoleText.Replace("\r", " ").Replace("\n", " | "));
+        Console.WriteLine("vec18 = " + m.PeekWord(0, 0x62).ToString("X4") + ":" + m.PeekWord(0, 0x60).ToString("X4") + ", regs AX " + m.Cpu.AX.ToString("X4"));
         return 0;
     }
 

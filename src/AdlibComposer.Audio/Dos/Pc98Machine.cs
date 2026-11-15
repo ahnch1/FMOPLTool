@@ -23,8 +23,13 @@ public sealed class Pc98Machine : DosMachine
     public readonly double CpuHz;
     /// <summary>hoot 인터럽트 벡터 (xml funcvect, 기본 0x7F).</summary>
     public int FuncVector = 0x7F;
-    /// <summary>사운드 보드 인터럽트 줄 (IRQ). 보드의 INT 점퍼는 SSG I/O 포트(레지스터 0x0E · 0x0F)로 읽히는데 0을 돌려주므로 INT0 = IRQ3 (벡터 0Bh).</summary>
-    public int SoundIrq = 3;
+    /// <summary>
+    /// 사운드 보드 인터럽트 줄 (IRQ): 기본 INT5 = IRQ12 (벡터 14h) — hoot(NP2)의 기본 점퍼 (snd26opt 0xD1). INT5로 고정해 둔 드라이버가 많다.
+    /// 점퍼는 SSG 포트 A (레지스터 0x0E) bit6~7로 읽힌다: 00 INT0 (IRQ3) · 01 INT6 (IRQ13) · 10 INT41 (IRQ10) · 11 INT5 (IRQ12).
+    /// </summary>
+    public int SoundIrq = 12;
+
+    private int JumperBits { get { return SoundIrq == 13 ? 0x40 : SoundIrq == 10 ? 0x80 : SoundIrq == 12 ? 0xC0 : 0x00; } }
 
     /// <summary>칩 쓰기: 시간 (CPU 클럭), 종류 (0 OPN/OPNA 포트 0, 1 OPNA 포트 1, 2 BEEP 켜기, 3 BEEP 카운터), 레지스터, 값.</summary>
     public readonly List<(long t, int kind, int reg, int val)> Log = new List<(long, int, int, int)>();
@@ -115,6 +120,7 @@ public sealed class Pc98Machine : DosMachine
             if (s < 0) { master.Irr &= ~0x80; return false; }
             vector = slave.Base + s;
             if (!Cpu.HardwareInterrupt(vector)) return false;
+            if (Trace) Count(TraceVectors, vector);
             slave.Irr &= ~(1 << s); if (!slave.AutoEoi) slave.Isr |= 1 << s;
             master.Irr &= ~0x80; if (!master.AutoEoi) master.Isr |= 0x80;
             Interrupts++;
@@ -122,12 +128,19 @@ public sealed class Pc98Machine : DosMachine
         }
         vector = master.Base + m;
         if (!Cpu.HardwareInterrupt(vector)) return false;
+        if (Trace) Count(TraceVectors, vector);
         master.Irr &= ~(1 << m); if (!master.AutoEoi) master.Isr |= 1 << m;
         Interrupts++;
         return true;
     }
 
     public long Interrupts { get; private set; }
+    /// <summary>재생 중 (셸을 다 돌린 뒤): 프로그램이 끝나 셸로 돌아와도 멈추지 않고 쉬는 고리에서 인터럽트를 계속 받는다.</summary>
+    public bool AutoIdle;
+    /// <summary>넣은 hoot 인터럽트 수 (진단).</summary>
+    public int HootDelivered { get; private set; }
+    /// <summary>hoot 인터럽트를 기다리는 중 (요청은 있었지만 꺼져 있거나 IF = 0).</summary>
+    public bool HootPending { get { return hootPending; } }
 
     // ------------------------------------------------------------ PIT 8253
 
@@ -231,13 +244,14 @@ public sealed class Pc98Machine : DosMachine
     private int OpnStatus(bool ext)
     {
         int s = timerFlags & 3;
-        if (ext) s |= 0x00;   // ADPCM · 리듬 상태 없음
+        if (ext) s |= 0x08;   // ADPCM BRDY = 늘 준비됨 (PMDB2 등이 ADPCM RAM을 쓰고 읽으며 기다린다), EOS · 리듬 상태 없음
         return s;
     }
 
     private int OpnReadData(int port, int reg)
     {
         if (port == 0 && reg == 0xFF) return Sound == Board.Opna ? 0x01 : 0x00;   // YM2608 ID
+        if (port == 0 && reg == 0x0E) return (opnRegs[reg] & 0x3F) | JumperBits;   // SSG 포트 A = 보드 INT 점퍼
         if (port == 0 && reg < 0x10) return opnRegs[reg];
         return opnRegs[port * 0x100 + reg];
     }
@@ -276,8 +290,24 @@ public sealed class Pc98Machine : DosMachine
 
     // ------------------------------------------------------------ 포트
 
+    // ------------------------------------------------------------ 진단 (Trace = true일 때만 센다)
+
+    /// <summary>진단: 넣은 하드웨어 인터럽트 벡터별 수 · 포트 읽기 / 쓰기 수 (쓰기는 포트 | 0x10000).</summary>
+    public bool Trace;
+    public readonly Dictionary<int, int> TraceVectors = new Dictionary<int, int>(), TracePorts = new Dictionary<int, int>();
+    private static void Count(Dictionary<int, int> d, int k) { d[k] = d.TryGetValue(k, out int n) ? n + 1 : 1; }
+
+    /// <summary>진단 한 줄: PIC 마스크 · ISR, PIT 0, OPN 타이머, CPU 위치.</summary>
+    public string Describe()
+    {
+        return "PIC m IMR " + master.Imr.ToString("X2") + " ISR " + master.Isr.ToString("X2") + " IRR " + master.Irr.ToString("X2") + ", s IMR " + slave.Imr.ToString("X2") + " ISR " + slave.Isr.ToString("X2") +
+            ", PIT0 " + (pit[0].Running ? pit[0].Reload.ToString() + " m" + pit[0].Mode : "off") + ", OPN ctl " + timerCtl.ToString("X2") + " A " + timerA + " B " + timerB + " flags " + timerFlags +
+            ", IF " + (Cpu.GetFlag(X86.IF) ? 1 : 0) + ", at " + Cpu.CS.ToString("X4") + ":" + Cpu.IP.ToString("X4") + (Cpu.Halted ? " HLT" : "");
+    }
+
     public override byte In(int port)
     {
+        if (Trace) Count(TracePorts, port);
         switch (port)
         {
             case 0x00: return (byte)master.ReadCmd();
@@ -289,6 +319,10 @@ public sealed class Pc98Machine : DosMachine
             case 0x75: case 0x3FDD: return (byte)PitRead(2);
             case 0x60: case 0xA0: return (byte)(0x04 | (InVsync ? 0x20 : 0));   // GDC 상태: FIFO 빔, 수직 귀선
             case 0x31: case 0x33: case 0x35: return 0x00;
+            case 0x42: return 0xDF;   // 프린터 8255 포트 B: bit5 = 0 → 5 · 10MHz 계열 (PIT 2.4576MHz)
+            case 0x7FD9: return 0;    // 마우스: 움직임 없음
+            case 0x7FDB: return 0xFF; // 버튼 안 눌림
+            case 0x7FDD: return (byte)mouseC;
             case 0x7E0: return (byte)hootCause;
             case 0x7E1: return 0;
             case 0x7E2: return (byte)hootCode; case 0x7E3: return (byte)(hootCode >> 8);
@@ -311,6 +345,7 @@ public sealed class Pc98Machine : DosMachine
 
     public override void Out(int port, byte value)
     {
+        if (Trace) Count(TracePorts, port | 0x10000);
         int v = value;
         switch (port)
         {
@@ -327,6 +362,13 @@ public sealed class Pc98Machine : DosMachine
             case 0x64: vsyncArmed = true; return;
             case 0x60: case 0x62: case 0xA0: case 0xA2: case 0x68: case 0x6A: case 0x7C: case 0x7E: return;   // GDC · 표시 (무시)
             case 0x5F: return;   // 기다림
+            case 0x7FDD: mouseC = v; MouseTimerChanged(); return;
+            case 0x7FDF:
+                if ((v & 0x80) == 0) { int bit = (v >> 1) & 7; mouseC = (v & 1) != 0 ? mouseC | (1 << bit) : mouseC & ~(1 << bit); }
+                else mouseC = 0x10;   // 방식 설정: 포트 C 처음으로 (인터럽트 끔)
+                MouseTimerChanged();
+                return;
+            case 0xBFDB: mouseHz = MouseRates[v & 3]; MouseTimerChanged(); return;
             case 0x7E8:
                 if (v == 0x80) hootEnabled = false;
                 else if (v == 0x81) hootEnabled = true;
@@ -343,8 +385,27 @@ public sealed class Pc98Machine : DosMachine
                 case 0xA460: if (Sound == Board.Opna) { a460 = 0x40 | (v & 3); return; } break;
             }
         }
+        if (port >= 0x4A0 && port <= 0x4AF) return;   // EGC (그래픽)
+        if (port >= 0xA4 && port <= 0xAE && (port & 1) == 0) return;   // 팔레트 · 표시 페이지
         UnknownPortWrites++; UnknownPorts.Add(port | 0x10000);
     }
+
+    // ------------------------------------------------------------ 마우스 인터페이스 타이머 (IRQ13)
+
+    private static readonly int[] MouseRates = { 120, 60, 30, 15 };
+    private int mouseC = 0x10, mouseHz = 120;
+    private long nextMouse = long.MaxValue;
+    private long MousePeriod { get { return Math.Max(1, (long)(CpuHz / mouseHz)); } }
+
+    /// <summary>포트 C bit4 (INT#) = 0이면 마우스 타이머 인터럽트 (IRQ13, 벡터 15h)가 120 · 60 · 30 · 15Hz로 (BFDBh). usd_98 같은 셸이 템포에 쓴다.</summary>
+    private void MouseTimerChanged()
+    {
+        bool on = (mouseC & 0x10) == 0;
+        if (!on) { nextMouse = long.MaxValue; LowerIrq(13); }
+        else if (nextMouse == long.MaxValue) nextMouse = Cpu.Cycles + MousePeriod;
+    }
+
+    private long NextEvent { get { return Math.Min(Math.Min(Math.Min(nextTimer0, nextVsync), Math.Min(nextTimerA, nextTimerB)), nextMouse); } }
 
     // ------------------------------------------------------------ BIOS (기본 벡터 처리기)
 
@@ -352,6 +413,7 @@ public sealed class Pc98Machine : DosMachine
 
     protected override void Interrupt(int n)
     {
+        if (Trace) Count(TraceVectors, 0x10000 + (n << 8) + Cpu.AH);   // 진단: 기본 처리기로 온 BIOS 호출 (벡터 · AH)
         if (n >= 0x08 && n <= 0x0F) { master.WriteCmd(0x60 | (n - 0x08)); return; }          // 하드웨어 IRQ: 처리기가 없으면 EOI만
         if (n >= 0x10 && n <= 0x17) { slave.WriteCmd(0x60 | (n - 0x10)); master.WriteCmd(0x67); return; }
         switch (n)
@@ -372,25 +434,31 @@ public sealed class Pc98Machine : DosMachine
     public override void Run(long cycles)
     {
         long end = Cpu.Cycles + cycles;
-        while (Cpu.Cycles < end && !HostReturned)
+        while (Cpu.Cycles < end)
         {
+            if (HostReturned)
+            {
+                if (!AutoIdle) break;
+                Idle();   // 재생 중에 셸 프로그램이 끝남: 상주한 드라이버는 계속 (인터럽트를 받는다)
+            }
             long now = Cpu.Cycles;
             if (now >= nextTimer0) { RaiseIrq(0); var c = pit[0]; nextTimer0 = c.Mode == 0 ? long.MaxValue : nextTimer0 + Math.Max(1, PitTicksToCycles(c.Reload)); }
             if (now >= nextVsync) { if (vsyncArmed) { RaiseIrq(2); vsyncArmed = false; } nextVsync += vsyncPeriod; }
             if (now >= nextTimerA) { TimerOverflow(0); nextTimerA += TimerAPeriod; }
             if (now >= nextTimerB) { TimerOverflow(1); nextTimerB += TimerBPeriod; }
-            if (hootPending && hootEnabled && Cpu.GetFlag(X86.IF)) { hootPending = false; Cpu.Vector(FuncVector); Interrupts++; }
+            if (now >= nextMouse) { RaiseIrq(13); nextMouse += MousePeriod; }
+            if (hootPending && hootEnabled && Cpu.GetFlag(X86.IF)) { hootPending = false; Cpu.Vector(FuncVector); Interrupts++; HootDelivered++; }
             else DeliverIrq();
             if (Cpu.Halted)
             {
                 // 다음 사건까지 쉰다
-                long next = Math.Min(Math.Min(nextTimer0, nextVsync), Math.Min(nextTimerA, nextTimerB));
+                long next = NextEvent;
                 if (next == long.MaxValue || next > end) { Cpu.Cycles = Math.Max(Cpu.Cycles, end); break; }
                 Cpu.Cycles = Math.Max(Cpu.Cycles + 1, next);
                 continue;
             }
             // 사건 사이를 한 번에 (인터럽트 검사를 줄인다)
-            long until = Math.Min(end, Math.Min(Math.Min(nextTimer0, nextVsync), Math.Min(nextTimerA, nextTimerB)));
+            long until = Math.Min(end, NextEvent);
             int guard = 0;
             do { Cpu.Step(); } while (Cpu.Cycles < until && !Cpu.Halted && !HostReturned && ++guard < 64);
         }

@@ -21,6 +21,8 @@ public static class HootPc98
     public const double DefaultSeconds = 180, DefaultFade = 8;
     /// <summary>셸 한 줄에 줄 CPU 클럭 (끝나거나 상주하지 않으면 그 자리에서 다음으로 = 계속 도는 재생기).</summary>
     public const long ShellCycles = 40_000_000;
+    /// <summary>진단: 세우는 동안부터 포트 · 인터럽트 · BIOS / DOS 호출을 센다 (<see cref="Pc98Machine.Trace"/>).</summary>
+    public static bool TraceBoot;
 
     public static List<(int Code, string Title)> Tracks(string path)
     {
@@ -58,9 +60,9 @@ public static class HootPc98
         v.SelfRunningName = "PC-98 (" + (board == Pc98Machine.Board.Opn ? "YM2203" : board == Pc98Machine.Board.Opna ? "YM2608" : "BEEP") + ")";
         // 기계 세우기 (드라이버 상주 · 초기화, 0.2~1초)는 미리 뒤에서: 처음 소리 내는 칩이 이것을 받는다 (오디오 스레드에서 기다리지 않게).
         // 그 뒤의 칩 (위치 옮기기 등)은 새로 세운다
-        var pre = System.Threading.Tasks.Task.Run(() => Boot(DosFileSystem.FromDirectory(dir), e));
+        var pre = System.Threading.Tasks.Task.Run(() => BootDir(dir, e, out _));
         int taken = 0;
-        v.SelfRunning = () => new Pc98Chip(() => System.Threading.Interlocked.Exchange(ref taken, 1) == 0 ? pre.GetAwaiter().GetResult() : Boot(DosFileSystem.FromDirectory(dir), e), board, code);
+        v.SelfRunning = () => new Pc98Chip(() => System.Threading.Interlocked.Exchange(ref taken, 1) == 0 ? pre.GetAwaiter().GetResult() : BootDir(dir, e, out _), board, code);
         v.SourceFormat = "hoot pc98dos (" + e.Type + ", 곡 코드 0x" + code.ToString("X") + ", 길이 " + DefaultSeconds + "초 고정)";
         return v;
     }
@@ -68,9 +70,19 @@ public static class HootPc98
     /// <summary>항목대로 기계를 세우고 셸을 돌린다 (재생 요청 전까지). 결과 = 셸마다 결과.</summary>
     public static Pc98Machine Boot(DosFileSystem fs, HootArchive.Entry e) { return Boot(fs, e, out _); }
 
-    public static Pc98Machine Boot(DosFileSystem fs, HootArchive.Entry e, out List<DosMachine.ShellResult> shells)
+    /// <summary>zip을 푼 폴더의 항목으로 세우기: 파일 = 원래 zip (Shift_JIS 이름), 없는 셸 프로그램 = 같은 폴더의 다른 zip (<see cref="SharedPrograms"/>).</summary>
+    public static Pc98Machine BootDir(string dir, HootArchive.Entry e, out List<DosMachine.ShellResult> shells)
     {
-        var m = new Pc98Machine(fs, BoardOf(e), Math.Max(1, e.Option("clockmul", 8))) { FuncVector = e.Option("funcvect", 0x7F) & 0xFF };
+        string zip = ZipFolder.SourceZip(dir);
+        return Boot(DosFileSystem.ForHootDir(dir), e, out shells, zip != null ? Path.GetDirectoryName(zip) : null, zip);
+    }
+
+    /// <summary>끝나지 않은 셸 뒤에 셸이 더 있으면 (드라이버 초기화가 오래 걸림) 이만큼 더 기다린다.</summary>
+    public const long MoreShellCycles = 400_000_000;
+
+    public static Pc98Machine Boot(DosFileSystem fs, HootArchive.Entry e, out List<DosMachine.ShellResult> shells, string library = null, string ownZip = null)
+    {
+        var m = new Pc98Machine(fs, BoardOf(e), Math.Max(1, e.Option("clockmul", 8))) { FuncVector = e.Option("funcvect", 0x7F) & 0xFF, Trace = TraceBoot };
         shells = new List<DosMachine.ShellResult>();
         var sjis = KoreanText.ShiftJis;
         foreach (var (type, off, text) in e.Roms)
@@ -95,7 +107,20 @@ public static class HootPc98
                     break;
                 case "shell":
                     {
+                        // 이 zip에 없는 프로그램 (여러 게임이 같이 쓰는 드라이버): 같은 폴더의 다른 zip에서
+                        string prog = text.Trim().Split(new[] { ' ', '\t', '/' }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? "";
+                        if (library != null && prog.Length > 0 && m.ResolveProgram(prog) == null)
+                        {
+                            var shared = SharedPrograms.Find(library, prog, ownZip);
+                            if (shared != null) fs.Add(shared.Value.name, shared.Value.data);
+                        }
                         var r = m.Shell(text, ShellCycles);
+                        // 뒤에 셸이 더 있는데 아직 도는 중: 상주 · 끝날 때까지 조금 더
+                        if (r == DosMachine.ShellResult.Running && e.Roms.Skip(e.Roms.IndexOf((type, off, text)) + 1).Any(x => x.Type == "shell"))
+                        {
+                            for (long spent = 0; spent < MoreShellCycles && !m.HostReturned; spent += 20_000_000) m.Run(20_000_000);
+                            if (m.HostReturned) r = (m.ReturnCode >> 8) == 3 ? DosMachine.ShellResult.Resident : DosMachine.ShellResult.Exited;
+                        }
                         shells.Add(r);
                         if (m.HostReturned || r == DosMachine.ShellResult.NotFound || r == DosMachine.ShellResult.NoMemory) m.Idle();
                         break;
@@ -103,6 +128,7 @@ public static class HootPc98
             }
         }
         if (m.HostReturned) m.Idle();
+        m.AutoIdle = true;
         return m;
     }
 
@@ -111,7 +137,7 @@ public static class HootPc98
     {
         var e = HootArchive.Load(hootPath);
         var (code, title) = e.Titles[Math.Max(0, Math.Min(index, e.Titles.Count - 1))];
-        machine = Boot(DosFileSystem.FromDirectory(Path.GetDirectoryName(Path.GetFullPath(hootPath))), e);
+        machine = BootDir(Path.GetDirectoryName(Path.GetFullPath(hootPath)), e, out _);
         long t0 = machine.Cpu.Cycles;
         machine.Play(code);
         machine.Run((long)(machine.CpuHz * seconds));

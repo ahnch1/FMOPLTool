@@ -32,6 +32,9 @@ public sealed class X86
     public int LastUnknown = -1, LastUnknownAt = -1;
     /// <summary>INT n: true면 바깥이 처리함 (레지스터를 직접 바꿔도 된다).</summary>
     public Func<int, bool> HostInterrupt;
+    /// <summary>호스트 함정: 명령 F1 xx xx (286에 없는 명령) = 바깥 처리기 호출 (번호 16비트). DOS · BIOS 흉내는 인터럽트 벡터가 이 함정을 가리키게 둔다
+    /// (상주 프로그램이 벡터를 가로채 원래 처리기로 넘겨도 바깥까지 온다). 없으면 모르는 명령.</summary>
+    public Action<int> HostTrap;
 
     public const int CF = 0x0001, PF = 0x0004, AF = 0x0010, ZF = 0x0040, SF = 0x0080, TF = 0x0100, IF = 0x0200, DF = 0x0400, OF = 0x0800;
 
@@ -531,6 +534,9 @@ public sealed class X86
             case 0xEE: bus.Out(DX, (byte)AL); return;
             case 0xEF: bus.Out(DX, (byte)AL); bus.Out((DX + 1) & 0xFFFF, (byte)AH); return;
             case 0xF4: Halted = true; return;
+            case 0xF1:
+                if (HostTrap == null) break;
+                { int id = Fetch16(); HostTrap(id); return; }
             case 0xF5: Flags ^= CF; return;
             case 0xF6: case 0xF7: Group3(word); return;
             case 0xF8: SetFlag(CF, false); return;

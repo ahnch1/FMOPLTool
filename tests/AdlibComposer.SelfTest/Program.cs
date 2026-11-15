@@ -29,7 +29,7 @@ public static class Program
             {
                 ("vgm", () => VgmTests.Run(Check)), ("vgmexport", () => VgmExportTests.Run(Check)), ("newchip", () => NewChipTests.Run(Check)),
                 ("chip", () => ChipTests.Run(Check)), ("midi", () => MidiTests.Run(Check)), ("jukebox", () => JukeboxTests.Run(Check)),
-                ("extra", () => ExtraTests.Run(Check)),
+                ("extra", () => ExtraTests.Run(Check)), ("queue", () => EngineQueueTests.Run(Check)),
             };
             foreach (var (name, run) in suites) if (name.Contains(args[1], StringComparison.OrdinalIgnoreCase)) run();
             Console.WriteLine();
@@ -60,6 +60,7 @@ public static class Program
         ChipTests.Run(Check);
         VgmTests.Run(Check);
         VgmExportTests.Run(Check);
+        EngineQueueTests.Run(Check);
         NewChipTests.Run(Check);
         MidiSysExTests.Run(Check);
         ChipMidiTests.Run(Check);

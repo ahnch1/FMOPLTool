@@ -7,10 +7,12 @@ namespace AdlibComposer.Audio;
 
 /// <summary>
 /// 오디오 엔진: OplSynth + Sequencer (ROL/IMS, OPL2), SopPlayer (SOP, OPL3), MusicBoxPlayer (오르골 시험 연주) 중 하나 + 출력 장치(스테레오).
-/// 명령(재생 · 멈춤 · 조절)은 UI 스레드와 오디오 스레드가 같은 락(sync)을 쓴다.
-/// UI가 자주 묻는 값(재생 중 · 위치 · 채널 상태 · 템포)은 오디오 스레드가 블록마다(그리고 명령마다) 남기는 스냅샷에서 읽어,
-/// 렌더하는 동안(버퍼 하나 ≈ 12ms) UI가 기다리지 않는다. 스냅샷 락(snap)은 복사하는 동안만 잡는다.
-/// Render()만 단독으로 호출하면 장치 없이 오프라인 렌더링도 가능 (테스트용).
+/// <para>스레드: 출력 장치가 열려 있으면 명령(재생 · 멈춤 · 조절 · 시음)은 큐에 넣고 바로 돌아오며, 오디오 스레드가 다음 블록을 만들기 전에
+/// 넣은 순서대로 실행한다 (<see cref="Post"/>). UI가 자주 묻는 값(재생 중 · 위치 · 채널 상태 · 템포)은 오디오 스레드가 블록마다 남기는 스냅샷에서 읽는다.
+/// 그래서 UI 스레드는 렌더(버퍼 하나 ≈ 12ms)를 기다리지 않는다. 재생 · 멈춤은 큐에 넣을 때 스냅샷의 '재생 중 · 위치'를 미리 바꿔 둔다
+/// (바로 뒤에 IsPlaying을 물어도 맞게). 값을 돌려받는 드문 호출(OpenMt32 · MIDI 설정 읽기 · Options)만 렌더 락(sync)을 잡고 큐를 먼저 비운다.
+/// 스냅샷 락(snap)은 복사하는 동안만 잡는다.</para>
+/// <para>장치가 없으면(테스트 · 오프라인 렌더) 명령은 부르는 자리에서 바로 실행된다. Render()만 단독으로 호출하면 장치 없이 렌더링.</para>
 /// </summary>
 public sealed class AudioEngine : IDisposable
 {
@@ -70,7 +72,9 @@ public sealed class AudioEngine : IDisposable
     /// <summary>'표준' 음색에서 되먹임 배율과 로우패스 차단 주파수.</summary>
     public const double StandardFeedback = 0.875, StandardCutoffHz = 12000;
     private bool toneStandard;
-    private bool vintageSpeaker;
+    /// <summary>UI 쪽에서 본 값 (명령이 아직 큐에 있어도 마지막으로 정한 값).</summary>
+    private volatile bool toneStandardUi;
+    private volatile bool vintageSpeaker;
     private OnePoleLowPass toneL, toneR;
     private SmallSpeaker spkL, spkR;
     /// <summary>스피커 소리 비율 (0 = 기본값, 1 = 그 시절). 바꿀 때 30ms에 걸쳐 옮겨 가 '딱' 소리를 막는다.</summary>
@@ -83,10 +87,12 @@ public sealed class AudioEngine : IDisposable
     /// </summary>
     public bool ToneStandard
     {
-        get { return toneStandard; }
+        get { return toneStandardUi; }
         set
         {
-            lock (sync)
+            if (toneStandardUi == value) return;
+            toneStandardUi = value;
+            Post(() =>
             {
                 if (toneStandard == value) return;
                 toneStandard = value;
@@ -94,7 +100,7 @@ public sealed class AudioEngine : IDisposable
                 synth.Chip.FeedbackScale = fb;
                 opl3.FeedbackScale = fb;
                 toneL.Reset(); toneR.Reset();
-            }
+            });
         }
     }
 
@@ -102,7 +108,7 @@ public sealed class AudioEngine : IDisposable
     public bool VintageSpeaker
     {
         get { return vintageSpeaker; }
-        set { lock (sync) vintageSpeaker = value; }
+        set { vintageSpeaker = value; }   // 오디오 스레드는 샘플마다 읽기만 한다 (volatile)
     }
 
     public OplMapping Mapping { get { return synth.Mapping; } }
@@ -119,20 +125,88 @@ public sealed class AudioEngine : IDisposable
     private readonly VoiceState[] snapStates = new VoiceState[PlaybackOptions.Voices];
     private readonly VoiceState[] workStates = new VoiceState[PlaybackOptions.Voices];
 
-    /// <summary>sync 안에서: 지금 상태를 스냅샷으로 남긴다 (배열 복사만, 할당 없음).</summary>
+    /// <summary>
+    /// sync 안에서: 지금 상태를 스냅샷으로 남긴다 (배열 복사만, 할당 없음).
+    /// 큐에 아직 실행 안 한 명령이 있으면 '재생 중 · 위치'는 그대로 둔다 (Post가 미리 정해 둔 값이 옛 상태로 덮이지 않게).
+    /// </summary>
     private void Publish()
     {
         bool playing = SourcePlaying;
         double tick = SourceTick, tempo = TempoMultiplierLocked;
         CopyStatesLocked(workStates);
         bool trk = source == Source.Tracker && tracker.IsSongPlaying;
+        int order = tracker.CurrentOrder, pattern = tracker.CurrentPattern, row = tracker.CurrentRow;
         lock (snap)
         {
-            snapPlaying = playing; snapTick = tick; snapTempo = tempo;
-            snapOrder = tracker.CurrentOrder; snapPattern = tracker.CurrentPattern; snapRow = tracker.CurrentRow; snapTrackerPlaying = trk;
+            if (pending.Count == 0)
+            {
+                snapPlaying = playing; snapTick = tick;
+                snapOrder = order; snapPattern = pattern; snapRow = row; snapTrackerPlaying = trk;
+            }
+            snapTempo = tempo;
             Array.Copy(workStates, snapStates, snapStates.Length);
         }
     }
+
+    // ---------------------------------------------------------------- 명령 큐
+
+    /// <summary>실행을 기다리는 명령 (snap 락 안에서만 만진다).</summary>
+    private readonly List<Action> pending = new List<Action>();
+    /// <summary>오디오 스레드가 꺼낸 명령을 옮겨 두는 곳 (블록마다 할당하지 않게).</summary>
+    private Action[] draining = new Action[32];
+    private enum Expect { None, Play, Stop }
+
+    /// <summary>장치가 열려 있을 때 오디오 스레드에서 명령이 던진 마지막 예외 (장치가 없으면 부르는 쪽으로 바로 던진다).</summary>
+    public Exception LastCommandError { get; private set; }
+
+    /// <summary>
+    /// 명령 하나. 장치가 열려 있으면 큐에 넣고 바로 돌아온다 (오디오 스레드가 다음 블록 전에 실행). 없으면 여기서 바로 실행.
+    /// expect = Play: 재생을 새로 시작 (세대 · 시작 위치를 지금 정하고 스냅샷을 '재생 중'으로), Stop: 스냅샷을 '멈춤'으로.
+    /// </summary>
+    private void Post(Action command, Expect expect = Expect.None, double start = 0)
+    {
+        if (!IsDeviceOpen)
+        {
+            lock (sync)
+            {
+                DrainLocked();
+                if (expect == Expect.Play) lock (snap) { generation++; startTick = start; }
+                command();
+                Publish();
+            }
+            return;
+        }
+        lock (snap)
+        {
+            pending.Add(command);
+            if (expect == Expect.Play) { generation++; startTick = start; snapPlaying = true; snapTick = start; snapTrackerPlaying = false; }
+            else if (expect == Expect.Stop) { snapPlaying = false; snapTrackerPlaying = false; }
+        }
+    }
+
+    /// <summary>sync 안에서: 큐의 명령을 넣은 순서대로 실행한다.</summary>
+    private void DrainLocked()
+    {
+        int n;
+        lock (snap)
+        {
+            n = pending.Count;
+            if (n == 0) return;
+            if (draining.Length < n) draining = new Action[Math.Max(n, draining.Length * 2)];
+            pending.CopyTo(draining);
+            pending.Clear();
+        }
+        for (int i = 0; i < n; i++)
+        {
+            var cmd = draining[i];
+            draining[i] = null;
+            try { cmd(); }
+            catch (Exception ex) { LastCommandError = ex; }   // 오디오 스레드는 계속 돌아야 한다
+        }
+    }
+
+    /// <summary>값을 돌려받는 호출: 렌더 락을 잡고 밀린 명령을 먼저 실행한 뒤 읽는다.</summary>
+    private T Query<T>(Func<T> read) { lock (sync) { DrainLocked(); return read(); } }
 
     private bool SourcePlaying
     {
@@ -206,7 +280,7 @@ public sealed class AudioEngine : IDisposable
 
     public void Play(Song song, InstrumentBank bank, int startTick = 0, int loopStart = -1, int loopEnd = -1, int onlyVoice = -1, PlaybackOptions options = null)
     {
-        lock (sync)
+        Post(() =>
         {
             if (source == Source.Sop) sop.Stop();
             if (source == Source.MusicBox) musicBox.Stop();
@@ -216,40 +290,31 @@ public sealed class AudioEngine : IDisposable
             source = Source.Opl2;
             Func<string, AdlibInstrument> resolver = name => bank != null ? bank.Find(name) : null;
             sequencer.Start(song, resolver, startTick, loopStart, loopEnd, onlyVoice, options);
-            generation++;
-            this.startTick = Math.Max(0, startTick);
-            Publish();
-        }
+        }, Expect.Play, Math.Max(0, startTick));
     }
 
     /// <summary>SOP 곡 재생 (OPL3). 조절값은 ROL/IMS와 같은 PlaybackOptions (보이스 = 트랙 0~19).</summary>
     public void PlaySop(SopSong song, int startTick = 0, PlaybackOptions options = null)
     {
-        lock (sync)
+        Post(() =>
         {
             if (sequencer.IsPlaying) sequencer.Stop();
             musicBox.Stop(); tracker.Stop(); midi.Stop(); pcm.Stop(); vgm.Stop();
             source = Source.Sop;
             sop.Start(song, Math.Max(0, startTick), options);
-            generation++;
-            this.startTick = Math.Max(0, startTick);
-            Publish();
-        }
+        }, Expect.Play, Math.Max(0, startTick));
     }
 
     /// <summary>MIDI 곡 재생 (.mid / .wrk). 위치 단위는 MIDI 틱. 조절값의 보이스 = MIDI 채널 0~15.</summary>
     public void PlayMidi(MidiSong song, double startTick = 0, PlaybackOptions options = null)
     {
-        lock (sync)
+        Post(() =>
         {
             if (sequencer.IsPlaying) sequencer.Stop();
             sop.Stop(); musicBox.Stop(); tracker.Stop(); pcm.Stop(); vgm.Stop();
             source = Source.Midi;
             midi.Start(song, Math.Max(0, startTick), options);
-            generation++;
-            this.startTick = Math.Max(0, startTick);
-            Publish();
-        }
+        }, Expect.Play, Math.Max(0, startTick));
     }
 
     /// <summary>
@@ -257,44 +322,38 @@ public sealed class AudioEngine : IDisposable
     /// </summary>
     public void PlayPcm(float[] samples, int rate, IList<MelodyNote> melody, double startSeconds, bool original, bool melodyOn)
     {
-        lock (sync)
+        Post(() =>
         {
             if (sequencer.IsPlaying) sequencer.Stop();
             sop.Stop(); musicBox.Stop(); tracker.Stop(); midi.Stop(); vgm.Stop();
             source = Source.Pcm;
             pcm.Start(samples, rate, melody, startSeconds, original, melodyOn);
-            generation++;
-            this.startTick = startSeconds * 1000;
-            Publish();
-        }
+        }, Expect.Play, startSeconds * 1000);
     }
 
     /// <summary>VGM 곡 재생 (PSG · SCC · OPL). 위치(PositionTick) = ms. 조절값의 보이스 = <see cref="VgmPlayer.Channels"/> 순서.</summary>
     public void PlayVgm(VgmSong song, double startMs = 0, PlaybackOptions options = null)
     {
-        lock (sync)
+        Post(() =>
         {
             if (sequencer.IsPlaying) sequencer.Stop();
             sop.Stop(); musicBox.Stop(); tracker.Stop(); midi.Stop(); pcm.Stop();
             source = Source.Vgm;
             vgm.Start(song, Math.Max(0, startMs), options);
-            generation++;
-            this.startTick = Math.Max(0, startMs);
-            Publish();
-        }
+        }, Expect.Play, Math.Max(0, startMs));
     }
 
     /// <summary>재생 중에 원곡 / 멜로디 켜고 끄기.</summary>
-    public void SetPcmMix(bool original, bool melodyOn) { lock (sync) { pcm.Original = original; pcm.Melody = melodyOn; } }
+    public void SetPcmMix(bool original, bool melodyOn) { Post(() => { pcm.Original = original; pcm.Melody = melodyOn; }); }
 
     /// <summary>MIDI FM 재생에 쓸 GM 뱅크 (다음 재생부터).</summary>
-    public GmBank MidiBank { get { lock (sync) return midi.Bank; } set { lock (sync) midi.Bank = value; } }
+    public GmBank MidiBank { get { return Query(() => midi.Bank); } set { Post(() => midi.Bank = value); } }
     /// <summary>MIDI를 FM으로 낼지 Windows 신디사이저로 낼지 (다음 재생부터).</summary>
-    public MidiSynth MidiSynth { get { lock (sync) return midi.Synth; } set { lock (sync) midi.Synth = value; } }
+    public MidiSynth MidiSynth { get { return Query(() => midi.Synth); } set { Post(() => midi.Synth = value); } }
     /// <summary>8-bit 신디의 칩 (다음 재생부터): PSG + SCC / PSG만.</summary>
-    public ChipSound MidiChipSound { get { lock (sync) return midi.ChipSound; } set { lock (sync) midi.ChipSound = value; } }
+    public ChipSound MidiChipSound { get { return Query(() => midi.ChipSound); } set { Post(() => midi.ChipSound = value); } }
     /// <summary>지금 MIDI 재생이 실제로 쓰는 신디사이저 (Windows 장치를 못 열면 FM).</summary>
-    public MidiSynth ActiveMidiSynth { get { lock (sync) return midi.ActiveSynth; } }
+    public MidiSynth ActiveMidiSynth { get { return Query(() => midi.ActiveSynth); } }
 
     /// <summary>MT-32 출력을 FM 곡과 비슷한 크기로 (Munt 출력은 16bit 꽉 차게 나온다).</summary>
     private const double Mt32Level = 0.7;
@@ -302,7 +361,7 @@ public sealed class AudioEngine : IDisposable
     private string mt32Folder;
 
     /// <summary>MIDI 모듈 규격 (다음 재생부터): GM / MT-32.</summary>
-    public MidiModule MidiModule { get { lock (sync) return midi.Module; } set { lock (sync) midi.Module = value; } }
+    public MidiModule MidiModule { get { return Query(() => midi.Module); } set { Post(() => midi.Module = value); } }
 
     /// <summary>
     /// MT-32 에뮬레이터를 ROM 폴더로 연다 (이미 같은 폴더로 열려 있으면 그대로). 성공하면 ROM 설명, 실패하면 null과 이유.
@@ -313,6 +372,7 @@ public sealed class AudioEngine : IDisposable
         error = null;
         lock (sync)
         {
+            DrainLocked();
             if (mt32Emu != null && string.Equals(mt32Folder, romFolder, StringComparison.OrdinalIgnoreCase)) { midi.Mt32 = mt32Emu; return mt32Emu.RomDescription; }
             if (source == Source.Midi && midi.ActiveSynth == MidiSynth.Mt32) midi.Stop();
             if (mt32Emu != null) { mt32Emu.Dispose(); mt32Emu = null; }
@@ -332,16 +392,14 @@ public sealed class AudioEngine : IDisposable
     /// <summary>오르골 시험 연주: (틱, 음 번호) 목록을 빗살 소리로. ticksPerSecond = 돌리는 속도.</summary>
     public void PlayMusicBox(IEnumerable<KeyValuePair<int, int>> hits, double ticksPerSecond, int startTick, int endTick)
     {
-        lock (sync)
+        var list = new List<KeyValuePair<int, int>>(hits);   // UI 쪽 목록을 오디오 스레드가 나중에 읽지 않게 지금 복사
+        Post(() =>
         {
             if (sequencer.IsPlaying) sequencer.Stop();
             sop.Stop(); midi.Stop(); pcm.Stop(); vgm.Stop();
             source = Source.MusicBox;
-            musicBox.Start(hits, ticksPerSecond, Math.Max(0, startTick), endTick);
-            generation++;
-            this.startTick = Math.Max(0, startTick);
-            Publish();
-        }
+            musicBox.Start(list, ticksPerSecond, Math.Max(0, startTick), endTick);
+        }, Expect.Play, Math.Max(0, startTick));
     }
 
     /// <summary>
@@ -350,22 +408,19 @@ public sealed class AudioEngine : IDisposable
     /// </summary>
     public void PlayTracker(TrackerModule module, int startOrder = 0, int startRow = 0, int singlePattern = -1, bool loop = false, PlaybackOptions options = null, double skipMs = 0)
     {
-        lock (sync)
+        Post(() =>
         {
             if (sequencer.IsPlaying) sequencer.Stop();
             sop.Stop(); musicBox.Stop(); midi.Stop(); pcm.Stop(); vgm.Stop();
             source = Source.Tracker;
             tracker.Start(module, startOrder, startRow, singlePattern, loop, options, skipMs);
-            generation++;
-            this.startTick = skipMs;
-            Publish();
-        }
+        }, Expect.Play, skipMs);
     }
 
     /// <summary>트래커 편집기 시음: 곡 재생 중이 아니면 악기 sampleNo(1부터)로 note를 한 채널에서 낸다.</summary>
     public void TrackerJam(TrackerModule module, int sampleNo, int note, int channel)
     {
-        lock (sync)
+        Post(() =>
         {
             if (source == Source.Tracker && tracker.IsSongPlaying) return;
             if (sequencer.IsPlaying) sequencer.Stop();
@@ -373,11 +428,10 @@ public sealed class AudioEngine : IDisposable
             vgm.Stop();
             source = Source.Tracker;
             tracker.Jam(module, sampleNo, note, channel);
-            Publish();
-        }
+        });
     }
 
-    public void TrackerJamOff(int channel) { lock (sync) { if (source == Source.Tracker) tracker.JamOff(channel); } }
+    public void TrackerJamOff(int channel) { Post(() => { if (source == Source.Tracker) tracker.JamOff(channel); }); }
 
     /// <summary>트래커 재생 위치 (렌더 위치 기준, 출력 버퍼만큼 앞설 수 있다).</summary>
     public bool GetTrackerPosition(out int order, out int pattern, out int row)
@@ -390,25 +444,25 @@ public sealed class AudioEngine : IDisposable
     }
 
     /// <summary>오르골 시험 연주 속도 (틱/초)를 재생 중에 바꾼다.</summary>
-    public void SetMusicBoxSpeed(double ticksPerSecond) { lock (sync) { musicBox.SetSpeed(ticksPerSecond); } }
+    public void SetMusicBoxSpeed(double ticksPerSecond) { Post(() => musicBox.SetSpeed(ticksPerSecond)); }
 
     public void Stop()
     {
-        lock (sync) { sequencer.Stop(); sop.Stop(); musicBox.Stop(); tracker.Stop(); midi.Stop(); pcm.Stop(); vgm.Stop(); Publish(); }
+        Post(() => { sequencer.Stop(); sop.Stop(); musicBox.Stop(); tracker.Stop(); midi.Stop(); pcm.Stop(); vgm.Stop(); }, Expect.Stop);
     }
 
     // ---------------------------------------------------------------- 재생 조절 (Jukebox)
 
     /// <summary>지금 재생의 조절값 (Play에 넘긴 것). 값을 바꾼 뒤에는 아래 Set...을 부른다.</summary>
-    public PlaybackOptions Options { get { lock (sync) { return CurrentOptions; } } }
+    public PlaybackOptions Options { get { return Query(() => CurrentOptions); } }
 
     private PlaybackOptions CurrentOptions { get { return sopMode ? sop.Options : source == Source.Tracker ? tracker.Options : source == Source.Midi ? midi.Options : source == Source.Pcm ? pcmOptions : source == Source.Vgm ? vgm.Options : sequencer.Options; } }
 
-    public void SetSpeed(double speed) { lock (sync) { CurrentOptions.Speed = speed; if (sopMode) sop.ApplySpeed(); else if (source == Source.Tracker) tracker.ApplySpeed(); else if (source == Source.Midi) midi.ApplySpeed(); else if (source != Source.Vgm) sequencer.ApplySpeed(); } }
-    public void SetTranspose(int semitones) { lock (sync) { CurrentOptions.Transpose = semitones; } }
-    public void SetVoiceTranspose(int voice, int semitones) { lock (sync) { CurrentOptions.VoiceTranspose[voice] = semitones; } }
-    public void SetVoiceMute(int voice, bool mute) { lock (sync) { CurrentOptions.VoiceMute[voice] = mute; if (sopMode) sop.ApplyMute(voice); else if (source == Source.Tracker) tracker.ApplyMute(voice); else if (source == Source.Midi) midi.ApplyMute(voice); else if (source != Source.Vgm) sequencer.ApplyMute(voice); } }
-    public void SetGain(double gain) { lock (sync) { CurrentOptions.Gain = gain; } }
+    public void SetSpeed(double speed) { Post(() => { CurrentOptions.Speed = speed; if (sopMode) sop.ApplySpeed(); else if (source == Source.Tracker) tracker.ApplySpeed(); else if (source == Source.Midi) midi.ApplySpeed(); else if (source != Source.Vgm) sequencer.ApplySpeed(); }); }
+    public void SetTranspose(int semitones) { Post(() => CurrentOptions.Transpose = semitones); }
+    public void SetVoiceTranspose(int voice, int semitones) { Post(() => CurrentOptions.VoiceTranspose[voice] = semitones); }
+    public void SetVoiceMute(int voice, bool mute) { Post(() => { CurrentOptions.VoiceMute[voice] = mute; if (sopMode) sop.ApplyMute(voice); else if (source == Source.Tracker) tracker.ApplyMute(voice); else if (source == Source.Midi) midi.ApplyMute(voice); else if (source != Source.Vgm) sequencer.ApplyMute(voice); }); }
+    public void SetGain(double gain) { Post(() => CurrentOptions.Gain = gain); }
 
     /// <summary>지금 템포 배수 (곡의 템포 이벤트). SOP는 지금 템포 / 기본 템포.</summary>
     public double TempoMultiplier { get { lock (snap) return snapTempo; } }
@@ -450,22 +504,22 @@ public sealed class AudioEngine : IDisposable
     }
 
     /// <summary>시음 모드 (리듬 / 멜로디). 4-op 시음 중이면 그 소리는 그대로 둔다 (편집하면서 누르고 있는 음).</summary>
-    public void PreviewSetMode(bool rhythm) { lock (sync) { if (!(source == Source.Sop && sop.IsJam)) LeaveSop(); synth.SetRhythmMode(rhythm); } }
+    public void PreviewSetMode(bool rhythm) { Post(() => { if (!(source == Source.Sop && sop.IsJam)) LeaveSop(); synth.SetRhythmMode(rhythm); }); }
 
     public void PreviewSetInstrument(int voice, AdlibInstrument ins)
     {
-        lock (sync)
+        Post(() =>
         {
             if (voice >= 0 && voice < previewIns.Length) previewIns[voice] = ins;
             if (source == Source.Sop && sop.IsJam && voice == jamVoice && ins != null && ins.Is4Op) { sop.JamUpdate(SopConvert.ToSop(ins)); return; }
             LeaveSop();
             synth.SetInstrument(voice, ins);
-        }
+        });
     }
 
     public void PreviewNoteOn(int voice, int note)
     {
-        lock (sync)
+        Post(() =>
         {
             LeaveSop();
             if (SourcePlaying) return;
@@ -478,25 +532,25 @@ public sealed class AudioEngine : IDisposable
                 return;
             }
             synth.NoteOn(voice, note);
-        }
+        });
     }
 
     public void PreviewNoteOff(int voice)
     {
-        lock (sync)
+        Post(() =>
         {
             if (source == Source.Sop && sop.IsJam) { if (voice == jamVoice) sop.JamOff(); return; }
             if (!SourcePlaying) synth.NoteOff(voice);
-        }
+        });
     }
 
     public void PreviewAllOff()
     {
-        lock (sync)
+        Post(() =>
         {
             if (source == Source.Sop && sop.IsJam) { sop.JamOff(); return; }
             if (!SourcePlaying) synth.AllNotesOff();
-        }
+        });
     }
 
     /// <summary>SOP 재생(또는 4-op 시음)이 끝났으면 OPL2 쪽(시음)으로 돌아간다.</summary>
@@ -518,7 +572,12 @@ public sealed class AudioEngine : IDisposable
     {
         lock (sync)
         {
-            var mark = new Mark { Start = renderedSamples, Count = count, T0 = SourceTick, Playing = SourcePlaying, Gen = generation };
+            // 세대는 큐를 비우기 전에 읽는다: 그 사이 들어온 재생 명령이 이 블록에서 실행돼도 이 블록은 '이전 세대'로 남아
+            // 커서가 새 곡 시작점에 머문다 (출력 버퍼만큼 늦게 들리는 동안 앞서 가지 않게).
+            int gen;
+            lock (snap) gen = generation;
+            DrainLocked();
+            var mark = new Mark { Start = renderedSamples, Count = count, T0 = SourceTick, Playing = SourcePlaying, Gen = gen };
             RenderLocked(buffer, count, stereo);
             mark.T1 = SourceTick;
             lock (snap)

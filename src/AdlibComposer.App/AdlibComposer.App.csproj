@@ -19,6 +19,7 @@
     <!-- MIDI FM용 GM 뱅크 (Freedoom, BSD 3-Clause) -->
     <None Include="Defaults\resource\GENMIDI.OP2" Link="resource\GENMIDI.OP2" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <None Include="Defaults\resource\GENMIDI.OP2.LICENSE.txt" Link="resource\GENMIDI.OP2.LICENSE.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="Defaults\resource\systems.json" Link="resource\systems.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <!-- MT-32 에뮬레이터 (Munt, LGPL-2.1+): src/AdlibComposer.Mt32/build_mt32emu.bat로 빌드한 DLL이 있으면 실행 폴더로 -->
     <None Include="..\AdlibComposer.Mt32\mt32emu.dll" Link="mt32emu.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" Condition="Exists('..\AdlibComposer.Mt32\mt32emu.dll')" />
     <None Include="..\AdlibComposer.Mt32\LICENSE.mt32emu.txt" Link="LICENSE.mt32emu.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" Condition="Exists('..\AdlibComposer.Mt32\LICENSE.mt32emu.txt')" />

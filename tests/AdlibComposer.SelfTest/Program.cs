@@ -22,6 +22,20 @@ public static class Program
     public static int Main(string[] args)
     {
         AdlibComposer.Audio.Windows.WindowsAudio.Register();
+        if (args.Length > 1 && args[0] == "--test")
+        {
+            // 빠른 시험: 이름에 글자가 든 묶음만 (예: --test chip)
+            var suites = new (string, Action)[]
+            {
+                ("vgm", () => VgmTests.Run(Check)), ("vgmexport", () => VgmExportTests.Run(Check)), ("newchip", () => NewChipTests.Run(Check)),
+                ("chip", () => ChipTests.Run(Check)), ("midi", () => MidiTests.Run(Check)), ("jukebox", () => JukeboxTests.Run(Check)),
+                ("extra", () => ExtraTests.Run(Check)),
+            };
+            foreach (var (name, run) in suites) if (name.Contains(args[1], StringComparison.OrdinalIgnoreCase)) run();
+            Console.WriteLine();
+            Console.WriteLine("passed=" + passed + " failed=" + failed);
+            return failed == 0 ? 0 : 1;
+        }
         if (args.Length > 0 && (args[0] == "--probe" || args[0] == "--render" || args[0] == "--latency" || args[0] == "--drum" || args[0] == "--drumshape")) return Probe.Run(args);
         if (args.Length > 0 && args[0] == "--transcribe") return TranscribeTests.Probe(args);
         if (args.Length > 0 && args[0].StartsWith("--")) return DemoRender.Run(args);
@@ -46,10 +60,12 @@ public static class Program
         ChipTests.Run(Check);
         VgmTests.Run(Check);
         VgmExportTests.Run(Check);
+        NewChipTests.Run(Check);
         MidiSysExTests.Run(Check);
         ChipMidiTests.Run(Check);
         SongChipTests.Run(Check);
         TestRegistry();
+        ExtraTests.Run(Check);
         RealFileTests.Run(Check);
         Console.WriteLine();
         Console.WriteLine("passed=" + passed + " failed=" + failed);

@@ -32,6 +32,20 @@ public static class KoreanText
     private static readonly Encoding johabCodec = TryGet(1361);
     private static readonly Encoding wansungCodec = TryGet(949);
     private static readonly Encoding cp437 = TryGet(437);
+    private static readonly Encoding sjis = TryGetLenient(932);
+
+    /// <summary>일본어 Shift-JIS (PC-88 · PC-98 곡 태그). 코드페이지가 없으면 ASCII.</summary>
+    public static Encoding ShiftJis { get { return sjis ?? Encoding.ASCII; } }
+
+    private static Encoding TryGetLenient(int codePage)
+    {
+        try
+        {
+            Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+            return Encoding.GetEncoding(codePage, new EncoderReplacementFallback("?"), new DecoderReplacementFallback("?"));
+        }
+        catch (Exception) { return null; }
+    }
 
     private static Encoding TryGet(int codePage)
     {

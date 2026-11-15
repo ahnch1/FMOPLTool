@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using AdlibComposer.Audio.Chips;
 using AdlibComposer.Formats;
 
 namespace AdlibComposer.Audio;
@@ -11,7 +12,9 @@ namespace AdlibComposer.Audio;
 /// 채널 끄기 = PSG · SCC는 에뮬레이터의 Mute, OPL은 키온 비트(리듬 모드는 BD의 드럼 비트)를 지운다.</para>
 /// <para>되돌아가는 곡(루프)은 한 번 더 돌고 마지막 몇 초를 줄여 끝낸다. 위치 단위 = ms. 처음이 아닌 곳에서 시작하면
 /// 그곳까지 명령만 빨리 실행한다 (소리는 만들지 않음).</para>
-/// <para>둘째 칩(듀얼 칩) 명령과 그 밖의 칩 명령은 건너뛴다.</para>
+/// <para>그 밖의 칩(SN76489 · YM2413 · YM2612 · YM2151 · YM2203 · YM2608 · OKIM6295)은 <see cref="ISoundChip"/> 공통 경로로 낸다:
+/// 조옮김 · 끄기는 칩의 SetPitch · SetMute, 표시는 칩에 물어본다.</para>
+/// <para>둘째 칩(듀얼 칩) 명령과 모르는 칩 명령은 건너뛴다.</para>
 /// </summary>
 public sealed class VgmPlayer
 {
@@ -19,7 +22,7 @@ public sealed class VgmPlayer
     /// <summary>루프 곡 끝에서 줄여 가는 시간 (초).</summary>
     public const double FadeSeconds = 4.0;
 
-    public enum ChipKind { Psg, Scc, Fm }
+    public enum ChipKind { Psg, Scc, Fm, Other }
 
     /// <summary>믹서 한 줄 = 칩의 채널 하나.</summary>
     public struct Channel
@@ -27,6 +30,37 @@ public sealed class VgmPlayer
         public ChipKind Chip;
         public int Index;
         public string Label;
+        /// <summary>Other: 공통 칩 목록 안 번호.</summary>
+        public int Extra;
+    }
+
+    /// <summary>공통 경로로 내는 칩 하나 (칩 속도 → 44100 선형 보간).</summary>
+    private sealed class ExtraChip
+    {
+        public ISoundChip Chip;
+        public int Base;
+        public double Frac, Gain = 1.0;
+        public int PL, PR, CL, CR;
+    }
+
+    private readonly List<ExtraChip> extras = new List<ExtraChip>();
+    private ExtraChip xSn, xOpll, xOpn2, xOpm, xOpn, xOpna, xOki;
+    /// <summary>YM2612 PCM 데이터 뱅크 (블록 0x00) · 읽는 위치.</summary>
+    private byte[] pcmBank = new byte[0];
+    private int pcmLen, pcmPos;
+
+    /// <summary>곡이 쓰는 PSG · SCC · OPL 말고 다른 칩을 만든다 (채널 목록 순서).</summary>
+    private static List<ISoundChip> CreateOtherChips(VgmSong s)
+    {
+        var l = new List<ISoundChip>();
+        if (s.Sn76489Clock > 0) l.Add(new Sn76489(s.Sn76489Clock, Rate, s.SnFeedback, s.SnWidth));
+        if (s.Ym2413Clock > 0) l.Add(new Ym2413(s.Ym2413Clock));
+        if (s.Ym2612Clock > 0) l.Add(new OpnChip(OpnChip.Variant.Ym2612, s.Ym2612Clock));
+        if (s.Ym2151Clock > 0) l.Add(new Ym2151(s.Ym2151Clock));
+        if (s.Ym2203Clock > 0) l.Add(new OpnChip(OpnChip.Variant.Ym2203, s.Ym2203Clock));
+        if (s.Ym2608Clock > 0) l.Add(new OpnChip(OpnChip.Variant.Ym2608, s.Ym2608Clock));
+        if (s.Okim6295Clock > 0) l.Add(new Okim6295(s.Okim6295Clock, s.OkiPin7, Rate));
+        return l;
     }
 
     private VgmSong song;
@@ -88,6 +122,10 @@ public sealed class VgmPlayer
             int n = s.IsOpl3 ? 18 : 9;
             for (int i = 0; i < n; i++) l.Add(new Channel { Chip = ChipKind.Fm, Index = i, Label = "F" + (i + 1) });
         }
+        var others = CreateOtherChips(s);
+        for (int k = 0; k < others.Count; k++)
+            for (int i = 0; i < others[k].ChannelCount && l.Count < PlaybackOptions.Voices; i++)
+                l.Add(new Channel { Chip = ChipKind.Other, Index = i, Extra = k, Label = others[k].ChannelLabel(i) });
         return l;
     }
 
@@ -136,9 +174,25 @@ public sealed class VgmPlayer
             fmClock = opl3 ? s.Ymf262Clock / 4 : s.Ym3812Clock > 0 ? s.Ym3812Clock : s.Y8950Clock > 0 ? s.Y8950Clock : s.Ym3526Clock;   // OPL3 = 14.318MHz (OPL2의 4배)
         }
 
+        extras.Clear();
+        xSn = xOpll = xOpn2 = xOpm = xOpn = xOpna = xOki = null;
+        foreach (var chip in CreateOtherChips(s))
+        {
+            var x = new ExtraChip { Chip = chip, Base = -1 };
+            for (int i = 0; i < channels.Count; i++) if (channels[i].Chip == ChipKind.Other && channels[i].Extra == extras.Count) { x.Base = i; break; }
+            extras.Add(x);
+            if (chip is Sn76489) xSn = x;
+            else if (chip is Ym2413) xOpll = x;
+            else if (chip is Ym2151) xOpm = x;
+            else if (chip is Okim6295) xOki = x;
+            else if (chip is OpnChip o) { if (o.Type == OpnChip.Variant.Ym2612) xOpn2 = x; else if (o.Type == OpnChip.Variant.Ym2203) xOpn = x; else xOpna = x; }
+        }
+        pcmLen = 0; pcmPos = 0;
+
         // 칩이 여럿이면 각각 줄여 합이 넘치지 않게
-        int chips = (psg != null ? 1 : 0) + (scc != null ? 1 : 0) + (opl != null ? 1 : 0);
-        double share = chips <= 1 ? 1.0 : chips == 2 ? 0.7 : 0.58;
+        int chips = (psg != null ? 1 : 0) + (scc != null ? 1 : 0) + (opl != null ? 1 : 0) + extras.Count;
+        double share = chips <= 1 ? 1.0 : chips == 2 ? 0.7 : chips == 3 ? 0.58 : 0.5;
+        foreach (var x in extras) x.Gain = share;
         psgGain = 0.75 * share;
         sccGain = 0.75 * share;
         fmGain = 1.0 * share;
@@ -175,7 +229,7 @@ public sealed class VgmPlayer
     public void Step()
     {
         if (!playing) return;
-        if (--syncCountdown <= 0) { syncCountdown = 64; SyncAdjustments(); }
+        if (--syncCountdown <= 0) { syncCountdown = 64; SyncAdjustments(); foreach (var x in extras) UpdateOther(x); }
         clock += Math.Max(0.05, Options.Speed);
         while (playing && due <= clock) ExecuteOne();
         if (clock >= playLength) playing = false;
@@ -199,10 +253,24 @@ public sealed class VgmPlayer
             l = (oplPrevL + (oplCurL - oplPrevL) * oplFrac) * fmGain;
             r = (oplPrevR + (oplCurR - oplPrevR) * oplFrac) * fmGain;
         }
-        double fade = 1.0;
-        if (song != null && song.LoopOffset > 0)
+        foreach (var x in extras)
         {
-            double fadeLen = Math.Min(FadeSeconds * Rate, song.LoopSamples);
+            int nr = x.Chip.NativeRate;
+            if (nr == Rate) { x.Chip.Generate(out int a, out int b); l += a * x.Gain; r += b * x.Gain; continue; }
+            x.Frac += nr / (double)Rate;
+            while (x.Frac >= 1.0)
+            {
+                x.Frac -= 1.0;
+                x.PL = x.CL; x.PR = x.CR;
+                x.Chip.Generate(out x.CL, out x.CR);
+            }
+            l += (x.PL + (x.CL - x.PL) * x.Frac) * x.Gain;
+            r += (x.PR + (x.CR - x.PR) * x.Frac) * x.Gain;
+        }
+        double fade = 1.0;
+        if (song != null && (song.LoopOffset > 0 || song.FadeSeconds > 0))
+        {
+            double fadeLen = song.LoopOffset > 0 ? Math.Min(FadeSeconds * Rate, song.LoopSamples) : song.FadeSeconds * Rate;
             double left0 = playLength - clock;
             if (left0 < fadeLen) fade = Math.Max(0, left0 / fadeLen);
         }
@@ -246,12 +314,82 @@ public sealed class VgmPlayer
                 break;
             case 0x5E: if (opl != null && opl3) WriteOpl(d[pos + 1], d[pos + 2]); break;
             case 0x5F: if (opl != null && opl3) WriteOpl(0x100 | d[pos + 1], d[pos + 2]); break;
+            case 0x50: Other(xSn, 0, 0, d[pos + 1]); break;
+            case 0x4F: Other(xSn, 1, 0, d[pos + 1]); break;
+            case 0x51: Other(xOpll, 0, d[pos + 1], d[pos + 2]); break;
+            case 0x52: Other(xOpn2, 0, d[pos + 1], d[pos + 2]); break;
+            case 0x53: Other(xOpn2, 1, d[pos + 1], d[pos + 2]); break;
+            case 0x54: Other(xOpm, 0, d[pos + 1], d[pos + 2]); break;
+            case 0x55: Other(xOpn, 0, d[pos + 1], d[pos + 2]); break;
+            case 0x56: Other(xOpna, 0, d[pos + 1], d[pos + 2]); break;
+            case 0x57: Other(xOpna, 1, d[pos + 1], d[pos + 2]); break;
+            case 0xB8: if ((d[pos + 1] & 0x80) == 0) Other(xOki, 0, d[pos + 1], d[pos + 2]); break;
+            case 0x67: DataBlock(d, pos); break;
+            case 0xE0: pcmPos = (int)VgmFormat.U32(d, pos + 1); break;
             default:
                 if (c >= 0x70 && c <= 0x7F) due += (c & 15) + 1;
-                else if (c >= 0x80 && c <= 0x8F) due += c & 15;   // YM2612 DAC + 기다림: 기다림만
+                else if (c >= 0x80 && c <= 0x8F)
+                {
+                    // YM2612 DAC: 뱅크에서 한 바이트를 0x2A에 쓰고 기다림
+                    if (xOpn2 != null && pcmPos < pcmLen) Other(xOpn2, 0, 0x2A, pcmBank[pcmPos]);
+                    pcmPos++;
+                    due += c & 15;
+                }
                 break;
         }
         pos += len;
+    }
+
+    // ================================================================ 공통 칩
+
+    private void Other(ExtraChip x, int port, int r, int v)
+    {
+        if (x == null) return;
+        x.Chip.Write(port, r, v);
+        UpdateOther(x);
+    }
+
+    /// <summary>데이터 블록 (0x67 0x66 종류 크기 …): YM2612 PCM · YM2608 ADPCM · OKIM6295 ROM.</summary>
+    private void DataBlock(byte[] d, int p)
+    {
+        int type = d[p + 2];
+        int size = (int)(VgmFormat.U32(d, p + 3) & 0x7FFFFFFF);
+        int at = p + 7;
+        if (at + size > d.Length) return;
+        if (type == 0x00)
+        {
+            if (pcmLen + size > pcmBank.Length) Array.Resize(ref pcmBank, Math.Max(pcmLen + size, pcmBank.Length * 2));
+            Array.Copy(d, at, pcmBank, pcmLen, size);
+            pcmLen += size;
+            return;
+        }
+        if ((type == 0x81 || type == 0x8B) && size > 8)
+        {
+            int start = (int)VgmFormat.U32(d, at + 4);
+            var data = new byte[size - 8];
+            Array.Copy(d, at + 8, data, 0, data.Length);
+            if (type == 0x81 && xOpna != null) ((OpnChip)xOpna.Chip).LoadAdpcm(data, start);
+            if (type == 0x8B && xOki != null) ((Okim6295)xOki.Chip).LoadRom(data, start);
+        }
+    }
+
+    /// <summary>칩에 물어 채널 표시를 고친다.</summary>
+    private void UpdateOther(ExtraChip x)
+    {
+        if (x.Base < 0) return;
+        int n = Math.Min(x.Chip.ChannelCount, channels.Count - x.Base);
+        for (int i = 0; i < n; i++)
+        {
+            int v = x.Base + i;
+            double f = x.Chip.ChannelFrequency(i);
+            float lv = x.Chip.ChannelLevel(i);
+            if (f > 0) SetVoice(v, true, f, lv);
+            else
+            {
+                SetVoice(v, false, 0, lv);
+                if (x.Chip.ChannelActive(i)) everSounded[v] = true;
+            }
+        }
     }
 
     private void EndOfData()
@@ -445,6 +583,10 @@ public sealed class VgmPlayer
                     WriteOplFreq(c.Index / 9, c.Index % 9);
                     if (c.Index >= 6 && c.Index < 9) WriteOplRhythm();
                     break;
+                case ChipKind.Other:
+                    extras[c.Extra].Chip.SetMute(c.Index, mute);
+                    extras[c.Extra].Chip.SetPitch(c.Index, Ratio(semis));
+                    break;
             }
         }
     }
@@ -495,6 +637,12 @@ public sealed class VgmPlayer
                     return (psgReg[8 + c.Index] & 0x10) != 0 ? t + " · 엔벨로프" : t;
                 }
             case ChipKind.Scc: return song.SccPlus ? "SCC+ 파형" : "SCC 파형";
+            case ChipKind.Other:
+                {
+                    var chip = c.Extra < extras.Count ? extras[c.Extra].Chip : null;
+                    if (chip is Ym2413 ll) { string n = ll.InstrumentOf(c.Index); return n.Length > 0 ? "OPLL " + n : "OPLL 리듬"; }
+                    return chip != null ? chip.Name : "";
+                }
             default: return opl3 ? "OPL3 FM" : "FM";
         }
     }

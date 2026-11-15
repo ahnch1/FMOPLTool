@@ -488,6 +488,7 @@ internal sealed class MainForm : Form
             Item("Export Instrument (.INS)...", delegate { ExportInstrument(); }),
             Item("Export Score (text)...", delegate { ExportScoreText(); }),
             Item("Export VGM (chip log)...", delegate { ExportVgm(); }),
+            Item("Extract Disk Image (D88 / FDI / HDM)...", delegate { ExtractDiskImage(); }),
             new ToolStripSeparator(),
             Item("Preferences...", delegate { ShowPreferences(); }, Keys.Control | Keys.Oemcomma),
             new ToolStripSeparator(),
@@ -1217,6 +1218,37 @@ internal sealed class MainForm : Form
                 using (var fs = File.Create(dlg.FileName)) new TextScoreExporter().Export(score, fs);
             }
             catch (Exception ex) { Fail("악보를 내보낼 수 없습니다.", ex); }
+        }
+    }
+
+    /// <summary>
+    /// PC-88 · PC-98 디스크 이미지의 파일을 이미지 옆 폴더 ("이름_files")에 꺼내고 왼쪽 목록에서 그 폴더를 연다.
+    /// FAT12 (PC-98 MS-DOS) · N88-BASIC (PC-88 2D)을 읽는다.
+    /// </summary>
+    private void ExtractDiskImage()
+    {
+        string filter = "Disk image (" + string.Join(";", DiskImage.Extensions.Select(e => "*" + e)) + ")|" + string.Join(";", DiskImage.Extensions.Select(e => "*" + e)) + "|All files (*.*)|*.*";
+        using (var dlg = new OpenFileDialog { Filter = filter, Title = "Extract disk image", InitialDirectory = StartDir(null) })
+        {
+            if (dlg.ShowDialog(this) != DialogResult.OK) return;
+            try
+            {
+                Cursor = Cursors.WaitCursor;
+                var img = DiskImage.Load(dlg.FileName);
+                string folder = Path.Combine(Path.GetDirectoryName(dlg.FileName), Path.GetFileNameWithoutExtension(dlg.FileName) + "_files");
+                var files = img.ExtractAll(folder, out string fs);
+                if (fs.Length == 0)
+                {
+                    AppLog.Warn("디스크", "파일 시스템을 알 수 없습니다: " + Path.GetFileName(dlg.FileName),
+                        img.Format + " " + img.Media + ", " + img.Cylinders + "×" + img.Heads + "×" + img.SectorsPerTrack + " × " + img.SectorSize + "바이트 · 읽는 것: FAT12 (PC-98 MS-DOS), N88-BASIC (PC-88 2D)");
+                    return;
+                }
+                AppLog.Info("디스크", "꺼내기: " + Path.GetFileName(dlg.FileName) + " (" + img.Format + " " + img.Media + ", " + fs + ") → " + folder + " · 파일 " + files.Count + "개",
+                    string.Join(Environment.NewLine, files.Select(f => f.Substring(folder.Length + 1))));
+                browser.OpenFolder(folder);
+            }
+            catch (Exception ex) { Fail("디스크 이미지를 읽을 수 없습니다.", ex); }
+            finally { Cursor = Cursors.Default; }
         }
     }
 

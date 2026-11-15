@@ -1,0 +1,187 @@
+// FMOPLTools 시스템 정의: 같은 id는 프로그램 기본값을 덮어쓰고, 새 id는 더해진다.
+// 숫자는 10진 또는 "0x7C" 같은 16진 문자열. KSS (msx / sms) · IMF (adlib / wolf3d tickRate)가 쓴다.
+{
+  "systems": [
+    {
+      "id": "msx",
+      "name": "MSX",
+      "cpu": "Z80",
+      "cpuClock": 3579545,
+      "frameRate": 60,
+      "chips": [
+        {
+          "chip": "AY-3-8910",
+          "clock": 1789772.5,
+          "ports": {
+            "addr": "0xA0",
+            "data": "0xA1",
+            "read": "0xA2"
+          }
+        },
+        {
+          "chip": "SCC",
+          "clock": 3579545,
+          "memory": "0x9800"
+        },
+        {
+          "chip": "SCC+",
+          "clock": 3579545,
+          "memory": "0xB800"
+        },
+        {
+          "chip": "YM2413",
+          "clock": 3579545,
+          "ports": {
+            "addr": "0x7C",
+            "data": "0x7D"
+          }
+        },
+        {
+          "chip": "Y8950",
+          "clock": 3579545,
+          "ports": {
+            "addr": "0xC0",
+            "data": "0xC1"
+          }
+        },
+        {
+          "chip": "Mapper",
+          "ports": {
+            "bank": "0xFE"
+          }
+        }
+      ]
+    },
+    {
+      "id": "sms",
+      "name": "Sega Master System / Game Gear",
+      "cpu": "Z80",
+      "cpuClock": 3579545,
+      "frameRate": 60,
+      "chips": [
+        {
+          "chip": "SN76489",
+          "clock": 3579545,
+          "ports": {
+            "data": "0x7F",
+            "data2": "0x7E",
+            "stereo": "0x06"
+          }
+        },
+        {
+          "chip": "YM2413",
+          "clock": 3579545,
+          "ports": {
+            "addr": "0xF0",
+            "data": "0xF1"
+          }
+        },
+        {
+          "chip": "Mapper",
+          "ports": {
+            "bank": "0xFE"
+          },
+          "memory": "0xFFFF"
+        }
+      ]
+    },
+    {
+      "id": "pc88",
+      "name": "NEC PC-8801 (OPN)",
+      "cpu": "Z80",
+      "cpuClock": 3993600,
+      "frameRate": 60,
+      "chips": [
+        {
+          "chip": "YM2203",
+          "clock": 3993600,
+          "ports": {
+            "addr": "0x44",
+            "data": "0x45"
+          }
+        }
+      ]
+    },
+    {
+      "id": "pc98-86",
+      "name": "NEC PC-9801-86 (OPNA)",
+      "cpu": "x86",
+      "cpuClock": 8000000,
+      "frameRate": 56.4,
+      "chips": [
+        {
+          "chip": "YM2608",
+          "clock": 7987200,
+          "ports": {
+            "addr": "0x188",
+            "data": "0x18A",
+            "addr2": "0x18C",
+            "data2": "0x18E"
+          }
+        }
+      ]
+    },
+    {
+      "id": "x68000",
+      "name": "Sharp X68000",
+      "cpu": "68000",
+      "cpuClock": 10000000,
+      "frameRate": 55.46,
+      "chips": [
+        {
+          "chip": "YM2151",
+          "clock": 4000000
+        },
+        {
+          "chip": "OKIM6295",
+          "clock": 8000000
+        }
+      ]
+    },
+    {
+      "id": "adlib",
+      "name": "AdLib (OPL2)",
+      "cpu": "x86",
+      "tickRate": 560,
+      "chips": [
+        {
+          "chip": "YM3812",
+          "clock": 3579545,
+          "ports": {
+            "addr": "0x388",
+            "data": "0x389"
+          }
+        }
+      ]
+    },
+    {
+      "id": "wolf3d",
+      "name": "Wolfenstein 3D (IMF 700Hz)",
+      "cpu": "x86",
+      "tickRate": 700,
+      "chips": [
+        {
+          "chip": "YM3812",
+          "clock": 3579545
+        }
+      ]
+    },
+    {
+      "id": "sbpro2",
+      "name": "Sound Blaster Pro 2 (OPL3)",
+      "cpu": "x86",
+      "chips": [
+        {
+          "chip": "YMF262",
+          "clock": 14318180,
+          "ports": {
+            "addr": "0x220",
+            "data": "0x221",
+            "addr2": "0x222",
+            "data2": "0x223"
+          }
+        }
+      ]
+    }
+  ]
+}

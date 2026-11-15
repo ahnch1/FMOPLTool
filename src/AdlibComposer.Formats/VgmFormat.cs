@@ -10,7 +10,10 @@ namespace AdlibComposer.Formats;
 /// <summary>
 /// VGM 곡 (.vgm, gzip으로 줄인 .vgz): 소리 칩 레지스터 쓰기와 기다림(44100Hz 샘플 단위)을 그대로 적은 기록.
 /// 이 프로그램이 내는 칩: AY-3-8910 / YM2149 (PSG, 0xA0), K051649 / K052539 (SCC · SCC+, 0xD2),
-/// YM3812 (OPL2, 0x5A) · YM3526 (OPL, 0x5B) · Y8950 (MSX-AUDIO FM 부분, 0x5C) · YMF262 (OPL3, 0x5E · 0x5F).
+/// YM3812 (OPL2, 0x5A) · YM3526 (OPL, 0x5B) · Y8950 (MSX-AUDIO FM 부분, 0x5C) · YMF262 (OPL3, 0x5E · 0x5F),
+/// SN76489 (0x50 · 0x4F), YM2413 (OPLL, 0x51), YM2612 (OPN2, 0x52 · 0x53 · DAC 0x80~0x8F), YM2151 (OPM, 0x54),
+/// YM2203 (OPN, 0x55), YM2608 (OPNA, 0x56 · 0x57, ADPCM 블록 0x81), OKIM6295 (0xB8, ROM 블록 0x8B).
+/// 둘째 칩(듀얼 칩)은 소리 내지 않는다.
 /// 그 밖의 칩 명령은 길이만 알고 건너뛴다 (<see cref="UnsupportedChips"/>에 이름).
 /// 명령 해석은 재생기(AdlibComposer.Audio.VgmPlayer)가 <see cref="Data"/>를 직접 읽으며 한다.
 /// </summary>
@@ -19,6 +22,10 @@ public sealed class VgmSong
     public const int Rate = 44100;
 
     public string FilePath;
+    /// <summary>원래 형식 (VGM이 아닌 것을 바꿔 읽었으면 그 이름, 예: "S98 v3" · "KSS").</summary>
+    public string SourceFormat = "VGM";
+    /// <summary>루프가 없는 곡을 끝에서 줄여 끝낼 시간 (초, 0 = 그대로). KSS처럼 길이를 정해 자른 곡.</summary>
+    public double FadeSeconds;
     /// <summary>파일 전체 (gzip을 푼 것).</summary>
     public byte[] Data = new byte[0];
     /// <summary>판 번호 (0x171 = 1.71).</summary>
@@ -43,6 +50,11 @@ public sealed class VgmSong
     /// <summary>K052539 (SCC+): 다섯 채널 모두 자기 파형.</summary>
     public bool SccPlus;
     public double Ym3812Clock, Ym3526Clock, Y8950Clock, Ymf262Clock;
+    public double Sn76489Clock, Ym2413Clock, Ym2612Clock, Ym2151Clock, Ym2203Clock, Ym2608Clock, Okim6295Clock;
+    /// <summary>SN76489 노이즈 되먹임 · LFSR 너비 (0 = 기본값).</summary>
+    public int SnFeedback, SnWidth;
+    /// <summary>OKIM6295 핀7 (클럭 칸 bit31).</summary>
+    public bool OkiPin7;
 
     /// <summary>파일에 있지만 이 프로그램이 소리 내지 않는 칩.</summary>
     public readonly List<string> UnsupportedChips = new List<string>();
@@ -54,8 +66,10 @@ public sealed class VgmSong
     public bool HasScc { get { return SccClock > 0; } }
     public bool HasOpl { get { return Ym3812Clock > 0 || Ym3526Clock > 0 || Y8950Clock > 0 || Ymf262Clock > 0; } }
     public bool IsOpl3 { get { return Ymf262Clock > 0; } }
+    /// <summary>PSG · SCC · OPL 말고 다른 칩 (공통 칩 경로로 내는 것).</summary>
+    public bool HasOther { get { return Sn76489Clock > 0 || Ym2413Clock > 0 || Ym2612Clock > 0 || Ym2151Clock > 0 || Ym2203Clock > 0 || Ym2608Clock > 0 || Okim6295Clock > 0; } }
     /// <summary>소리 낼 수 있는 칩이 하나라도 있는가.</summary>
-    public bool IsPlayable { get { return HasPsg || HasScc || HasOpl; } }
+    public bool IsPlayable { get { return HasPsg || HasScc || HasOpl || HasOther; } }
     public bool AyIsYm { get { return AyType >= 0x10; } }
 
     public string VersionText { get { return (Version >> 8).ToString("X") + "." + (Version & 0xFF).ToString("X2"); } }
@@ -83,6 +97,13 @@ public sealed class VgmSong
         get
         {
             var l = new List<string>();
+            if (Sn76489Clock > 0) l.Add("SN76489");
+            if (Ym2413Clock > 0) l.Add("YM2413");
+            if (Ym2612Clock > 0) l.Add("YM2612");
+            if (Ym2151Clock > 0) l.Add("YM2151");
+            if (Ym2203Clock > 0) l.Add("YM2203");
+            if (Ym2608Clock > 0) l.Add("YM2608");
+            if (Okim6295Clock > 0) l.Add("OKIM6295");
             if (HasPsg) l.Add(AyTypeName);
             if (HasScc) l.Add(SccPlus ? "SCC+" : "SCC");
             if (Ymf262Clock > 0) l.Add("OPL3");
@@ -172,13 +193,32 @@ public static class VgmFormat
         s.Ym3526Clock = hz(0x54);
         s.Y8950Clock = hz(0x58);
         s.Ymf262Clock = hz(0x5C);
+        s.Sn76489Clock = hz(0x0C);
+        if (s.Sn76489Clock > 0 && s.Version >= 0x110 && 0x2B < dataOfs) { s.SnFeedback = d[0x28] | (d[0x29] << 8); s.SnWidth = d[0x2A]; }
+        s.Ym2413Clock = hz(0x10);
+        s.Ym2612Clock = hz(0x2C);
+        s.Ym2151Clock = hz(0x30);
+        s.Ym2203Clock = hz(0x44);
+        s.Ym2608Clock = hz(0x48);
+        s.Okim6295Clock = hz(0x98);
+        s.OkiPin7 = (clock(0x98) & 0x80000000) != 0;
+        if (s.Version < 0x110 && s.Ym2413Clock > 0)
+        {
+            // 1.10 전에는 0x10 칸 하나가 YM2413 · YM2612 · YM2151 모두의 클럭: 명령으로 어느 칩인지 본다
+            bool o = false, n2 = false, m = false;
+            ScanCommands(s, c => { if (c == 0x51) o = true; else if (c == 0x52 || c == 0x53) n2 = true; else if (c == 0x54) m = true; });
+            double clk = s.Ym2413Clock;
+            s.Ym2413Clock = o ? clk : 0;
+            if (n2) s.Ym2612Clock = clk;
+            if (m) s.Ym2151Clock = clk;
+        }
 
         var other = new (int ofs, string name)[]
         {
-            (0x0C, "SN76489"), (0x10, "YM2413 (OPLL)"), (0x2C, "YM2612 (OPN2)"), (0x30, "YM2151 (OPM)"), (0x38, "SegaPCM"), (0x40, "RF5C68"),
-            (0x44, "YM2203 (OPN)"), (0x48, "YM2608 (OPNA)"), (0x4C, "YM2610 (OPNB)"), (0x60, "YMF278B (OPL4)"), (0x64, "YMF271 (OPX)"),
+            (0x38, "SegaPCM"), (0x40, "RF5C68"),
+            (0x4C, "YM2610 (OPNB)"), (0x60, "YMF278B (OPL4)"), (0x64, "YMF271 (OPX)"),
             (0x68, "YMZ280B"), (0x6C, "RF5C164"), (0x70, "PWM"), (0x80, "Game Boy DMG"), (0x84, "NES APU"), (0x88, "MultiPCM"),
-            (0x8C, "uPD7759"), (0x90, "OKIM6258"), (0x98, "OKIM6295"), (0xA0, "K054539"), (0xA4, "HuC6280"), (0xA8, "C140"),
+            (0x8C, "uPD7759"), (0x90, "OKIM6258"), (0xA0, "K054539"), (0xA4, "HuC6280"), (0xA8, "C140"),
             (0xAC, "K053260"), (0xB0, "Pokey"), (0xB4, "QSound"), (0xB8, "SCSP"), (0xC0, "WonderSwan"), (0xC4, "VSU"),
             (0xC8, "SAA1099"), (0xCC, "ES5503"), (0xD0, "ES5506"), (0xD8, "X1-010"), (0xDC, "C352"), (0xE0, "GA20"),
         };
@@ -188,6 +228,22 @@ public static class VgmFormat
         if (gd3 > 0 && gd3 + 12 <= d.Length) ReadGd3(d, gd3, s);
         if (s.TotalSamples <= 0) s.TotalSamples = CountSamples(s);
         return s;
+    }
+
+    /// <summary>명령 바이트를 하나씩 본다 (끝까지 또는 0x66까지).</summary>
+    private static void ScanCommands(VgmSong s, Action<int> seen)
+    {
+        int p = s.DataOffset;
+        var d = s.Data;
+        while (p < s.DataEnd)
+        {
+            int c = d[p];
+            if (c == 0x66) break;
+            seen(c);
+            int len = CommandLength(d, p);
+            if (len <= 0) break;
+            p += len;
+        }
     }
 
     /// <summary>머리말에 길이가 없으면 명령을 훑어 기다림을 더한다.</summary>
@@ -260,7 +316,7 @@ public static class VgmFormat
         s.ReleaseDate = F(8); s.Ripper = F(9); s.Notes = F(10);
     }
 
-    internal static uint U32(byte[] d, int o) { return o + 4 <= d.Length ? (uint)(d[o] | (d[o + 1] << 8) | (d[o + 2] << 16) | (d[o + 3] << 24)) : 0; }
+    public static uint U32(byte[] d, int o) { return o + 4 <= d.Length ? (uint)(d[o] | (d[o + 1] << 8) | (d[o + 2] << 16) | (d[o + 3] << 24)) : 0; }
 
     /// <summary>머리말의 상대 위치 칸 → 파일 안 위치 (0이면 0).</summary>
     private static int Rel(byte[] d, int o)

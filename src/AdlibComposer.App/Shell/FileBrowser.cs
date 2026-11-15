@@ -23,7 +23,7 @@ internal sealed class FileBrowser : UserControl
     private static readonly string[] AdlibExt = { ".rol", ".ims", ".sop" };
     private static readonly string[] TrackerExt = { ".s3m", ".stm", ".mod", ".nst" };
     private static readonly string[] MidiExt = { ".mid", ".midi", ".wrk" };
-    private static readonly string[] VgmExt = { ".vgm", ".vgz" };
+    private static readonly string[] VgmExt = AdlibComposer.Audio.ChipSongs.Extensions.ToArray();
     private static readonly string[] AudioExt = { ".mp3", ".wav", ".wma", ".m4a", ".aac", ".flac" };
 
     /// <summary>목록 한 줄: 위 폴더(..) · 폴더 · 곡 파일.</summary>
@@ -440,7 +440,7 @@ internal sealed class FileBrowser : UserControl
         {
             string ext = Path.GetExtension(path).ToLowerInvariant();
             if (MidiFiles.IsMidi(path)) t = MidiFiles.Load(path).Title;
-            else if (VgmFormat.IsVgm(path)) { var v = VgmFormat.Load(path); t = v.TitleEn.Length > 0 ? v.TitleEn : v.TitleJp; }
+            else if (AdlibComposer.Audio.ChipSongs.IsChipSong(path)) t = AdlibComposer.Audio.ChipSongs.Title(path);
             else if (SopFormat.IsSop(path)) t = SopFormat.Load(path).Title;
             else if (TrackerFiles.IsTracker(path)) t = TrackerFiles.Load(path).Title;
             else if (ext == ".ims")

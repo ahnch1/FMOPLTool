@@ -23,7 +23,7 @@ namespace AdlibComposer.App.Views;
 [System.ComponentModel.DesignerCategory("Code")]   // 코드로 만든 화면: 디자이너 대신 코드로 연다
 internal sealed class JukeboxView : UserControl, IShellPage
 {
-    private static readonly string[] SongExtensions = { ".rol", ".ims", ".sop", ".s3m", ".stm", ".mod", ".nst", ".mid", ".midi", ".wrk", ".vgm", ".vgz" };
+    private static readonly string[] SongExtensions = new[] { ".rol", ".ims", ".sop", ".s3m", ".stm", ".mod", ".nst", ".mid", ".midi", ".wrk" }.Concat(ChipSongs.Extensions).ToArray();
 
     private readonly Workspace ws;
     private readonly Func<AppSettings> settings;
@@ -113,18 +113,25 @@ internal sealed class JukeboxView : UserControl, IShellPage
     /// <summary>Jukebox가 재생하는 형식인가 (MP3 · WAV는 Transcribe).</summary>
     public static bool CanPlay(string path)
     {
-        return Array.IndexOf(SongExtensions, (Path.GetExtension(path) ?? "").ToLowerInvariant()) >= 0;
+        return Array.IndexOf(SongExtensions, (Path.GetExtension(ChipSongs.FilePart(path)) ?? "").ToLowerInvariant()) >= 0;
     }
 
     /// <summary>공용 파일 목록에서 재생할 수 있는 곡만 (보이는 순서).</summary>
     private List<string> CurrentListPaths()
     {
-        return browser.Paths.Where(CanPlay).ToList();
+        // 곡이 여럿 든 파일 (KSS)은 곡마다 한 줄 ("경로::번호")
+        var l = new List<string>();
+        foreach (var p in browser.Paths.Where(CanPlay))
+        {
+            if (ChipSongs.IsChipSong(p)) l.AddRange(ChipSongs.Tracks(p).Select(t => t.path));
+            else l.Add(p);
+        }
+        return l;
     }
 
     private void MarkPlaying()
     {
-        browser.MarkCurrent(currentPath);
+        browser.MarkCurrent(ChipSongs.FilePart(currentPath));
     }
 
     /// <summary>끌어다 놓은 곡 파일만 재생한다 (다음 곡 목록 = 놓은 곡들, 하나면 그 곡만).</summary>
@@ -376,7 +383,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
         if (SopFormat.IsSop(path)) { PlaySopFile(path, fromList); return; }
         if (TrackerFiles.IsTracker(path)) { PlayTrackerFile(path, fromList); return; }
         if (MidiFiles.IsMidi(path)) { PlayMidiFile(path, fromList); return; }
-        if (VgmFormat.IsVgm(path)) { PlayVgmFile(path, fromList); return; }
+        if (ChipSongs.IsChipSong(path)) { PlayVgmFile(path, fromList); return; }
         Song s;
         try
         {
@@ -637,8 +644,14 @@ internal sealed class JukeboxView : UserControl, IShellPage
     /// </summary>
     private void PlayVgmFile(string path, bool fromList)
     {
+        // 곡이 여럿 든 파일을 그냥 열면 첫 곡 ("경로::0") — 다음 곡 = 그 파일의 다음 곡
+        if (path.IndexOf("::", 2, StringComparison.Ordinal) < 0)
+        {
+            var tracks = ChipSongs.Tracks(path);
+            if (tracks.Count > 1) path = tracks[0].path;
+        }
         VgmSong v;
-        try { v = VgmFormat.Load(path); }
+        try { v = ChipSongs.Load(path); }
         catch (Exception ex)
         {
             AppLog.Error("Jukebox", "곡을 열 수 없습니다: " + Path.GetFileName(path), ex);
@@ -647,7 +660,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
         if (!v.IsPlayable)
         {
             AppLog.Warn("Jukebox", "소리 낼 수 있는 칩이 없는 VGM입니다: " + Path.GetFileName(path),
-                "이 곡의 칩: " + (v.UnsupportedChips.Count > 0 ? string.Join(", ", v.UnsupportedChips) : "알 수 없음") + " · 재생하는 칩: AY-3-8910 / YM2149, SCC, OPL / OPL2 / Y8950 / OPL3");
+                "이 곡의 칩: " + (v.UnsupportedChips.Count > 0 ? string.Join(", ", v.UnsupportedChips) : "알 수 없음") + " · 재생하는 칩: AY-3-8910 / YM2149, SCC, OPL / OPL2 / Y8950 / OPL3, SN76489, YM2413, YM2151, YM2203, YM2608, YM2612, OKIM6295");
             return;
         }
         StopEngine();
@@ -675,16 +688,17 @@ internal sealed class JukeboxView : UserControl, IShellPage
         display.LyricFile = null;
         var info = new List<string>();
         foreach (var t in new[] { v.Game, v.SystemName, v.Author, v.ReleaseDate }) if (!string.IsNullOrEmpty(t)) info.Add(t);
-        display.InfoLine = info.Count > 0 ? string.Join(" · ", info) : "VGM " + v.VersionText;
+        string fmtName = v.SourceFormat == "VGM" ? "VGM " + v.VersionText : v.SourceFormat;
+        display.InfoLine = info.Count > 0 ? string.Join(" · ", info) : fmtName;
         display.TotalSeconds = totalSeconds;
-        display.Mode = "VGM " + v.VersionText + " · " + v.ChipSummary + (v.LoopOffset > 0 ? " · 루프" : "");
+        display.Mode = fmtName + " · " + v.ChipSummary + (v.LoopOffset > 0 ? " · 루프" : "");
         lyrics.Lyrics = null;
         lyrics.State = null;
         lenLabel.Text = DeckTheme.Clock(totalSeconds);
         seek.Enabled = true;
         RebuildMixerRows();
         MarkPlaying();
-        AppLog.Info("Jukebox", "재생: " + Path.GetFileName(path) + " — VGM " + v.VersionText + ", " + v.ChipSummary + ", 채널 " + active + "/" + vgmChannels.Count + ", " + DeckTheme.Clock(totalSeconds)
+        AppLog.Info("Jukebox", "재생: " + Path.GetFileName(path) + " — " + fmtName + ", " + v.ChipSummary + ", 채널 " + active + "/" + vgmChannels.Count + ", " + DeckTheme.Clock(totalSeconds)
             + (v.LoopOffset > 0 ? " (루프 " + DeckTheme.Clock(v.LoopSamples / (double)VgmSong.Rate) + ")" : ""),
             v.UnsupportedChips.Count > 0 ? "소리 내지 않는 칩: " + string.Join(", ", v.UnsupportedChips) : null);
         StartAt(0);

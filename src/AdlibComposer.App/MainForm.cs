@@ -505,6 +505,7 @@ internal sealed class MainForm : Form
             Item("Export Score (text)...", delegate { ExportScoreText(); }),
             Item("Export VGM (chip log)...", delegate { ExportVgm(); }),
             Item("Extract Disk Image (D88 / FDI / HDM)...", delegate { ExtractDiskImage(); }),
+            Item("Compare Hoot Game Lists...", delegate { new HootCompareForm(HootStartFolder()).Show(this); }),
             new ToolStripSeparator(),
             Item("Preferences...", delegate { ShowPreferences(); }, Keys.Control | Keys.Oemcomma),
             new ToolStripSeparator(),
@@ -1290,6 +1291,18 @@ internal sealed class MainForm : Form
             catch (Exception ex) { Fail("VGM으로 내보낼 수 없습니다.", ex); }
             finally { Cursor = Cursors.Default; }
         }
+    }
+
+    /// <summary>hoot 목록 비교 시작 폴더: 왼쪽 목록의 폴더(또는 그 위)에 xml 묶음 폴더가 있으면.</summary>
+    private string HootStartFolder()
+    {
+        string d = browser.CurrentFolder;
+        for (int i = 0; i < 3 && !string.IsNullOrEmpty(d); i++)
+        {
+            try { if (Directory.GetDirectories(d, "xml*").Any(x => Directory.GetFiles(x, "*.xml").Length > 0)) return d; } catch (Exception) { }
+            d = Path.GetDirectoryName(d);
+        }
+        return null;
     }
 
     private void NewBank()

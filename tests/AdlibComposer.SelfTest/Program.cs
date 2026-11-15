@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using AdlibComposer.Audio;
 using AdlibComposer.Core;
 using AdlibComposer.Formats;
@@ -22,6 +23,18 @@ public static class Program
     public static int Main(string[] args)
     {
         AdlibComposer.Audio.Windows.WindowsAudio.Register();
+        if (args.Length > 2 && args[0] == "--hootmerge")
+        {
+            // hoot 게임 목록 합치기: --hootmerge 출력폴더 묶음폴더1 묶음폴더2 … [hoot.xml]  (뒤 묶음일수록 우선)
+            var dirs = args.Skip(2).Where(System.IO.Directory.Exists).ToList();
+            string hx = args.Skip(2).FirstOrDefault(a => a.EndsWith(".xml", StringComparison.OrdinalIgnoreCase) && System.IO.File.Exists(a));
+            var sw0 = System.Diagnostics.Stopwatch.StartNew();
+            var r = AdlibComposer.Formats.HootLists.Merge(dirs, args[1], hx);
+            Console.WriteLine("entries " + r.Entries + " -> " + r.Clusters + " (dropped " + r.Dropped + "), files " + r.Files + ", uncertain merges " + r.Uncertain + ", similar pairs " + r.SimilarPairs + ", unencodable " + r.Unencodable + ", errors " + r.Errors.Count + ", " + sw0.ElapsedMilliseconds + " ms");
+            Console.WriteLine("kept from: " + string.Join(", ", r.KeptFrom.Select(k => k.Key + " " + k.Value)));
+            Console.WriteLine("report: " + r.ReportPath + (r.HootXmlPath.Length > 0 ? ", hoot: " + r.HootXmlPath : ""));
+            return 0;
+        }
         if (args.Length > 1 && args[0] == "--hes")
         {
             // 진단: --hes 파일 [곡] [초]
@@ -50,7 +63,7 @@ public static class Program
             {
                 ("vgm", () => VgmTests.Run(Check)), ("vgmexport", () => VgmExportTests.Run(Check)), ("newchip", () => NewChipTests.Run(Check)),
                 ("chip", () => ChipTests.Run(Check)), ("midi", () => MidiTests.Run(Check)), ("jukebox", () => JukeboxTests.Run(Check)),
-                ("extra", () => ExtraTests.Run(Check)), ("queue", () => EngineQueueTests.Run(Check)), ("nespce", () => NesPceTests.Run(Check)), ("zip", () => ZipTests.Run(Check)),
+                ("extra", () => ExtraTests.Run(Check)), ("queue", () => EngineQueueTests.Run(Check)), ("nespce", () => NesPceTests.Run(Check)), ("zip", () => ZipTests.Run(Check)), ("droraw", () => DroRawTests.Run(Check)), ("hoot", () => HootTests.Run(Check)),
             };
             foreach (var (name, run) in suites) if (name.Contains(args[1], StringComparison.OrdinalIgnoreCase)) run();
             Console.WriteLine();
@@ -90,6 +103,8 @@ public static class Program
         ExtraTests.Run(Check);
         NesPceTests.Run(Check);
         ZipTests.Run(Check);
+        DroRawTests.Run(Check);
+        HootTests.Run(Check);
         RealFileTests.Run(Check);
         Console.WriteLine();
         Console.WriteLine("passed=" + passed + " failed=" + failed);

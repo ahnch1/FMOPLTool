@@ -11,6 +11,7 @@ namespace AdlibComposer.Formats;
 /// <list type="bullet">
 /// <item>IMF (id Software: Commander Keen · Wolfenstein 3D · Duke Nukem II) — (레지스터, 값, 기다림) 기록 그대로. .imf = 560Hz, .wlf = 700Hz.</item>
 /// <item>HSC (HSC-Tracker, Hannes Seifert) — 9채널 패턴 트래커. 재생 규칙은 AdPlug의 hsc.cpp를 따른다 (18.2Hz).</item>
+/// <item>DRO (DOSBox Raw OPL, 판 0.1 · 2.0) · RAW (Rdos Raw OPL Capture) — 게임이 OPL에 쓴 것을 그대로 기록. OPL2 · OPL3 · 듀얼 OPL2.</item>
 /// <item>CMF (Creative Music File, 사운드 블래스터) — 악기 뱅크 + MIDI 이벤트. SBFMDRV처럼 MIDI 채널 n = OPL 채널 n, 리듬 모드는 채널 12~16 = BD SD TOM CY HH.</item>
 /// </list>
 /// </summary>
@@ -87,6 +88,188 @@ public static class AdlibStreamFormats
         }
         o.Advance(0.5);
         return o.Finish(title, "IMF " + hz + "Hz" + (start == 2 ? " (종류 1)" : " (종류 0)"));
+    }
+
+    // ================================================================ DRO · RAW (OPL 기록)
+
+    public static readonly string[] DroExtensions = { ".dro" };
+    public static readonly string[] RawExtensions = { ".raw" };
+    public const double Opl3Clock = 14318180;
+
+    /// <summary>OPL 쓰기 기록 (시간 · 칩 0/1 · 레지스터 · 값). 다 모은 뒤 OPL2 / OPL3 / 듀얼 OPL2를 정해 VGM으로.</summary>
+    private sealed class OplLog
+    {
+        public readonly List<(double t, int chip, int reg, int val)> E = new List<(double, int, int, int)>();
+        public double Now;
+        public int Chip;
+        public void Write(int reg, int val) { E.Add((Now, Chip, reg & 0xFF, val & 0xFF)); }
+    }
+
+    /// <summary>하드웨어 종류 (DRO 판 2 값으로 맞춤).</summary>
+    private enum OplHw { Unknown = -1, Opl2 = 0, DualOpl2 = 1, Opl3 = 2 }
+
+    /// <summary>
+    /// 기록 → VGM. 둘째 칩을 안 쓰면 OPL2 (YM3812). OPL3이면 칩 0/1 = 레지스터 뱅크 0/1 그대로 (YMF262).
+    /// 듀얼 OPL2(사운드 블래스터 프로 1)는 OPL3 하나로: 칩 0 = 왼쪽, 칩 1 = 오른쪽 (C0~C8의 좌우 비트를 바꿔 쓰고, NEW = 1로 좌우를 살린다).
+    /// </summary>
+    private static VgmSong OplLogToVgm(OplLog log, OplHw hw, string title, string source, string system)
+    {
+        bool chip1 = log.E.Any(e => e.chip == 1);
+        bool opl3 = hw == OplHw.Opl3 || log.E.Any(e => e.chip == 1 && e.reg == 0x05 && (e.val & 1) != 0);
+        bool dual = chip1 && !opl3;
+        bool two = chip1 || opl3;
+        var w = new VgmWriter { System = system + " (" + (opl3 ? "OPL3" : dual ? "듀얼 OPL2" : "OPL2") + ")", Title = title ?? "" };
+        if (two) w.SetClock(VgmWriter.ClockYmf262, Opl3Clock); else w.SetClock(VgmWriter.ClockYm3812, Opl2Clock);
+        if (dual) w.Write(0x5F, 0x05, 0x01);
+        long written = 0;
+        foreach (var (t, chip, reg, val) in log.E)
+        {
+            if (t > MaxSeconds) break;
+            long target = (long)Math.Round(t * VgmSong.Rate);
+            if (target > written) { w.Wait(target - written); written = target; }
+            if (!two) { w.Write(0x5A, reg, val); continue; }
+            int v = val;
+            if (dual)
+            {
+                if (chip == 1 && reg == 0x05) continue;
+                if (reg >= 0xC0 && reg <= 0xC8) v = (v & 0x0F) | (chip == 0 ? 0x10 : 0x20);
+            }
+            w.Write((byte)(chip == 0 ? 0x5E : 0x5F), reg, v);
+        }
+        long end = (long)Math.Round((Math.Min(log.Now, MaxSeconds) + 0.5) * VgmSong.Rate);
+        if (end > written) w.Wait(end - written);
+        var s = VgmFormat.Read(w.ToArray());
+        s.SourceFormat = source + (opl3 ? " · OPL3" : dual ? " · 듀얼 OPL2 → OPL3 좌우" : " · OPL2");
+        return s;
+    }
+
+    public static VgmSong LoadDro(string path)
+    {
+        var s = ReadDro(File.ReadAllBytes(path), Path.GetFileNameWithoutExtension(path));
+        s.FilePath = path;
+        return s;
+    }
+
+    /// <summary>
+    /// DOSBox Raw OPL (.dro, "DBRAWOPL"). 시간 단위 = 1ms.
+    /// <list type="bullet">
+    /// <item>판 0.1 (DOSBox 0.61~0.72): 0x08 판 0x00010000, 0x0C 길이(ms), 0x10 길이(바이트), 0x14 하드웨어 (0 OPL2 · 1 OPL3 · 2 듀얼 OPL2, 1바이트 또는 4바이트).
+    /// 명령 0 = 기다림 1+n ms, 1 = 기다림 1+nn ms(16비트), 2 / 3 = 칩 0 / 1, 4 = 다음 두 바이트가 레지스터 · 값 (레지스터 0~4용), 그 밖 = 레지스터 · 값.</item>
+    /// <item>판 2.0 (DOSBox 0.73~): 0x0C 쌍 개수, 0x14 하드웨어 (0 OPL2 · 1 듀얼 OPL2 · 2 OPL3), 0x15 형식 0, 0x16 압축 0,
+    /// 0x17 짧은 기다림 코드, 0x18 긴 기다림 코드, 0x19 코드 표 길이, 0x1A 코드 표 (코드 → 레지스터). 이어서 (코드, 값) 쌍: 코드 bit7 = 칩 1.</item>
+    /// </list>
+    /// AdPlug dro.cpp · dro2.cpp와 같은 해석.
+    /// </summary>
+    public static VgmSong ReadDro(byte[] d, string title = "")
+    {
+        if (d.Length < 0x18 || Encoding.ASCII.GetString(d, 0, 8) != "DBRAWOPL") throw new InvalidDataException("DRO 파일이 아닙니다 (머리말 DBRAWOPL이 없음).");
+        uint ver = VgmFormat.U32(d, 8);
+        var log = new OplLog();
+        OplHw hw;
+        string source;
+        if (ver == 0x10000)
+        {
+            int lenBytes = (int)Math.Min(VgmFormat.U32(d, 0x10), int.MaxValue);
+            int t = d[0x14];
+            hw = t == 0 ? OplHw.Opl2 : t == 1 ? OplHw.Opl3 : t == 2 ? OplHw.DualOpl2 : OplHw.Unknown;
+            int p = 0x15;
+            // 처음에는 하드웨어 종류가 1바이트였다가 판 번호를 바꾸지 않고 4바이트가 되었다: 뒤 3바이트 중 0이 있으면 4바이트
+            if (d.Length >= 0x18 && (d[0x15] == 0 || d[0x16] == 0 || d[0x17] == 0)) p = 0x18;
+            int end = (int)Math.Min(d.Length, (long)p + lenBytes);
+            while (p < end)
+            {
+                int c = d[p++];
+                switch (c)
+                {
+                    case 0: if (p < end) log.Now += (1 + d[p++]) / 1000.0; break;
+                    case 1:
+                        if (p + 1 < end) { log.Now += (1 + (d[p] | (d[p + 1] << 8))) / 1000.0; p += 2; }
+                        else p = end;
+                        break;
+                    case 2: log.Chip = 0; break;
+                    case 3: log.Chip = 1; break;
+                    case 4:
+                        if (p + 1 < end) { log.Write(d[p], d[p + 1]); p += 2; }
+                        else p = end;
+                        break;
+                    default:
+                        if (p < end) log.Write(c, d[p++]);
+                        break;
+                }
+                if (log.Now > MaxSeconds) break;
+            }
+            source = "DRO 0.1";
+        }
+        else if (ver == 2)
+        {
+            if (d.Length < 0x1A) throw new InvalidDataException("DRO 2.0 머리말이 짧습니다.");
+            long pairs = VgmFormat.U32(d, 0x0C);
+            int t = d[0x14];
+            hw = t == 0 ? OplHw.Opl2 : t == 1 ? OplHw.DualOpl2 : t == 2 ? OplHw.Opl3 : OplHw.Unknown;
+            if (d[0x15] != 0 || d[0x16] != 0) throw new InvalidDataException("DRO 2.0: 이 형식 · 압축은 모릅니다 (형식 " + d[0x15] + ", 압축 " + d[0x16] + ").");
+            int shortCode = d[0x17], longCode = d[0x18], n = d[0x19];
+            if (0x1A + n > d.Length) throw new InvalidDataException("DRO 2.0 코드 표가 잘렸습니다.");
+            var map = new byte[n];
+            Array.Copy(d, 0x1A, map, 0, n);
+            int p = 0x1A + n;
+            long end = Math.Min(d.Length, p + pairs * 2);
+            while (p + 1 < end)
+            {
+                int code = d[p], val = d[p + 1];
+                p += 2;
+                if (code == shortCode) log.Now += (val + 1) / 1000.0;
+                else if (code == longCode) log.Now += ((val + 1) << 8) / 1000.0;
+                else
+                {
+                    log.Chip = (code & 0x80) != 0 ? 1 : 0;
+                    int idx = code & 0x7F;
+                    if (idx < n) log.Write(map[idx], val);
+                }
+                if (log.Now > MaxSeconds) break;
+            }
+            source = "DRO 2.0";
+        }
+        else throw new InvalidDataException("DRO 판을 모릅니다 (0x" + ver.ToString("X8") + ").");
+        return OplLogToVgm(log, hw, title, source, "DOSBox");
+    }
+
+    public static VgmSong LoadRaw(string path)
+    {
+        var s = ReadRaw(File.ReadAllBytes(path), Path.GetFileNameWithoutExtension(path));
+        s.FilePath = path;
+        return s;
+    }
+
+    /// <summary>
+    /// Rdos Raw OPL Capture (.raw, "RAWADATA"): 0x08 클럭 값(16비트) → 틱 = 1193180Hz / 클럭. 이어서 (값, 명령) 2바이트씩:
+    /// 명령 0 = 이 틱을 끝내고 값만큼 틱 기다림 (0 = 256), 명령 2 = 값 0이면 다음 2바이트가 새 클럭 · 값 1/2면 칩 0/1,
+    /// 명령 0xFF 값 0xFF = 끝, 그 밖 = OPL 레지스터(명령)에 값. AdPlug raw.cpp와 같은 해석.
+    /// </summary>
+    public static VgmSong ReadRaw(byte[] d, string title = "")
+    {
+        if (d.Length < 10 || Encoding.ASCII.GetString(d, 0, 8) != "RAWADATA") throw new InvalidDataException("RAW 파일이 아닙니다 (머리말 RAWADATA가 없음).");
+        int speed = d[8] | (d[9] << 8);
+        var log = new OplLog();
+        int n = (d.Length - 10) / 2;
+        for (int i = 0; i < n; i++)
+        {
+            int param = d[10 + 2 * i], cmd = d[11 + 2 * i];
+            double tick = (speed == 0 ? 0xFFFF : speed) / 1193180.0;
+            if (cmd == 0) log.Now += tick * (param == 0 ? 256 : param);
+            else if (cmd == 2)
+            {
+                if (param == 0)
+                {
+                    if (++i >= n) break;
+                    speed = d[10 + 2 * i] | (d[11 + 2 * i] << 8);
+                }
+                else log.Chip = param == 2 ? 1 : 0;
+            }
+            else if (cmd == 0xFF) { if (param == 0xFF) break; }
+            else log.Write(cmd, param);
+            if (log.Now > MaxSeconds) break;
+        }
+        return OplLogToVgm(log, OplHw.Unknown, title, "RAW (Rdos)", "PC");
     }
 
     // ================================================================ HSC

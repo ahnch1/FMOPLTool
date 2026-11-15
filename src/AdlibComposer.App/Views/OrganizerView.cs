@@ -28,6 +28,8 @@ internal sealed class OrganizerView : UserControl, IShellPage
     private readonly Button btnBrowse = new Button();
     private readonly CheckBox chkRecursive = new CheckBox();
     private readonly Button btnScan = new Button();
+    /// <summary>hoot 게임 목록(xml · xml2 · xml3 …) 비교 · 합치기 창.</summary>
+    private readonly Button btnHoot = new Button();
     private readonly CheckBox chkOnlyDup = new CheckBox();
     private readonly Label lblProgress = new Label();
     private readonly TextBox txtPreferred = new TextBox();
@@ -98,7 +100,11 @@ internal sealed class OrganizerView : UserControl, IShellPage
         chkOnlyDup.CheckedChanged += delegate { FillList(); };
         lblProgress.AutoSize = false;
         lblProgress.ForeColor = ShellTheme.Muted;
-        lblProgress.SetBounds(872, 14, 400, 18);
+        btnHoot.Text = "Hoot 목록 비교...";
+        btnHoot.SetBounds(872, 9, 130, 26);
+        btnHoot.Click += delegate { OpenHootCompare(); };
+        tips.SetToolTip(btnHoot, "hoot 게임 목록 폴더(xml · xml2 · xml3 …)의 게임 · 제작사 목록을 비교하고 중복 없이 합친다 (xml_new)");
+        lblProgress.SetBounds(1012, 14, 400, 18);
         tips.SetToolTip(btnScan, "ROL · IMS · SOP를 읽어 크기 · 내용(바이트) · 음표 · 제목 · 악기 순서로 같은 곡을 찾는다");
         tips.SetToolTip(chkOnlyDup, "끄면 같은 곡이 없는 파일도 '중복 없음' 묶음에 보인다");
         var lblPref = new Label { Text = "우선 폴더", AutoSize = true, Location = new Point(12, 46) };
@@ -113,8 +119,19 @@ internal sealed class OrganizerView : UserControl, IShellPage
         btnPreferredClear.Click += delegate { txtPreferred.Text = ""; Regroup(); };
         var lblPrefHint = new Label { Text = "이 폴더(하위 폴더 포함)의 파일을 가장 먼저 남긴다 · 그다음 ISS 있음 → BNK 있음 → 점수 · ROL과 IMS는 각각 하나씩 남김", AutoSize = true, ForeColor = ShellTheme.Muted, Location = new Point(636, 46) };
         tips.SetToolTip(txtPreferred, "같은 곡 그룹에서 이 폴더(하위 폴더 포함) 안의 파일을 최우선으로 남긴다. 비우면 쓰지 않음");
-        topPanel.Controls.AddRange(new Control[] { lbl, txtFolder, btnBrowse, chkRecursive, btnScan, chkOnlyDup, lblProgress, lblPref, txtPreferred, btnPreferred, btnPreferredClear, lblPrefHint });
+        topPanel.Controls.AddRange(new Control[] { lbl, txtFolder, btnBrowse, chkRecursive, btnScan, chkOnlyDup, btnHoot, lblProgress, lblPref, txtPreferred, btnPreferred, btnPreferredClear, lblPrefHint });
     }
+
+    /// <summary>hoot 목록 비교 창: 폴더 칸의 폴더(또는 그 위 폴더)에 xml 묶음이 있으면 그것으로 시작.</summary>
+    private void OpenHootCompare()
+    {
+        string start = null;
+        foreach (var d in new[] { txtFolder.Text.Trim(), SafeParent(txtFolder.Text.Trim()) })
+            if (!string.IsNullOrEmpty(d) && Directory.Exists(d) && Directory.GetDirectories(d, "xml*").Any(x => Directory.GetFiles(x, "*.xml").Length > 0)) { start = d; break; }
+        new HootCompareForm(start).Show(FindForm());
+    }
+
+    private static string SafeParent(string d) { try { return string.IsNullOrEmpty(d) ? null : Path.GetDirectoryName(d.TrimEnd('\\')); } catch (Exception) { return null; } }
 
     private void BuildList()
     {

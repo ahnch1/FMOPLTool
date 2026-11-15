@@ -18,11 +18,11 @@ namespace AdlibComposer.Formats;
 public static class HootArchive
 {
     public const string Extension = ".hoot";
-    /// <summary>항목을 써 둔 표시 (재생할 수 있는 드라이버가 늘면 이름을 바꿔 이미 푼 zip에도 다시 쓴다: 2 = SPC · KSS · NSF · GBS 더함).</summary>
-    private const string Mark = ".fmopl_hoot2";
+    /// <summary>항목을 써 둔 표시 (재생할 수 있는 드라이버가 늘면 이름을 바꿔 이미 푼 zip에도 다시 쓴다: 2 = SPC · KSS · NSF · GBS 더함, 3 = PC/AT DOS).</summary>
+    private const string Mark = ".fmopl_hoot3";
 
     /// <summary>
-    /// 재생할 수 있는 hoot 드라이버 · 형식: pc98dos opn · opna · 86 · beep (기계 흉내), 그리고 이미 읽는 파일을 곡 코드로 고르는 것 —
+    /// 재생할 수 있는 hoot 드라이버 · 형식: pc98dos opn · opna · 86 · beep · pcatdos adlib · soundblaster16 · beep (기계 흉내), 그리고 이미 읽는 파일을 곡 코드로 고르는 것 —
     /// snes spc (rom offset = 곡 코드 → 그 .spc), msx kss · nes nsf · gb gbs (곡 코드 = 파일 안 곡 번호).
     /// 옵션 midiout이 있는 항목(MIDI 판)은 색인에서 뺀다.
     /// </summary>
@@ -32,6 +32,7 @@ public static class HootArchive
         switch (d)
         {
             case "pc98dos": return t == "opn" || t == "opna" || t == "86" || t == "beep";
+            case "pcatdos": return t == "adlib" || t == "soundblaster16" || t == "beep";
             case "snes": return t == "spc";
             case "msx": return t == "kss";
             case "nes": return t == "nsf";

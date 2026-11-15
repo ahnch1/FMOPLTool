@@ -13,8 +13,15 @@ namespace AdlibComposer.Audio.Dos;
 /// IF가 켜져 있을 때). 재생 = 곡 코드 번호의 핸들을 표준 입력에 이중화하고 요인 0 (<see cref="Play"/>).</para>
 /// <para>칩 쓰기는 시간 (CPU 클럭)과 함께 <see cref="Log"/>에 모은다 (VGM으로 바꾸기는 바깥에서).</para>
 /// </summary>
-public sealed class Pc98Machine : DosMachine
+public sealed class Pc98Machine : DosMachine, IHootMachine
 {
+    // ------------------------------------------------------------ IHootMachine
+    List<(long t, int kind, int reg, int val)> IHootMachine.ChipLog { get { return Log; } }
+    double IHootMachine.ClockHz { get { return CpuHz; } }
+    int IHootMachine.HootVector { get { return FuncVector; } set { FuncVector = value; } }
+    bool IHootMachine.KeepRunning { get { return AutoIdle; } set { AutoIdle = value; } }
+    int IHootMachine.HootCount { get { return HootDelivered; } }
+
     public enum Board { None, Opn, Opna }
 
     public const double PitClock = 2457600, VsyncHz = 56.4229, OpnBaseClock = 3993600;
@@ -47,53 +54,8 @@ public sealed class Pc98Machine : DosMachine
 
     // ------------------------------------------------------------ PIC 8259
 
-    private sealed class Pic
-    {
-        public int Irr, Isr, Imr = 0xFF, Base;
-        public int IcwStep;
-        public bool NeedIcw4, ReadIsr, AutoEoi;
-
-        public void WriteCmd(int v)
-        {
-            if ((v & 0x10) != 0) { IcwStep = 1; NeedIcw4 = (v & 1) != 0; Imr = 0; Isr = 0; Irr = 0; return; }   // ICW1
-            if ((v & 0x18) == 0)   // OCW2
-            {
-                int cmd = v >> 5;
-                if (cmd == 1) { for (int i = 0; i < 8; i++) if ((Isr & (1 << i)) != 0) { Isr &= ~(1 << i); break; } }   // 정하지 않은 EOI
-                else if (cmd == 3) Isr &= ~(1 << (v & 7));   // 정한 EOI
-                return;
-            }
-            if ((v & 0x18) == 0x08) { if ((v & 2) != 0) ReadIsr = (v & 1) != 0; }   // OCW3
-        }
-
-        public void WriteData(int v)
-        {
-            switch (IcwStep)
-            {
-                case 1: Base = v & 0xF8; IcwStep = 2; return;
-                case 2: IcwStep = NeedIcw4 ? 3 : 0; return;
-                case 3: AutoEoi = (v & 2) != 0; IcwStep = 0; return;
-            }
-            Imr = v;
-        }
-
-        public int ReadCmd() { return ReadIsr ? Isr : Irr; }
-
-        /// <summary>받을 IRQ (가장 높은 우선순위, 들어가 있는 것보다 높음), 없으면 −1.</summary>
-        public int Pending()
-        {
-            int req = Irr & ~Imr;
-            for (int i = 0; i < 8; i++)
-            {
-                if ((Isr & (1 << i)) != 0) return -1;
-                if ((req & (1 << i)) != 0) return i;
-            }
-            return -1;
-        }
-    }
-
     // BIOS가 남기는 마스크: 주 = 키보드 · 종(IRQ7)만 열림, 종 = 모두 닫힘 (드라이버가 자기 IRQ를 연다)
-    private readonly Pic master = new Pic { Base = 0x08, Imr = 0x7D }, slave = new Pic { Base = 0x10, Imr = 0xFF };
+    private readonly Pic8259 master = new Pic8259 { Base = 0x08, Imr = 0x7D }, slave = new Pic8259 { Base = 0x10, Imr = 0xFF };
 
     private void RaiseIrq(int irq)
     {

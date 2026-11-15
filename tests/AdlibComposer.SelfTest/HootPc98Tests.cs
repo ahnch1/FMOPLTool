@@ -341,6 +341,57 @@ public static class HootPc98Tests
         return 0;
     }
 
+    /// <summary>
+    /// 진단: --hootatsurvey 폴더 [zip 수] [초] — PC/AT DOS (pcatdos) 항목마다 첫 곡을 돌려 OPL 키온 · 스피커가 나는지, 셸 결과 · 모르는 포트 · 못 연 파일.
+    /// </summary>
+    public static int SurveyAt(string folder, int count, double seconds)
+    {
+        var zips = Directory.GetFiles(folder, "*.zip").OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToList();
+        var rnd = new Random(98);
+        zips = zips.OrderBy(_ => rnd.Next()).Take(count).ToList();
+        var stats = new System.Collections.Generic.SortedDictionary<string, (int total, int sound)>();
+        var sw = Stopwatch.StartNew();
+        foreach (var zip in zips)
+        {
+            string dir;
+            try { dir = ZipFolder.Extract(zip); } catch (Exception ex) { Console.WriteLine("ZIP?  " + Path.GetFileName(zip) + ": " + ex.Message); continue; }
+            foreach (var h in Directory.GetFiles(dir, "*" + HootArchive.Extension))
+            {
+                var e = HootArchive.Load(h);
+                if (!HootPc98.IsPcAt(e)) continue;
+                string key = e.Type.ToLowerInvariant();
+                stats.TryGetValue(key, out var st);
+                st.total++;
+                string note;
+                try
+                {
+                    var m = (PcAtMachine)HootPc98.BootDirAny(dir, e, out var shells);
+                    int boot = m.Log.Count;
+                    m.Play(e.Titles.Count > 0 ? e.Titles[0].Code : 0);
+                    m.Run((long)(m.CpuHz * seconds));
+                    int keyOns = m.Log.Count(x => x.kind <= 1 && ((x.reg >= 0xB0 && x.reg <= 0xB8 && (x.val & 0x20) != 0) || (x.reg == 0xBD && (x.val & 0x20) != 0 && (x.val & 0x1F) != 0)));
+                    int beeps = m.Log.Count(x => x.kind == 2 && x.val != 0);
+                    bool sound = keyOns > 0 || beeps > 0;
+                    if (sound) st.sound++;
+                    note = (sound ? "SOUND " : "quiet ") + "key-ons " + keyOns + ", beeps " + beeps + ", writes " + m.Log.Count + " (boot " + boot + "), hoot " + m.HootDelivered + (m.HootInterruptEnabled ? "" : " off") +
+                        ", vec " + m.FuncVector.ToString("X2") + (m.PeekWord(0, m.FuncVector * 4 + 2) == DosMachine.StubSeg ? " stub" : "") + ", shells " + string.Join("/", shells.Select(r => r.ToString().Substring(0, 3))) +
+                        (m.Cpu.UnknownOps > 0 ? ", op@" + m.Cpu.CS.ToString("X4") + ":" + m.Cpu.IP.ToString("X4") + " " + m.PeekByte(m.Cpu.CS, m.Cpu.IP).ToString("X2") : "") +
+                        (m.UnknownFunctions.Count > 0 ? ", dos " + string.Join(" ", m.UnknownFunctions.Keys.Select(k => k.ToString("X"))) : "") +
+                        (m.MissingFiles.Count > 0 ? ", missing " + string.Join(" ", m.MissingFiles.Distinct().Take(3)) : "") +
+                        (m.UnknownPorts.Count > 0 ? ", ports " + string.Join(" ", m.UnknownPorts.Take(8).Select(p => (p > 0xFFFF ? "w" : "r") + (p & 0xFFFF).ToString("X"))) : "") +
+                        " | " + m.ConsoleText.Replace("\r", " ").Replace("\n", " ").Trim().Split(' ').Where(x => x.Length > 0).TakeLast(10).Aggregate("", (a, b) => a + " " + b);
+                }
+                catch (Exception ex) { note = "ERROR " + ex.GetType().Name + " " + ex.Message; }
+                stats[key] = st;
+                Console.WriteLine(key.PadRight(6) + " " + Path.GetFileName(zip).PadRight(22) + " " + note);
+            }
+        }
+        Console.WriteLine();
+        foreach (var kv in stats) Console.WriteLine(kv.Key + ": sound " + kv.Value.sound + "/" + kv.Value.total);
+        Console.WriteLine(zips.Count + " zips, " + sw.Elapsed.TotalSeconds.ToString("0") + " s");
+        return 0;
+    }
+
     /// <summary>진단: --hoottree xml폴더 — hoot 트리(제작사 → 장비 → 게임 → 곡)를 만들 자료를 읽는 시간과 단계별 수.</summary>
     public static int TreeStats(string dir)
     {

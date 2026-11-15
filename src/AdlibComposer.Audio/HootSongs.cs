@@ -27,7 +27,7 @@ public static class HootSongs
         NezM3u.SplitTrack(path, out int n);
         var e = HootArchive.Load(file);
         string driver = e.Driver.ToLowerInvariant();
-        if (driver == "pc98dos") return Dos.HootPc98.Load(path);
+        if (driver == "pc98dos" || driver == "pcatdos") return Dos.HootPc98.Load(path);
         if (!HootArchive.Playable(e.Driver, e.Type)) throw new InvalidDataException("아직 재생하지 못하는 hoot 항목입니다: " + e.Driver + " / " + e.Type);
         if (e.Titles.Count == 0) throw new InvalidDataException("hoot 항목에 곡 목록(titlelist)이 없습니다.");
         n = Math.Max(0, Math.Min(n, e.Titles.Count - 1));

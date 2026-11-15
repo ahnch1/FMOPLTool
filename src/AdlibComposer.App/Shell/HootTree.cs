@@ -277,7 +277,7 @@ internal sealed class HootTree : UserControl
         if (g.Alias.Length > 0) l.Add("별칭: " + g.Alias + (g.AliasType.Length > 0 ? " (" + g.AliasType + ")" : ""));
         if (g.Options.Count > 0) l.Add("옵션: " + string.Join(", ", g.Options.Select(o => o.Key + "=" + o.Value)));
         l.Add(!Playable(g) ? "재생: 아직 못 함 — zip을 폴더 목록에서 열기" + (g.Options.ContainsKey("midiout") ? " (MIDI 판)" : "")
-            : "재생: " + (g.Driver.Equals("pc98dos", StringComparison.OrdinalIgnoreCase) ? "PC-98 DOS 흉내" : g.DriverType.ToUpperInvariant() + " 파일 (곡 코드 = 곡 번호)"));
+            : "재생: " + (g.Driver.Equals("pc98dos", StringComparison.OrdinalIgnoreCase) ? "PC-98 DOS 흉내" : g.Driver.Equals("pcatdos", StringComparison.OrdinalIgnoreCase) ? "PC/AT DOS 흉내" : g.DriverType.ToUpperInvariant() + " 파일 (곡 코드 = 곡 번호)"));
         return string.Join("\n", l);
     }
 

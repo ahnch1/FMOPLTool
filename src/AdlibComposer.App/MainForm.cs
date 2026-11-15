@@ -15,7 +15,7 @@ using AdlibComposer.Notation;
 namespace AdlibComposer.App;
 
 /// <summary>
-/// 메인 창: 메뉴 + 가로 페이지 메뉴(Composer / Instrument Maker / Tracker / Jukebox / Note …) + 툴바 + 왼쪽 공용 폴더/파일 목록 + 페이지 머리글 + 페이지 + 진행 로그 + 상태 표시줄.
+/// 메인 창: 메뉴 + 가로 페이지 메뉴(Jukebox / Composer / Instrument Maker / Tracker / Note …) + 툴바 + 왼쪽 공용 폴더/파일 목록 + 페이지 머리글 + 페이지 + 진행 로그 + 상태 표시줄.
 /// Composer와 Instrument Maker 페이지 안은 원본 화면 재현, 바깥 틀은 현대식.
 /// </summary>
 [System.ComponentModel.DesignerCategory("Code")]   // 코드로 만든 화면: 디자이너 대신 코드로 연다
@@ -234,7 +234,7 @@ internal sealed class MainForm : Form
         });
     }
 
-    /// <summary>사이드바 / Ctrl+1~4: 페이지 바꾸기.</summary>
+    /// <summary>페이지 메뉴 / Ctrl+1~8: 페이지 바꾸기 (Ctrl+1 Jukebox, 2 Composer, 3 Instrument Maker, 4 Note …).</summary>
     private void ShowPage(AppPage target)
     {
         if (page == target) return;
@@ -654,9 +654,9 @@ internal sealed class MainForm : Form
         helpMenu.DropDownItems.Insert(0, Item("Tracker", delegate { ShowPage(AppPage.Tracker); }, Keys.None, "Ctrl+6"));
         helpMenu.DropDownItems.Insert(0, Item("Orgel Note", delegate { ShowPage(AppPage.Orgel); }, Keys.None, "Ctrl+5"));
         helpMenu.DropDownItems.Insert(0, Item("Note", delegate { ShowPage(AppPage.Note); }, Keys.None, "Ctrl+4"));
-        helpMenu.DropDownItems.Insert(0, Item("Jukebox", delegate { ShowPage(AppPage.Jukebox); }, Keys.None, "Ctrl+3"));
-        helpMenu.DropDownItems.Insert(0, Item("Instrument Maker", delegate { ShowPage(AppPage.Instrument); }, Keys.None, "Ctrl+2"));
-        helpMenu.DropDownItems.Insert(0, Item("Composer", delegate { ShowPage(AppPage.Composer); }, Keys.None, "Ctrl+1"));
+        helpMenu.DropDownItems.Insert(0, Item("Instrument Maker", delegate { ShowPage(AppPage.Instrument); }, Keys.None, "Ctrl+3"));
+        helpMenu.DropDownItems.Insert(0, Item("Composer", delegate { ShowPage(AppPage.Composer); }, Keys.None, "Ctrl+2"));
+        helpMenu.DropDownItems.Insert(0, Item("Jukebox", delegate { ShowPage(AppPage.Jukebox); }, Keys.None, "Ctrl+1"));
 
         menu.Items.AddRange(new ToolStripItem[] { fileMenu, editMenu, instOptionMenu, playMenu, displayMenu, optionsMenu, helpMenu });
         menu.MenuActivate += delegate { SyncMenus(); };
@@ -981,9 +981,9 @@ internal sealed class MainForm : Form
             case Keys.F2: if (instrumentMode) { instrument.FocusColumn(false); return true; } break;
             case Keys.F3: if (instrumentMode) { instrument.ShowPair(false); return true; } break;   // 4-op: 오퍼레이터 1·2
             case Keys.F4: if (instrumentMode) { instrument.ShowPair(true); return true; } break;    // 4-op: 오퍼레이터 3·4
-            case Keys.Control | Keys.D1: ShowPage(AppPage.Composer); return true;
-            case Keys.Control | Keys.D2: ShowPage(AppPage.Instrument); return true;
-            case Keys.Control | Keys.D3: ShowPage(AppPage.Jukebox); return true;
+            case Keys.Control | Keys.D1: ShowPage(AppPage.Jukebox); return true;
+            case Keys.Control | Keys.D2: ShowPage(AppPage.Composer); return true;
+            case Keys.Control | Keys.D3: ShowPage(AppPage.Instrument); return true;
             case Keys.Control | Keys.D4: ShowPage(AppPage.Note); return true;
             case Keys.Control | Keys.D5: ShowPage(AppPage.Orgel); return true;
             case Keys.Control | Keys.D6: ShowPage(AppPage.Tracker); return true;
@@ -1072,7 +1072,7 @@ internal sealed class MainForm : Form
     /// <param name="single">끌어다 놓은 파일: Jukebox 다음 곡 목록 = 그 곡만 (왼쪽 목록의 폴더가 아니라).</param>
     private void OpenFromBrowser(string path, bool single)
     {
-        if (string.IsNullOrEmpty(path) || !File.Exists(path)) return;
+        if (string.IsNullOrEmpty(path) || !File.Exists(ChipSongs.FilePart(path))) return;   // "파일::n" = 파일 안 n번 곡
         if (page == AppPage.Jukebox && JukeboxView.CanPlay(path)) { if (single) jukebox.PlayFiles(new List<string> { path }); else jukebox.Play(path); return; }
         switch (FileBrowser.KindOf(path))
         {

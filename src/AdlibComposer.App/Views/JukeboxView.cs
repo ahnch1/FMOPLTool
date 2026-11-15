@@ -119,7 +119,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
     /// <summary>공용 파일 목록에서 재생할 수 있는 곡만 (보이는 순서).</summary>
     private List<string> CurrentListPaths()
     {
-        // 곡이 여럿 든 파일 (KSS)은 곡마다 한 줄 ("경로::번호")
+        // 곡이 여럿 든 파일 (KSS · NSF · HES)은 곡마다 한 줄 ("경로::번호")
         var l = new List<string>();
         foreach (var p in browser.Paths.Where(CanPlay))
         {
@@ -131,7 +131,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
 
     private void MarkPlaying()
     {
-        browser.MarkCurrent(ChipSongs.FilePart(currentPath));
+        browser.MarkCurrent(currentPath);   // "파일::n"이면 파일 목록이 그 파일을 펼쳐 곡 줄을 고른다
     }
 
     /// <summary>끌어다 놓은 곡 파일만 재생한다 (다음 곡 목록 = 놓은 곡들, 하나면 그 곡만).</summary>

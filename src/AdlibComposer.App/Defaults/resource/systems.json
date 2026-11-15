@@ -1,5 +1,5 @@
 // FMOPLTools 시스템 정의: 같은 id는 프로그램 기본값을 덮어쓰고, 새 id는 더해진다.
-// 숫자는 10진 또는 "0x7C" 같은 16진 문자열. KSS (msx / sms) · IMF (adlib / wolf3d tickRate)가 쓴다.
+// 숫자는 10진 또는 "0x7C" 같은 16진 문자열. KSS (msx / sms) · NSF (nes) · HES (pce) · IMF (adlib / wolf3d tickRate)가 쓴다.
 {
   "systems": [
     {
@@ -180,6 +180,42 @@
             "addr2": "0x222",
             "data2": "0x223"
           }
+        }
+      ]
+    },
+    {
+      "id": "nes",
+      "name": "Nintendo Famicom / NES (NTSC)",
+      "cpu": "6502",
+      "cpuClock": 1789773,
+      "frameRate": 60.0988,
+      "chips": [
+        {
+          "chip": "2A03",
+          "clock": 1789773,
+          "memory": "0x4000"
+        }
+      ]
+    },
+    {
+      "id": "pce",
+      "name": "NEC PC Engine / TurboGrafx-16",
+      "cpu": "HuC6280",
+      "cpuClock": 7159090,
+      "frameRate": 59.94,
+      "chips": [
+        {
+          "chip": "HuC6280",
+          "clock": 3579545,
+          "memory": "0x1FE800"
+        },
+        {
+          "chip": "Timer",
+          "memory": "0x1FEC00"
+        },
+        {
+          "chip": "VDC",
+          "memory": "0x1FE000"
         }
       ]
     }

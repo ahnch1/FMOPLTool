@@ -67,27 +67,16 @@ public static class Kss
 
     // ------------------------------------------------------------ m3u
 
-    /// <summary>KSS 옆 같은 이름의 .m3u에서 곡 목록. 없으면 KSSX 머리말의 범위 (KSCC면 곡 0 하나).</summary>
+    /// <summary>KSS 옆 같은 이름의 .m3u에서 곡 목록 (<see cref="NezM3u"/>). 없으면 KSSX 머리말의 범위 (KSCC면 곡 0 하나).</summary>
     public static List<Track> Tracks(string kssPath)
     {
         var list = new List<Track>();
-        string m3u = Path.ChangeExtension(kssPath, ".m3u");
-        if (File.Exists(m3u))
+        foreach (var e in NezM3u.Read(kssPath, "KSS"))
         {
-            foreach (var raw in KoreanText.ShiftJis.GetString(File.ReadAllBytes(m3u)).Split('\n'))
-            {
-                string line = raw.Trim('\r', ' ', '\t');
-                if (line.Length == 0 || line[0] == '#') continue;
-                int at = line.IndexOf("::KSS,", StringComparison.OrdinalIgnoreCase);
-                if (at < 0) continue;
-                var f = SplitFields(line.Substring(at + 6));
-                if (f.Count == 0 || !TryNumber(f[0], out int song)) continue;
-                var t = new Track { Song = song };
-                if (f.Count > 1) t.Title = f[1];
-                if (f.Count > 2 && TryTime(f[2], out double sec) && sec > 0) t.Seconds = sec;
-                if (f.Count > 4 && TryTime(f[4], out double fade)) t.Fade = fade;
-                list.Add(t);
-            }
+            var t = new Track { Song = e.Number, Title = e.Title };
+            if (e.Seconds > 0) t.Seconds = e.Seconds;
+            if (e.Fade >= 0) t.Fade = e.Fade;
+            list.Add(t);
         }
         if (list.Count > 0) return list;
         try
@@ -101,53 +90,12 @@ public static class Kss
         return list;
     }
 
-    /// <summary>쉼표로 나누되 \, 는 글자 그대로.</summary>
-    private static List<string> SplitFields(string s)
-    {
-        var l = new List<string>();
-        var sb = new StringBuilder();
-        for (int i = 0; i < s.Length; i++)
-        {
-            if (s[i] == '\\' && i + 1 < s.Length) { sb.Append(s[++i]); continue; }
-            if (s[i] == ',') { l.Add(sb.ToString().Trim()); sb.Clear(); continue; }
-            sb.Append(s[i]);
-        }
-        l.Add(sb.ToString().Trim());
-        return l;
-    }
-
-    private static bool TryNumber(string s, out int v)
-    {
-        s = s.Trim();
-        if (s.StartsWith("$")) return int.TryParse(s.Substring(1), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out v);
-        if (s.StartsWith("0x", StringComparison.OrdinalIgnoreCase)) return int.TryParse(s.Substring(2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out v);
-        return int.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out v);
-    }
-
-    /// <summary>"85" · "1:25" · "0:01:25" · "1:25.500" → 초.</summary>
-    private static bool TryTime(string s, out double sec)
-    {
-        sec = 0;
-        s = s.Trim().TrimEnd('-');
-        if (s.Length == 0) return false;
-        double total = 0;
-        foreach (var part in s.Split(':'))
-        {
-            if (!double.TryParse(part, NumberStyles.Float, CultureInfo.InvariantCulture, out double v)) return false;
-            total = total * 60 + v;
-        }
-        sec = total;
-        return true;
-    }
-
     // ------------------------------------------------------------ 열기 (ChipSongs)
 
     /// <summary>"파일.kss" 또는 "파일.kss::n" (n = 곡 목록 안 번호, 0부터).</summary>
     public static VgmSong Load(string path)
     {
-        int track = 0;
-        int sep = path.LastIndexOf("::", StringComparison.Ordinal);
-        if (sep > 0 && int.TryParse(path.Substring(sep + 2), out int n)) { track = n; path = path.Substring(0, sep); }
+        path = NezM3u.SplitTrack(path, out int track);
         var tracks = Tracks(path);
         var t = tracks[Math.Max(0, Math.Min(track, tracks.Count - 1))];
         var v = Render(File.ReadAllBytes(path), t.Song, t.Seconds, t.Fade);

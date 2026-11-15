@@ -26,12 +26,19 @@ internal sealed class FileBrowser : UserControl
     private static readonly string[] VgmExt = AdlibComposer.Audio.ChipSongs.Extensions.ToArray();
     private static readonly string[] AudioExt = { ".mp3", ".wav", ".wma", ".m4a", ".aac", ".flac" };
 
-    /// <summary>목록 한 줄: 위 폴더(..) · 폴더 · 곡 파일.</summary>
+    /// <summary>목록 한 줄: 위 폴더(..) · 폴더 · 곡 파일 · 파일 안 곡 (KSS · NSF · HES, Path = "파일::n").</summary>
     private sealed class Entry
     {
         public string Path;
         public bool IsDir, IsUp;
+        /// <summary>곡이 여럿 든 파일 (펼치면 곡마다 줄).</summary>
+        public bool Multi;
+        /// <summary>파일 안 곡 한 줄 (Path = "파일::n").</summary>
+        public bool IsTrack;
     }
+
+    /// <summary>펼쳐 둔 파일 (곡이 여럿 든 파일: 곡마다 줄). 폴더를 다시 그려도 그대로.</summary>
+    private readonly HashSet<string> expanded = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
     private readonly Workspace ws;
     private readonly Func<AppSettings> settings;
@@ -60,6 +67,8 @@ internal sealed class FileBrowser : UserControl
         icons.Images.Add("dir", GlyphImages.Get(Glyphs.Folder, 16, Color.FromArgb(214, 160, 40)));
         icons.Images.Add("up", GlyphImages.Get('', 16, ShellTheme.Muted));   // Up
         icons.Images.Add("song", GlyphImages.Get(Glyphs.Composer, 16, ShellTheme.Accent));
+        icons.Images.Add("multi", GlyphImages.Get(Glyphs.Jukebox, 16, ShellTheme.Accent));
+        icons.Images.Add("track", GlyphImages.Get(Glyphs.Play, 16, ShellTheme.Muted));
 
         // 위: [폴더 열기] [위로]
         var bar = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 36, Padding = new Padding(6, 5, 6, 0), BackColor = Color.FromArgb(246, 247, 249), WrapContents = false };
@@ -94,9 +103,21 @@ internal sealed class FileBrowser : UserControl
         list.Columns.Add("가사", 30, HorizontalAlignment.Center);
         list.Columns.Add("뱅크", 30, HorizontalAlignment.Center);
         list.ItemActivate += delegate { ActivateSelected(); };
-        list.KeyDown += (s, e) => { if (e.KeyCode == Keys.Back) { GoUp(); e.Handled = true; } };
+        list.KeyDown += (s, e) =>
+        {
+            if (e.KeyCode == Keys.Back) { GoUp(); e.Handled = true; }
+            else if (e.KeyCode == Keys.Right && SelectedEntry != null && SelectedEntry.Multi) { SetExpanded(list.SelectedItems[0], true); e.Handled = true; }
+            else if (e.KeyCode == Keys.Left && SelectedEntry != null && (SelectedEntry.Multi || SelectedEntry.IsTrack))
+            {
+                var fileItem = SelectedEntry.IsTrack ? FindItem(AdlibComposer.Audio.ChipSongs.FilePart(SelectedEntry.Path)) : list.SelectedItems[0];
+                if (fileItem != null) { SetExpanded(fileItem, false); fileItem.Selected = true; fileItem.Focused = true; fileItem.EnsureVisible(); }
+                e.Handled = true;
+            }
+        };
         list.Resize += delegate { UpdatePager(); };
-        tips.SetToolTip(list, "폴더 두 번 클릭: 들어가기 · 곡 두 번 클릭 / Enter: 지금 페이지에서 열기 (못 여는 형식이면 그 형식을 여는 페이지로)\n제목 = 곡 안의 제목 · 가사 = 같은 이름 .ISS · 뱅크 = 같은 이름 .BNK");
+        tips.SetToolTip(list, "폴더 두 번 클릭: 들어가기 · 곡 두 번 클릭 / Enter: 지금 페이지에서 열기 (못 여는 형식이면 그 형식을 여는 페이지로)\n"
+            + "곡이 여럿 든 파일(KSS · NSF · HES, ▸): 두 번 클릭 / → 로 곡 목록 펼치기, ← 로 접기 — 곡 줄을 두 번 클릭하면 그 곡 재생\n"
+            + "제목 = 곡 안의 제목 · 가사 = 같은 이름 .ISS · 뱅크 = 같은 이름 .BNK");
 
         emptyLabel.Dock = DockStyle.Fill;
         emptyLabel.Font = ShellTheme.Ui;
@@ -160,7 +181,7 @@ internal sealed class FileBrowser : UserControl
 
     public static MusicFileKind KindOf(string path)
     {
-        string ext = (Path.GetExtension(path) ?? "").ToLowerInvariant();
+        string ext = (Path.GetExtension(AdlibComposer.Audio.ChipSongs.FilePart(path)) ?? "").ToLowerInvariant();   // "파일::n" = 파일 안 곡
         if (Array.IndexOf(AdlibExt, ext) >= 0) return MusicFileKind.Adlib;
         if (Array.IndexOf(TrackerExt, ext) >= 0) return MusicFileKind.Tracker;
         if (Array.IndexOf(MidiExt, ext) >= 0) return MusicFileKind.Midi;
@@ -171,15 +192,24 @@ internal sealed class FileBrowser : UserControl
 
     // ---------------------------------------------------------------- 공개
 
-    /// <summary>지금 보이는 폴더의 곡 경로 (보이는 순서, 폴더 빼고).</summary>
+    /// <summary>지금 보이는 폴더의 곡 파일 경로 (보이는 순서, 폴더 · 펼친 곡 줄 빼고 — 곡이 여럿 든 파일은 Jukebox가 곡마다 펼친다).</summary>
     public List<string> Paths
     {
         get
         {
             var l = new List<string>();
-            foreach (ListViewItem it in list.Items) { var e = (Entry)it.Tag; if (!e.IsDir) l.Add(e.Path); }
+            foreach (ListViewItem it in list.Items) { var e = (Entry)it.Tag; if (!e.IsDir && !e.IsTrack) l.Add(e.Path); }
             return l;
         }
+    }
+
+    private Entry SelectedEntry { get { return list.SelectedItems.Count > 0 ? (Entry)list.SelectedItems[0].Tag : null; } }
+
+    private ListViewItem FindItem(string path)
+    {
+        foreach (ListViewItem it in list.Items)
+            if (string.Equals(((Entry)it.Tag).Path, path, StringComparison.OrdinalIgnoreCase)) return it;
+        return null;
     }
 
     /// <summary>목록에서 고른 곡 (폴더면 null).</summary>
@@ -222,17 +252,31 @@ internal sealed class FileBrowser : UserControl
         }
     }
 
-    /// <summary>지금 연(재생 중인) 파일을 굵게 표시하고 고른다.</summary>
+    /// <summary>
+    /// 지금 연(재생 중인) 파일을 굵게 표시하고 고른다. "파일::n"(파일 안 곡)이면 그 파일을 펼쳐 곡 줄을 고르고 파일 줄도 굵게.
+    /// </summary>
     public void MarkCurrent(string path)
     {
         currentPath = path;
+        string file = AdlibComposer.Audio.ChipSongs.FilePart(path);
+        bool track = path != null && !string.Equals(file, path, StringComparison.OrdinalIgnoreCase);
+        if (track)
+        {
+            var fileItem = FindItem(file);
+            if (fileItem != null) SetExpanded(fileItem, true);
+        }
+        list.BeginUpdate();
+        ListViewItem pick = null;
         foreach (ListViewItem it in list.Items)
         {
             var e = (Entry)it.Tag;
-            bool cur = !e.IsDir && string.Equals(e.Path, currentPath, StringComparison.OrdinalIgnoreCase);
-            it.Font = cur ? new Font(list.Font, FontStyle.Bold) : list.Font;
-            if (cur) { it.Selected = true; it.Focused = true; it.EnsureVisible(); }
+            bool exact = !e.IsDir && string.Equals(e.Path, currentPath, StringComparison.OrdinalIgnoreCase);
+            bool parent = track && !e.IsDir && !e.IsTrack && string.Equals(e.Path, file, StringComparison.OrdinalIgnoreCase);
+            it.Font = exact || parent ? new Font(list.Font, FontStyle.Bold) : list.Font;
+            if (exact || (parent && pick == null)) pick = it;
         }
+        list.EndUpdate();
+        if (pick != null) { pick.Selected = true; pick.Focused = true; pick.EnsureVisible(); }
     }
 
     // ---------------------------------------------------------------- 폴더 오가기
@@ -266,6 +310,7 @@ internal sealed class FileBrowser : UserControl
         var e = (Entry)list.SelectedItems[0].Tag;
         if (e.IsUp) GoUp();
         else if (e.IsDir) ShowFolder(e.Path);
+        else if (e.Multi) SetExpanded(list.SelectedItems[0], !expanded.Contains(e.Path));
         else if (FileActivated != null) FileActivated(e.Path);
     }
 
@@ -309,14 +354,21 @@ internal sealed class FileBrowser : UserControl
             {
                 if (KindOf(f) == MusicFileKind.None) continue;
                 string stem = Path.GetFileNameWithoutExtension(f).ToUpperInvariant();
-                var it = new ListViewItem(Path.GetFileName(f), "song") { Tag = new Entry { Path = f }, ToolTipText = f };
+                bool multi = AdlibComposer.Audio.ChipSongs.HasTracks(f);
+                bool open = multi && expanded.Contains(f);
+                var it = new ListViewItem(FileText(f, multi, open), multi ? "multi" : "song")
+                {
+                    Tag = new Entry { Path = f, Multi = multi },
+                    ToolTipText = f + (multi ? "\n곡이 여럿 든 파일: 두 번 클릭 / → 로 곡 목록" : ""),
+                };
                 it.SubItems.Add(CachedTitle(f) ?? "");
                 it.SubItems.Add(Path.GetExtension(f).TrimStart('.').ToUpperInvariant());
                 it.SubItems.Add(names.Contains(stem + ".ISS") ? "●" : "");
                 it.SubItems.Add(names.Contains(stem + ".BNK") ? "●" : "");
-                if (string.Equals(f, currentPath, StringComparison.OrdinalIgnoreCase)) it.Font = new Font(list.Font, FontStyle.Bold);
+                if (string.Equals(f, AdlibComposer.Audio.ChipSongs.FilePart(currentPath), StringComparison.OrdinalIgnoreCase)) it.Font = new Font(list.Font, FontStyle.Bold);
                 list.Items.Add(it);
                 songCount++;
+                if (open) foreach (var t in TrackItems(f)) list.Items.Add(t);
             }
         }
         catch (Exception ex) { AppLog.Warn("파일", "폴더를 읽을 수 없습니다: " + dir, ex.Message); }
@@ -331,6 +383,71 @@ internal sealed class FileBrowser : UserControl
         lastTop = -1;
         UpdatePager();
         LoadTitles();
+    }
+
+    // ---------------------------------------------------------------- 곡이 여럿 든 파일 (KSS · NSF · HES)
+
+    private static string FileText(string path, bool multi, bool open)
+    {
+        return (multi ? (open ? "▾ " : "▸ ") : "") + Path.GetFileName(path);
+    }
+
+    /// <summary>파일 안 곡마다 한 줄 ("파일::n", 들여 쓰기). HES는 처음 한 번 곡을 찾느라 1초쯤 걸릴 수 있다.</summary>
+    private List<ListViewItem> TrackItems(string file)
+    {
+        var l = new List<ListViewItem>();
+        List<(string path, string title)> tracks;
+        try { tracks = AdlibComposer.Audio.ChipSongs.Tracks(file); }
+        catch (Exception ex) { AppLog.Warn("파일", "곡 목록을 읽을 수 없습니다: " + Path.GetFileName(file), ex.Message); return l; }
+        for (int i = 0; i < tracks.Count; i++)
+        {
+            var (path, title) = tracks[i];
+            var it = new ListViewItem((i + 1).ToString("00"), "track")
+            {
+                Tag = new Entry { Path = path, IsTrack = true },
+                IndentCount = 1,
+                ToolTipText = Path.GetFileName(file) + " — " + (i + 1) + "/" + tracks.Count + (title.Length > 0 ? ": " + title : "") + "\n두 번 클릭 / Enter: 이 곡 재생",
+            };
+            // 제목이 "이름 #n"뿐이면 (m3u 없음) 칸을 비운다: 번호는 이미 이름 칸에
+            it.SubItems.Add(System.Text.RegularExpressions.Regex.IsMatch(title, @" #\d+$") ? "" : title);
+            it.SubItems.Add("");
+            it.SubItems.Add("");
+            it.SubItems.Add("");
+            if (string.Equals(path, currentPath, StringComparison.OrdinalIgnoreCase)) it.Font = new Font(list.Font, FontStyle.Bold);
+            l.Add(it);
+        }
+        return l;
+    }
+
+    /// <summary>곡이 여럿 든 파일 줄을 펼치거나 접는다 (바로 아래에 곡 줄을 넣거나 뺀다).</summary>
+    private void SetExpanded(ListViewItem fileItem, bool open)
+    {
+        var e = (Entry)fileItem.Tag;
+        if (!e.Multi) return;
+        bool isOpen = expanded.Contains(e.Path);
+        int at = fileItem.Index;
+        if (open == isOpen && (!open || (at + 1 < list.Items.Count && ((Entry)list.Items[at + 1].Tag).IsTrack))) return;
+        list.BeginUpdate();
+        // 있던 곡 줄을 먼저 뺀다
+        while (at + 1 < list.Items.Count && ((Entry)list.Items[at + 1].Tag).IsTrack) list.Items.RemoveAt(at + 1);
+        if (open)
+        {
+            var old = Cursor;
+            Cursor = Cursors.WaitCursor;
+            try
+            {
+                var rows = TrackItems(e.Path);
+                for (int i = 0; i < rows.Count; i++) list.Items.Insert(at + 1 + i, rows[i]);
+                expanded.Add(e.Path);
+                if (rows.Count > 0) list.Items[at + rows.Count].EnsureVisible();
+                fileItem.EnsureVisible();
+            }
+            finally { Cursor = old; }
+        }
+        else expanded.Remove(e.Path);
+        fileItem.Text = FileText(e.Path, true, open);
+        list.EndUpdate();
+        UpdatePager();
     }
 
     // ---------------------------------------------------------------- 쪽 넘기기
@@ -399,7 +516,7 @@ internal sealed class FileBrowser : UserControl
         foreach (ListViewItem it in list.Items)
         {
             var e = (Entry)it.Tag;
-            if (!e.IsDir && KindOf(e.Path) != MusicFileKind.Audio && CachedTitle(e.Path) == null) todo.Add(e.Path);
+            if (!e.IsDir && !e.IsTrack && KindOf(e.Path) != MusicFileKind.Audio && CachedTitle(e.Path) == null) todo.Add(e.Path);
         }
         if (todo.Count == 0) return;
         System.Threading.Tasks.Task.Run(() =>
@@ -427,7 +544,7 @@ internal sealed class FileBrowser : UserControl
         foreach (ListViewItem it in list.Items)
         {
             var e = (Entry)it.Tag;
-            if (!e.IsDir && titles.TryGetValue(e.Path, out var t)) it.SubItems[1].Text = t;
+            if (!e.IsDir && !e.IsTrack && titles.TryGetValue(e.Path, out var t)) it.SubItems[1].Text = t;
         }
         list.EndUpdate();
     }

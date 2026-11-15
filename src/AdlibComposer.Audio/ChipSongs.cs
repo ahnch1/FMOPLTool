@@ -17,10 +17,31 @@ public static class ChipSongs
         (VgmFormat.Extensions, VgmFormat.Load),
         (S98Format.Extensions, S98Format.Load),
         (Kss.Extensions, Kss.Load),
+        (Nsf.Extensions, Nsf.Load),
+        (Hes.Extensions, Hes.Load),
         (AdlibStreamFormats.ImfExtensions, LoadImf),
         (AdlibStreamFormats.HscExtensions, AdlibStreamFormats.LoadHsc),
         (AdlibStreamFormats.CmfExtensions, AdlibStreamFormats.LoadCmf),
     };
+
+    /// <summary>곡이 여럿 든 형식: 확장자 → 곡 제목 목록 (목록 안 번호 = "경로::번호").</summary>
+    private static readonly List<(string[] ext, Func<string, List<string>> titles)> multi = new List<(string[], Func<string, List<string>>)>
+    {
+        (Kss.Extensions, p => Kss.Tracks(p).Select(t => t.Title.Length > 0 ? t.Title : Path.GetFileNameWithoutExtension(p) + " #" + t.Song).ToList()),
+        (Nsf.Extensions, p => Nsf.Tracks(p).Select(t => t.Title).ToList()),
+        (Hes.Extensions, p => Hes.Tracks(p).Select(t => t.Title).ToList()),
+    };
+
+    /// <summary>곡이 여럿 들 수 있는 형식인가 (KSS · NSF · HES): 파일 목록이 곡마다 줄을 펼친다.</summary>
+    public static bool HasTracks(string path) { return MultiOf(path) != null; }
+
+    private static Func<string, List<string>> MultiOf(string path)
+    {
+        string ext = Path.GetExtension(FilePart(path) ?? "");
+        foreach (var (exts, titles) in multi)
+            if (exts.Any(x => string.Equals(x, ext, StringComparison.OrdinalIgnoreCase))) return titles;
+        return null;
+    }
 
     /// <summary>IMF 속도: 시스템 정의 adlib (.imf) / wolf3d (.wlf)의 tickRate.</summary>
     private static VgmSong LoadImf(string path)
@@ -48,28 +69,33 @@ public static class ChipSongs
     }
 
     /// <summary>
-    /// 파일 하나에 곡이 여럿이면 (KSS) 곡마다 "경로::번호"와 제목, 아니면 그 경로 하나.
+    /// 파일 하나에 곡이 여럿이면 (KSS · NSF · HES) 곡마다 "경로::번호"와 제목, 아니면 그 경로 하나.
     /// </summary>
     public static List<(string path, string title)> Tracks(string path)
     {
         var l = new List<(string, string)>();
-        if (Kss.Extensions.Any(x => string.Equals(x, Path.GetExtension(path), StringComparison.OrdinalIgnoreCase)))
+        var titles = MultiOf(path);
+        if (titles != null)
         {
-            var t = Kss.Tracks(path);
-            for (int i = 0; i < t.Count; i++) l.Add((path + "::" + i, t[i].Title.Length > 0 ? t[i].Title : Path.GetFileNameWithoutExtension(path) + " #" + t[i].Song));
+            var t = titles(FilePart(path));
+            for (int i = 0; i < t.Count; i++) l.Add((FilePart(path) + "::" + i, t[i]));
             return l;
         }
         l.Add((path, ""));
         return l;
     }
 
-    /// <summary>목록에 보일 제목 (KSS는 돌리지 않고 m3u에서).</summary>
+    /// <summary>목록에 보일 제목 (곡이 여럿인 형식은 돌리지 않고 머리말 · m3u에서).</summary>
     public static string Title(string path)
     {
-        if (Kss.Extensions.Any(x => string.Equals(x, Path.GetExtension(FilePart(path)), StringComparison.OrdinalIgnoreCase)))
+        var titles = MultiOf(path);
+        if (titles != null)
         {
-            var t = Kss.Tracks(FilePart(path));
-            return t.Count > 0 ? t[0].Title : "";
+            // HES는 곡 목록을 찾으려면 곡마다 돌려 봐야 한다: 아직 모르면 파일 목록에서는 돌리지 않는다
+            if (Hes.Extensions.Any(x => string.Equals(x, Path.GetExtension(FilePart(path)), StringComparison.OrdinalIgnoreCase)) && !Hes.TracksKnown(FilePart(path))) return "";
+            NezM3u.SplitTrack(path, out int n);
+            var t = titles(FilePart(path));
+            return t.Count > 0 ? t[Math.Max(0, Math.Min(n, t.Count - 1))] : "";
         }
         var v = Load(path);
         return v.TitleEn.Length > 0 ? v.TitleEn : v.TitleJp;

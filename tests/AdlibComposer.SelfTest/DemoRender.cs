@@ -161,6 +161,28 @@ public static class DemoRender
                 + "  len=" + len.ToString("0.0") + "s  peak=" + peak + " over=" + (100.0 * over / nf).ToString("0.00") + "%  rmsL=" + Math.Sqrt(sl / nf).ToString("0") + " rmsR=" + Math.Sqrt(sr / nf).ToString("0"));
             return 0;
         }
+        if (args[0] == "--chip")
+        {
+            // --chip 곡(VGM · S98 · KSS · NSF · HES …, "파일::n" = 곡 목록 n번) 출력.wav [초]
+            var v = ChipSongs.Load(args[1]);
+            double sec = args.Length > 3 ? double.Parse(args[3], System.Globalization.CultureInfo.InvariantCulture) : Math.Min(60, VgmPlayer.PlaySeconds(v));
+            var p = new VgmPlayer();
+            p.Start(v, 0, null);
+            int frames = (int)(sec * AudioEngine.OutputRate);
+            var pcm = new short[frames * 2];
+            int peak = 0; double sum = 0;
+            for (int i = 0; i < frames; i++)
+            {
+                p.Step(); p.Generate(out double l, out double r);
+                pcm[2 * i] = (short)AudioEngine.SoftClip(l * 1.5); pcm[2 * i + 1] = (short)AudioEngine.SoftClip(r * 1.5);
+                peak = Math.Max(peak, Math.Max(Math.Abs((int)pcm[2 * i]), Math.Abs((int)pcm[2 * i + 1])));
+                sum += (double)pcm[2 * i] * pcm[2 * i];
+            }
+            WriteWav(args[2], pcm, AudioEngine.OutputRate, 2);
+            Console.WriteLine("rendered " + args[2] + "  " + v.Title + "  [" + v.ChipSummary + "]  " + sec.ToString("0.0") + "s  peak=" + peak + "  rms=" + Math.Sqrt(sum / Math.Max(1, frames)).ToString("0")
+                + (v.UnsupportedChips.Count > 0 ? "  unsupported: " + string.Join(", ", v.UnsupportedChips) : ""));
+            return 0;
+        }
         if (args[0] == "--sop")
         {
             // --sop 곡.SOP 출력.wav [초]

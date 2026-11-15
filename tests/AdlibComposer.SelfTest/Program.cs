@@ -22,6 +22,27 @@ public static class Program
     public static int Main(string[] args)
     {
         AdlibComposer.Audio.Windows.WindowsAudio.Register();
+        if (args.Length > 1 && args[0] == "--hes")
+        {
+            // 진단: --hes 파일 [곡] [초]
+            if (args.Length > 2 && args[2] == "list")
+            {
+                var sw0 = System.Diagnostics.Stopwatch.StartNew();
+                var songs = AdlibComposer.Audio.Hes.SoundingSongs(args[1]);
+                Console.WriteLine(songs.Count + " songs in " + sw0.ElapsedMilliseconds + " ms: " + string.Join(",", songs));
+                var sw1 = System.Diagnostics.Stopwatch.StartNew();
+                var bytes0 = System.IO.File.ReadAllBytes(args[1]);
+                long worst = 0; int worstSong = -1;
+                for (int k = 0; k < 256; k++) { var t0 = System.Diagnostics.Stopwatch.StartNew(); AdlibComposer.Audio.Hes.Signature(bytes0, k, 2.0); if (t0.ElapsedMilliseconds > worst) { worst = t0.ElapsedMilliseconds; worstSong = k; } }
+                Console.WriteLine("sequential " + sw1.ElapsedMilliseconds + " ms, worst song " + worstSong + " = " + worst + " ms");
+                return 0;
+            }
+            var b = System.IO.File.ReadAllBytes(args[1]);
+            int song = args.Length > 2 ? int.Parse(args[2]) : 0;
+            double sec = args.Length > 3 ? double.Parse(args[3], System.Globalization.CultureInfo.InvariantCulture) : 2;
+            Console.WriteLine(AdlibComposer.Audio.Hes.Describe(b, song, sec));
+            return 0;
+        }
         if (args.Length > 1 && args[0] == "--test")
         {
             // 빠른 시험: 이름에 글자가 든 묶음만 (예: --test chip)
@@ -29,7 +50,7 @@ public static class Program
             {
                 ("vgm", () => VgmTests.Run(Check)), ("vgmexport", () => VgmExportTests.Run(Check)), ("newchip", () => NewChipTests.Run(Check)),
                 ("chip", () => ChipTests.Run(Check)), ("midi", () => MidiTests.Run(Check)), ("jukebox", () => JukeboxTests.Run(Check)),
-                ("extra", () => ExtraTests.Run(Check)), ("queue", () => EngineQueueTests.Run(Check)),
+                ("extra", () => ExtraTests.Run(Check)), ("queue", () => EngineQueueTests.Run(Check)), ("nespce", () => NesPceTests.Run(Check)),
             };
             foreach (var (name, run) in suites) if (name.Contains(args[1], StringComparison.OrdinalIgnoreCase)) run();
             Console.WriteLine();
@@ -67,6 +88,7 @@ public static class Program
         SongChipTests.Run(Check);
         TestRegistry();
         ExtraTests.Run(Check);
+        NesPceTests.Run(Check);
         RealFileTests.Run(Check);
         Console.WriteLine();
         Console.WriteLine("passed=" + passed + " failed=" + failed);

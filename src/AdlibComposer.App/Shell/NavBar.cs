@@ -9,7 +9,7 @@ namespace AdlibComposer.App.Shell;
 internal enum AppPage { Composer, Instrument, Jukebox, Note, Orgel, Tracker, Organizer, Transcribe }
 
 /// <summary>
-/// 메뉴 줄(File …)과 툴바(새 곡 …) 사이의 가로 페이지 메뉴: 구역 머리글(CREATE / PLAY / SCORE / TOOLS) + 둥근 아이콘 메뉴.
+/// 메뉴 줄(File …)과 툴바(새 곡 …) 사이의 가로 페이지 메뉴: 구역 머리글(PLAY / CREATE / SCORE / TOOLS) + 둥근 아이콘 메뉴.
 /// 메뉴를 누르면 PageSelected가 불린다. 창이 좁으면 구역 머리글을 빼고, 더 좁으면 아이콘만 (이름은 풍선 도움말).
 /// </summary>
 [System.ComponentModel.DesignerCategory("Code")]   // 코드로 만든 화면: 디자이너 대신 코드로 연다
@@ -46,10 +46,11 @@ internal sealed class NavBar : Control
         Height = BarHeight;
         Cursor = Cursors.Default;
 
+        // 순서 = 흐름: 곡을 듣고(Jukebox) → 고치고(Composer) → 악보로(Note)
+        Add("PLAY", AppPage.Jukebox, "Jukebox", "폴더의 곡 재생 (ROL · IMS · SOP · S3M · STM · MOD · MID · WRK · VGM · KSS · NSF · HES …) · 가사 · 채널 믹서", Glyphs.Jukebox);
         Add("CREATE", AppPage.Composer, "Composer", "건반 악보 작곡 · 재생 (ROL / IMS)", Glyphs.Composer);
         Add("CREATE", AppPage.Instrument, "Instrument Maker", "FM 악기 편집 · 시음 (BNK / INS)", Glyphs.Instrument);
         Add("CREATE", AppPage.Tracker, "Tracker", "트래커 곡 만들기 (S3M / STM / MOD / NST)", Glyphs.Tracker);
-        Add("PLAY", AppPage.Jukebox, "Jukebox", "폴더의 곡 재생 (ROL · IMS · SOP · S3M · STM · MOD · MID · WRK) · 가사 · 채널 믹서", Glyphs.Jukebox);
         Add("SCORE", AppPage.Note, "Note", "오선 악보 보기 · MusicXML / MIDI / PNG · 인쇄", Glyphs.Note);
         Add("SCORE", AppPage.Orgel, "Orgel Note", "30음 오르골 띠 구멍 위치 · 시험 연주 · 실제 크기 인쇄", Glyphs.Orgel);
         Add("SCORE", AppPage.Transcribe, "Transcribe", "음악 파일(MP3 · WAV)의 주 멜로디를 악보로 채보 (이 PC에서 분석)", Glyphs.Transcribe);

@@ -77,7 +77,13 @@ public static class SystemDefinitions
   { ""id"": ""wolf3d"", ""name"": ""Wolfenstein 3D (IMF 700Hz)"", ""cpu"": ""x86"", ""tickRate"": 700, ""chips"": [
     { ""chip"": ""YM3812"", ""clock"": 3579545 } ] },
   { ""id"": ""sbpro2"", ""name"": ""Sound Blaster Pro 2 (OPL3)"", ""cpu"": ""x86"", ""chips"": [
-    { ""chip"": ""YMF262"", ""clock"": 14318180, ""ports"": { ""addr"": ""0x220"", ""data"": ""0x221"", ""addr2"": ""0x222"", ""data2"": ""0x223"" } } ] }
+    { ""chip"": ""YMF262"", ""clock"": 14318180, ""ports"": { ""addr"": ""0x220"", ""data"": ""0x221"", ""addr2"": ""0x222"", ""data2"": ""0x223"" } } ] },
+  { ""id"": ""nes"", ""name"": ""Nintendo Famicom / NES (NTSC)"", ""cpu"": ""6502"", ""cpuClock"": 1789773, ""frameRate"": 60.0988, ""chips"": [
+    { ""chip"": ""2A03"", ""clock"": 1789773, ""memory"": ""0x4000"" } ] },
+  { ""id"": ""pce"", ""name"": ""NEC PC Engine / TurboGrafx-16"", ""cpu"": ""HuC6280"", ""cpuClock"": 7159090, ""frameRate"": 59.94, ""chips"": [
+    { ""chip"": ""HuC6280"", ""clock"": 3579545, ""memory"": ""0x1FE800"" },
+    { ""chip"": ""Timer"", ""memory"": ""0x1FEC00"" },
+    { ""chip"": ""VDC"", ""memory"": ""0x1FE000"" } ] }
 ] }";
 
     public static IReadOnlyCollection<SystemDefinition> All { get { lock (gate) { Ensure(); return all.Values.ToList(); } } }

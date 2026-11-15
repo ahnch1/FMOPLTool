@@ -44,7 +44,7 @@ public sealed class VgmPlayer
     }
 
     private readonly List<ExtraChip> extras = new List<ExtraChip>();
-    private ExtraChip xSn, xOpll, xOpn2, xOpm, xOpn, xOpna, xOki;
+    private ExtraChip xSn, xOpll, xOpn2, xOpm, xOpn, xOpna, xOki, xNes, xPce;
     /// <summary>YM2612 PCM 데이터 뱅크 (블록 0x00) · 읽는 위치.</summary>
     private byte[] pcmBank = new byte[0];
     private int pcmLen, pcmPos;
@@ -60,6 +60,8 @@ public sealed class VgmPlayer
         if (s.Ym2203Clock > 0) l.Add(new OpnChip(OpnChip.Variant.Ym2203, s.Ym2203Clock));
         if (s.Ym2608Clock > 0) l.Add(new OpnChip(OpnChip.Variant.Ym2608, s.Ym2608Clock));
         if (s.Okim6295Clock > 0) l.Add(new Okim6295(s.Okim6295Clock, s.OkiPin7, Rate));
+        if (s.NesApuClock > 0) l.Add(new NesApu(s.NesApuClock, Rate));
+        if (s.Huc6280Clock > 0) l.Add(new Huc6280Psg(s.Huc6280Clock, Rate));
         return l;
     }
 
@@ -175,7 +177,7 @@ public sealed class VgmPlayer
         }
 
         extras.Clear();
-        xSn = xOpll = xOpn2 = xOpm = xOpn = xOpna = xOki = null;
+        xSn = xOpll = xOpn2 = xOpm = xOpn = xOpna = xOki = xNes = xPce = null;
         foreach (var chip in CreateOtherChips(s))
         {
             var x = new ExtraChip { Chip = chip, Base = -1 };
@@ -185,6 +187,8 @@ public sealed class VgmPlayer
             else if (chip is Ym2413) xOpll = x;
             else if (chip is Ym2151) xOpm = x;
             else if (chip is Okim6295) xOki = x;
+            else if (chip is NesApu) xNes = x;
+            else if (chip is Huc6280Psg) xPce = x;
             else if (chip is OpnChip o) { if (o.Type == OpnChip.Variant.Ym2612) xOpn2 = x; else if (o.Type == OpnChip.Variant.Ym2203) xOpn = x; else xOpna = x; }
         }
         pcmLen = 0; pcmPos = 0;
@@ -210,6 +214,7 @@ public sealed class VgmPlayer
         clock = 0;
         due = 0;
         playLength = PlayLength(s);
+        outLevel = 1;
         loopsLeft = s.LoopOffset > 0 ? 1 : 0;
         playing = pos < s.DataEnd;
         SyncAdjustments();
@@ -221,7 +226,14 @@ public sealed class VgmPlayer
         if (clock >= playLength) playing = false;
     }
 
+    /// <summary>
+    /// 멈춤: 명령을 그만 실행하고 소리도 5ms에 걸쳐 줄여 끈다. 칩은 마지막에 받은 음을 계속 내므로
+    /// (NES 사각파의 길이 정지 · PSG 고정 볼륨 · OPL 키온 등) 출력을 끄지 않으면 멈춘 뒤에도 그 음이 남는다.
+    /// </summary>
     public void Stop() { playing = false; }
+
+    /// <summary>출력 크기 (재생 중 1, 멈추면 0으로 짧게 줄인다: 딱 소리 없이).</summary>
+    private double outLevel = 1;
 
     // ================================================================ 한 샘플
 
@@ -238,6 +250,9 @@ public sealed class VgmPlayer
     /// <summary>칩 소리를 섞어 스테레오 샘플 하나 (16bit 범위 안팎).</summary>
     public void Generate(out double left, out double right)
     {
+        // 멈추면 5ms(220샘플)에 걸쳐 0으로 곧게 줄인다 (딱 소리 없이, 끝은 정확히 0)
+        outLevel = playing ? Math.Min(1.0, outLevel + 1.0 / 220) : Math.Max(0.0, outLevel - 1.0 / 220);
+        if (!playing && outLevel <= 0) { left = right = 0; return; }   // 멈춘 뒤: 칩을 돌리지 않는다
         double mono = 0, l = 0, r = 0;
         if (psg != null) mono += psg.Generate() * psgGain;
         if (scc != null) mono += scc.Generate() * sccGain;
@@ -274,8 +289,8 @@ public sealed class VgmPlayer
             double left0 = playLength - clock;
             if (left0 < fadeLen) fade = Math.Max(0, left0 / fadeLen);
         }
-        left = (mono + l) * fade;
-        right = (mono + r) * fade;
+        left = (mono + l) * fade * outLevel;
+        right = (mono + r) * fade * outLevel;
     }
 
     // ================================================================ 명령
@@ -324,6 +339,8 @@ public sealed class VgmPlayer
             case 0x56: Other(xOpna, 0, d[pos + 1], d[pos + 2]); break;
             case 0x57: Other(xOpna, 1, d[pos + 1], d[pos + 2]); break;
             case 0xB8: if ((d[pos + 1] & 0x80) == 0) Other(xOki, 0, d[pos + 1], d[pos + 2]); break;
+            case 0xB4: if ((d[pos + 1] & 0x80) == 0) Other(xNes, 0, d[pos + 1], d[pos + 2]); break;
+            case 0xB9: if ((d[pos + 1] & 0x80) == 0) Other(xPce, 0, d[pos + 1], d[pos + 2]); break;
             case 0x67: DataBlock(d, pos); break;
             case 0xE0: pcmPos = (int)VgmFormat.U32(d, pos + 1); break;
             default:
@@ -349,7 +366,7 @@ public sealed class VgmPlayer
         UpdateOther(x);
     }
 
-    /// <summary>데이터 블록 (0x67 0x66 종류 크기 …): YM2612 PCM · YM2608 ADPCM · OKIM6295 ROM.</summary>
+    /// <summary>데이터 블록 (0x67 0x66 종류 크기 …): YM2612 PCM · YM2608 ADPCM · OKIM6295 ROM · NES APU 메모리(0xC2).</summary>
     private void DataBlock(byte[] d, int p)
     {
         int type = d[p + 2];
@@ -361,6 +378,12 @@ public sealed class VgmPlayer
             if (pcmLen + size > pcmBank.Length) Array.Resize(ref pcmBank, Math.Max(pcmLen + size, pcmBank.Length * 2));
             Array.Copy(d, at, pcmBank, pcmLen, size);
             pcmLen += size;
+            return;
+        }
+        if (type == 0xC2 && size > 2 && xNes != null)
+        {
+            // NES APU 메모리 (DPCM 샘플): 시작 주소 2바이트 + 바이트
+            ((NesApu)xNes.Chip).LoadRam(d[at] | (d[at + 1] << 8), d, at + 2, size - 2);
             return;
         }
         if ((type == 0x81 || type == 0x8B) && size > 8)

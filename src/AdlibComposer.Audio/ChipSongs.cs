@@ -22,7 +22,7 @@ public static class ChipSongs
         (Gbs.Extensions, Gbs.Load),
         (Mdx.Extensions, Mdx.Load),
         (Spc.Extensions, Spc.Load),
-        (Dos.HootPc98.Extensions, Dos.HootPc98.Load),
+        (HootSongs.Extensions, HootSongs.Load),
         (AdlibStreamFormats.ImfExtensions, LoadImf),
         (AdlibStreamFormats.HscExtensions, AdlibStreamFormats.LoadHsc),
         (AdlibStreamFormats.CmfExtensions, AdlibStreamFormats.LoadCmf),
@@ -37,7 +37,7 @@ public static class ChipSongs
         (Nsf.Extensions, p => Nsf.Tracks(p).Select(t => t.Title).ToList()),
         (Hes.Extensions, p => Hes.Tracks(p).Select(t => t.Title).ToList()),
         (Gbs.Extensions, p => Gbs.Tracks(p).Select(t => t.Title).ToList()),
-        (Dos.HootPc98.Extensions, p => Dos.HootPc98.Tracks(p).Select(t => t.Title).ToList()),
+        (HootSongs.Extensions, p => HootSongs.Tracks(p).Select(t => t.Title).ToList()),
         // XMI는 MIDI로 재생하지만 곡이 여럿 든 파일이라 목록만 같이 쓴다
         (new[] { ".xmi" }, p => Enumerable.Range(1, MidiFiles.SequenceCount(p)).Select(i => Path.GetFileNameWithoutExtension(p) + " #" + i).ToList()),
     };

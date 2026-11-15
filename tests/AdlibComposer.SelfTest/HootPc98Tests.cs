@@ -130,6 +130,57 @@ public static class HootPc98Tests
             try { Directory.Delete(root, true); } catch (Exception) { }
         }
         Real(check);
+        RealFiles(check);
+    }
+
+    /// <summary>
+    /// 이미 읽는 파일을 hoot 곡 코드로 (8-1): snes spc · msx kss · nes nsf · gb gbs 항목마다 아카이브 zip 하나를 풀어 .hoot이 생기고,
+    /// 곡 목록 = titlelist, 첫 두 곡이 소리 나고 서로 다르며 제목 = hoot 목록의 것.
+    /// </summary>
+    private static void RealFiles(Action<string, bool, string> check)
+    {
+        string inc = SopTests.FindDir("_incoming");
+        string hootDir = inc == null ? null : Path.Combine(inc, "Hootarchive");
+        string listDir = hootDir == null ? null : Path.Combine(hootDir, "xml_new");
+        if (listDir == null || !Directory.Exists(listDir)) { Console.WriteLine("SKIP  real hoot SPC / KSS / NSF / GBS (Hootarchive/xml_new not found)"); return; }
+        var idx = HootArchive.Index(listDir);
+        string root = Path.Combine(Path.GetTempPath(), "fmopl_hootf_" + Guid.NewGuid().ToString("N").Substring(0, 8));
+        string oldCache = ZipFolder.CacheBase;
+        try
+        {
+            ZipFolder.CacheBase = root;
+            foreach (var (folder, driver, type) in new[] { ("snes", "snes", "spc"), ("msx", "msx", "kss"), ("nes", "nes", "nsf"), ("gb", "gb", "gbs") })
+            {
+                string d = Path.Combine(hootDir, folder);
+                if (!Directory.Exists(d)) { Console.WriteLine("SKIP  real hoot " + type + " (" + folder + " folder not found)"); continue; }
+                string zip = null, hp = null;
+                foreach (var z in Directory.GetFiles(d, "*.zip").OrderBy(x => x, StringComparer.OrdinalIgnoreCase))
+                {
+                    if (!idx.TryGetValue(Path.GetFileNameWithoutExtension(z), out var gl)) continue;
+                    if (!gl.Any(g => g.Contains("type=\"" + type + "\">" + driver))) continue;
+                    if (new FileInfo(z).Length > 3_000_000) continue;
+                    string dir = ZipFolder.Extract(z);
+                    hp = Directory.GetFiles(dir, "*" + HootArchive.Extension).FirstOrDefault(h => { var e = HootArchive.Load(h); return e.Driver == driver && e.Type == type && e.Titles.Count >= 2; });
+                    if (hp != null) { zip = z; break; }
+                }
+                if (hp == null) { Console.WriteLine("SKIP  real hoot " + type + " (no entry with 2+ songs)"); continue; }
+                var entry = HootArchive.Load(hp);
+                var tracks = ChipSongs.Tracks(hp);
+                var sw = Stopwatch.StartNew();
+                var v0 = ChipSongs.Load(tracks[0].path);
+                var v1 = ChipSongs.Load(tracks[1].path);
+                double r0 = Rms(v0, 3, out _), r1 = Rms(v1, 3, out _);
+                bool differ = Math.Abs(r0 - r1) > 1 || !v0.Data.Skip(v0.DataOffset).Take(4000).SequenceEqual(v1.Data.Skip(v1.DataOffset).Take(4000));
+                check("Real hoot " + driver + " / " + type + ": " + Path.GetFileName(zip) + " → .hoot, titlelist songs play by hoot code (" + entry.Titles[0].Title + " · " + entry.Titles[1].Title + ")",
+                    tracks.Count == entry.Titles.Count && r0 > 100 && r1 > 100 && differ && v0.Title == entry.Titles[0].Title && v1.Title == entry.Titles[1].Title && v0.SourceFormat.StartsWith("hoot"),
+                    tracks.Count + " songs, rms " + r0.ToString("0") + " / " + r1.ToString("0") + ", " + sw.ElapsedMilliseconds + " ms, " + v1.SourceFormat);
+            }
+        }
+        finally
+        {
+            ZipFolder.CacheBase = oldCache;
+            try { Directory.Delete(root, true); } catch (Exception) { }
+        }
     }
 
     private static void Real(Action<string, bool, string> check)

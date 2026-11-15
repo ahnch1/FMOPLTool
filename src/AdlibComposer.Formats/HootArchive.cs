@@ -10,7 +10,7 @@ namespace AdlibComposer.Formats;
 
 /// <summary>
 /// hoot 아카이브 zip ↔ hoot 목록(xml) 항목: zip 이름 = 항목의 &lt;romlist archive="…"&gt;.
-/// zip을 풀 때 (<see cref="ZipFolder.Extract"/>) 그 zip을 쓰는 기종 흉내 항목(지금은 PC-98 DOS = pc98dos)마다
+/// zip을 풀 때 (<see cref="ZipFolder.Extract"/>) 그 zip을 쓰는 재생할 수 있는 항목(<see cref="Playable"/>: PC-98 DOS 흉내 · SPC · KSS · NSF · GBS)마다
 /// 항목 XML 하나를 <see cref="Extension"/> 파일로 푼 폴더에 써 둔다 → 파일 목록 · Jukebox에서 곡이 여럿 든 파일처럼 보인다.
 /// <para>목록 찾기: zip이 있는 폴더부터 위로 세 단계까지, 그 폴더나 그 아래 xml_new · xml에 *.xml이 있는 곳 (hoot 배포 모양: hoot.exe 옆 xml\, 기종 폴더 pc98\).
 /// 처음 한 번 목록 전체(수십 MB)를 훑어 archive → 항목 색인을 만든다 (기종 흉내 항목만 남김).</para>
@@ -18,15 +18,24 @@ namespace AdlibComposer.Formats;
 public static class HootArchive
 {
     public const string Extension = ".hoot";
-    private const string Mark = ".fmopl_hoot";
+    /// <summary>항목을 써 둔 표시 (재생할 수 있는 드라이버가 늘면 이름을 바꿔 이미 푼 zip에도 다시 쓴다: 2 = SPC · KSS · NSF · GBS 더함).</summary>
+    private const string Mark = ".fmopl_hoot2";
 
-    /// <summary>흉내 낼 수 있는 hoot 드라이버 · 형식 (driver "pc98dos" type …). 옵션 midiout이 있는 항목(MIDI 판)은 색인에서 뺀다.</summary>
+    /// <summary>
+    /// 재생할 수 있는 hoot 드라이버 · 형식: pc98dos opn · opna · 86 · beep (기계 흉내), 그리고 이미 읽는 파일을 곡 코드로 고르는 것 —
+    /// snes spc (rom offset = 곡 코드 → 그 .spc), msx kss · nes nsf · gb gbs (곡 코드 = 파일 안 곡 번호).
+    /// 옵션 midiout이 있는 항목(MIDI 판)은 색인에서 뺀다.
+    /// </summary>
     public static bool Playable(string driver, string type)
     {
-        if (!string.Equals(driver, "pc98dos", StringComparison.OrdinalIgnoreCase)) return false;
-        switch ((type ?? "").ToLowerInvariant())
+        string d = (driver ?? "").Trim().ToLowerInvariant(), t = (type ?? "").Trim().ToLowerInvariant();
+        switch (d)
         {
-            case "opn": case "opna": case "86": case "beep": return true;
+            case "pc98dos": return t == "opn" || t == "opna" || t == "86" || t == "beep";
+            case "snes": return t == "spc";
+            case "msx": return t == "kss";
+            case "nes": return t == "nsf";
+            case "gb": return t == "gbs";
         }
         return false;
     }
@@ -69,7 +78,6 @@ public static class HootArchive
                 foreach (var (at, len) in HootLists.GameBlocksAt(t))
                 {
                     string g = t.Substring(at, len);
-                    if (g.IndexOf("pc98dos", StringComparison.OrdinalIgnoreCase) < 0) continue;
                     var dm = DriverRx.Match(g);
                     if (!dm.Success || !Playable(dm.Groups[2].Value, dm.Groups[1].Value)) continue;
                     if (MidiOutRx.IsMatch(g)) continue;   // MIDI로 내는 판 (GS · MT-32 · Vermouth …): MPU-PC98 흉내 전
@@ -102,6 +110,7 @@ public static class HootArchive
             var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var g in games)
             {
+                if (MissingRom(dir, g) != null) continue;   // 이 zip에 그 판의 곡 파일이 없음
                 string name = EntryFileName(g, Path.GetFileNameWithoutExtension(zipPath));
                 string file = name;
                 for (int k = 2; !used.Add(file); k++) file = name + " (" + k + ")";
@@ -141,6 +150,36 @@ public static class HootArchive
             return Regex.Replace(g >= 0 ? s.Substring(g) : s, @"\s+", "");
         }
         return Norm(a) == Norm(b);
+    }
+
+    /// <summary>zip을 푼 폴더에서 rom 이름의 파일 (대소문자 · '/' 무시, 하위 폴더 포함, 이름만 맞아도). 없으면 null.</summary>
+    public static string FindFile(string dir, string name)
+    {
+        string rel = name.Replace('/', Path.DirectorySeparatorChar).Replace('\\', Path.DirectorySeparatorChar).TrimStart(Path.DirectorySeparatorChar);
+        string direct = Path.Combine(dir, rel);
+        if (File.Exists(direct)) return direct;
+        string leaf = Path.GetFileName(rel), byLeaf = null;
+        foreach (var f in Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories))
+        {
+            if (string.Equals(Path.GetRelativePath(dir, f), rel, StringComparison.OrdinalIgnoreCase)) return f;
+            if (byLeaf == null && string.Equals(Path.GetFileName(f), leaf, StringComparison.OrdinalIgnoreCase)) byLeaf = f;
+        }
+        return byLeaf;
+    }
+
+    /// <summary>
+    /// 파일을 바로 읽는 항목(kss · nsf · gbs: rom 파일 하나)인데 그 파일이 푼 zip에 없으면 그 이름 (같은 archive 이름을 다른 판과 나눠 쓰는 항목이 있다).
+    /// 기계 흉내(pc98dos) · SPC(곡마다 파일)는 null.
+    /// </summary>
+    public static string MissingRom(string dir, string gameXml)
+    {
+        var dm = DriverRx.Match(gameXml);
+        string driver = dm.Success ? dm.Groups[2].Value.ToLowerInvariant() : "";
+        if (driver != "msx" && driver != "nes" && driver != "gb") return null;
+        var rom = Regex.Match(gameXml, @"<rom\b[^>]*>\s*([^<]+?)\s*</rom>");
+        if (!rom.Success) return "(rom 없음)";
+        string name = System.Net.WebUtility.HtmlDecode(rom.Groups[1].Value);
+        return FindFile(dir, name) == null ? name : null;
     }
 
     /// <summary>항목 이름 → 파일 이름 ("[PC-9801] " 떼고, 쓸 수 없는 글자 → _, 80자까지).</summary>

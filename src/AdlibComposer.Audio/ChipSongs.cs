@@ -19,6 +19,7 @@ public static class ChipSongs
         (Kss.Extensions, Kss.Load),
         (Nsf.Extensions, Nsf.Load),
         (Hes.Extensions, Hes.Load),
+        (Gbs.Extensions, Gbs.Load),
         (Spc.Extensions, Spc.Load),
         (AdlibStreamFormats.ImfExtensions, LoadImf),
         (AdlibStreamFormats.HscExtensions, AdlibStreamFormats.LoadHsc),
@@ -33,6 +34,7 @@ public static class ChipSongs
         (Kss.Extensions, p => Kss.Tracks(p).Select(t => t.Title.Length > 0 ? t.Title : Path.GetFileNameWithoutExtension(p) + " #" + t.Song).ToList()),
         (Nsf.Extensions, p => Nsf.Tracks(p).Select(t => t.Title).ToList()),
         (Hes.Extensions, p => Hes.Tracks(p).Select(t => t.Title).ToList()),
+        (Gbs.Extensions, p => Gbs.Tracks(p).Select(t => t.Title).ToList()),
         // XMI는 MIDI로 재생하지만 곡이 여럿 든 파일이라 목록만 같이 쓴다
         (new[] { ".xmi" }, p => Enumerable.Range(1, MidiFiles.SequenceCount(p)).Select(i => Path.GetFileNameWithoutExtension(p) + " #" + i).ToList()),
     };
@@ -104,6 +106,7 @@ public static class ChipSongs
         {
             // HES는 곡 목록을 찾으려면 곡마다 돌려 봐야 한다: 아직 모르면 파일 목록에서는 돌리지 않는다
             if (Hes.Extensions.Any(x => string.Equals(x, Path.GetExtension(FilePart(path)), StringComparison.OrdinalIgnoreCase)) && !Hes.TracksKnown(FilePart(path))) return "";
+            if (!Gbs.TracksKnown(FilePart(path))) return "";
             NezM3u.SplitTrack(path, out int n);
             var t = titles(FilePart(path));
             return t.Count > 0 ? t[Math.Max(0, Math.Min(n, t.Count - 1))] : "";

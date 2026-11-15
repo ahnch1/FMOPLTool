@@ -45,7 +45,7 @@ public sealed class VgmPlayer
     }
 
     private readonly List<ExtraChip> extras = new List<ExtraChip>();
-    private ExtraChip xSn, xOpll, xOpn2, xOpm, xOpn, xOpna, xOpnb, xOki, xNes, xPce, xNsfx, xMsm, xSaa;
+    private ExtraChip xSn, xOpll, xOpn2, xOpm, xOpn, xOpna, xOpnb, xOki, xNes, xPce, xNsfx, xMsm, xSaa, xGb;
     /// <summary>YM2612 PCM 데이터 뱅크 (블록 0x00) · 읽는 위치.</summary>
     private byte[] pcmBank = new byte[0];
     private int pcmLen, pcmPos;
@@ -98,6 +98,7 @@ public sealed class VgmPlayer
         if (s.Huc6280Clock > 0) l.Add(new Huc6280Psg(s.Huc6280Clock, Rate));
         if (s.Okim6258Clock > 0) l.Add(new Msm6258(s.Okim6258Clock, s.Okim6258Flags, Rate));
         if (s.Saa1099Clock > 0) l.Add(new Saa1099(s.Saa1099Clock, Rate));
+        if (s.GbDmgClock > 0) l.Add(new GbApu(s.GbDmgClock, Rate));
         return l;
     }
 
@@ -232,7 +233,7 @@ public sealed class VgmPlayer
         }
 
         extras.Clear();
-        xSn = xOpll = xOpn2 = xOpm = xOpn = xOpna = xOpnb = xOki = xNes = xPce = xNsfx = xMsm = xSaa = null;
+        xSn = xOpll = xOpn2 = xOpm = xOpn = xOpna = xOpnb = xOki = xNes = xPce = xNsfx = xMsm = xSaa = xGb = null;
         foreach (var chip in CreateOtherChips(s))
         {
             var x = new ExtraChip { Chip = chip, Base = -1 };
@@ -247,6 +248,7 @@ public sealed class VgmPlayer
             else if (chip is NsfExpansion) xNsfx = x;
             else if (chip is Msm6258) xMsm = x;
             else if (chip is Saa1099) xSaa = x;
+            else if (chip is GbApu) xGb = x;
             else if (chip is OpnChip o) { if (o.Type == OpnChip.Variant.Ym2612) xOpn2 = x; else if (o.Type == OpnChip.Variant.Ym2203) xOpn = x; else if (o.Type == OpnChip.Variant.Ym2608) xOpna = x; else xOpnb = x; }
         }
         pcmLen = 0; pcmPos = 0;
@@ -406,6 +408,7 @@ public sealed class VgmPlayer
             case 0xB9: if ((d[pos + 1] & 0x80) == 0) Other(xPce, 0, d[pos + 1], d[pos + 2]); break;
             case 0xB7: if ((d[pos + 1] & 0x80) == 0) Other(xMsm, 0, d[pos + 1], d[pos + 2]); break;
             case 0xBD: if ((d[pos + 1] & 0x80) == 0) Other(xSaa, 0, d[pos + 1], d[pos + 2]); break;
+            case 0xB3: if ((d[pos + 1] & 0x80) == 0) Other(xGb, 0, d[pos + 1], d[pos + 2]); break;
             case 0x90: case 0x91: case 0x92: case 0x93: case 0x94: case 0x95: StreamCommand(d, pos); break;
             case 0xD7: if (song.NsfChips != 0) Other(xNsfx, d[pos + 1], d[pos + 2], d[pos + 3]); break;   // NSF 확장 음원 (이 프로그램 안에서만)
             case 0x67: DataBlock(d, pos); break;
@@ -560,7 +563,7 @@ public sealed class VgmPlayer
         anyStream = any;
     }
 
-    /// <summary>스트림 바이트 하나를 칩에 (VGM 칩 번호: 0x02 YM2612, 0x03 YM2151, 0x06 YM2203, 0x07 YM2608, 0x08 YM2610, 0x17 OKIM6258, 0x18 OKIM6295).</summary>
+    /// <summary>스트림 바이트 하나를 칩에 (VGM 칩 번호: 0x02 YM2612, 0x03 YM2151, 0x06 YM2203, 0x07 YM2608, 0x08 YM2610, 0x13 GB DMG, 0x17 OKIM6258, 0x18 OKIM6295).</summary>
     private void StreamWrite(DacStream st, int v)
     {
         if ((st.ChipType & 0x80) != 0) return;   // 둘째 칩
@@ -571,6 +574,7 @@ public sealed class VgmPlayer
             case 0x06: Other(xOpn, 0, st.Reg, v); break;
             case 0x07: Other(xOpna, st.Port, st.Reg, v); break;
             case 0x08: Other(xOpnb, st.Port, st.Reg, v); break;
+            case 0x13: Other(xGb, 0, st.Reg, v); break;
             case 0x17: Other(xMsm, 0, st.Reg, v); break;
             case 0x18: Other(xOki, 0, st.Reg, v); break;
         }

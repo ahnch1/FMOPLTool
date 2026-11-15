@@ -35,6 +35,15 @@ public static class Program
             Console.WriteLine("report: " + r.ReportPath + (r.HootXmlPath.Length > 0 ? ", hoot: " + r.HootXmlPath : ""));
             return 0;
         }
+        if (args.Length > 1 && args[0] == "--gbs")
+        {
+            // 진단: --gbs 파일 [곡] [초]
+            var b = System.IO.File.ReadAllBytes(args[1]);
+            int song = args.Length > 2 ? int.Parse(args[2]) : 0;
+            double sec = args.Length > 3 ? double.Parse(args[3], System.Globalization.CultureInfo.InvariantCulture) : 2;
+            Console.WriteLine(AdlibComposer.Audio.Gbs.Describe(b, song, sec));
+            return 0;
+        }
         if (args.Length > 1 && args[0] == "--hes")
         {
             // 진단: --hes 파일 [곡] [초]
@@ -63,7 +72,7 @@ public static class Program
             {
                 ("vgm", () => VgmTests.Run(Check)), ("vgmexport", () => VgmExportTests.Run(Check)), ("newchip", () => NewChipTests.Run(Check)),
                 ("chip", () => ChipTests.Run(Check)), ("midi", () => MidiTests.Run(Check)), ("jukebox", () => JukeboxTests.Run(Check)),
-                ("extra", () => ExtraTests.Run(Check)), ("queue", () => EngineQueueTests.Run(Check)), ("nespce", () => NesPceTests.Run(Check)), ("zip", () => ZipTests.Run(Check)), ("droraw", () => DroRawTests.Run(Check)), ("hoot", () => HootTests.Run(Check)), ("spc", () => SpcTests.Run(Check)), ("pcfmt", () => PcFormatTests.Run(Check)), ("ym2610", () => Ym2610Tests.Run(Check)), ("small", () => SmallChipTests.Run(Check)),
+                ("extra", () => ExtraTests.Run(Check)), ("queue", () => EngineQueueTests.Run(Check)), ("nespce", () => NesPceTests.Run(Check)), ("zip", () => ZipTests.Run(Check)), ("droraw", () => DroRawTests.Run(Check)), ("hoot", () => HootTests.Run(Check)), ("spc", () => SpcTests.Run(Check)), ("pcfmt", () => PcFormatTests.Run(Check)), ("ym2610", () => Ym2610Tests.Run(Check)), ("small", () => SmallChipTests.Run(Check)), ("gbs", () => GbsTests.Run(Check)),
             };
             foreach (var (name, run) in suites) if (name.Contains(args[1], StringComparison.OrdinalIgnoreCase)) run();
             Console.WriteLine();
@@ -109,6 +118,7 @@ public static class Program
         PcFormatTests.Run(Check);
         Ym2610Tests.Run(Check);
         SmallChipTests.Run(Check);
+        GbsTests.Run(Check);
         RealFileTests.Run(Check);
         Console.WriteLine();
         Console.WriteLine("passed=" + passed + " failed=" + failed);

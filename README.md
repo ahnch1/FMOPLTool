@@ -7,7 +7,7 @@ BNK 악기를 보이스(채널)에 할당하고, 건반 악보에 노트를 배�
 - 화면: 원본 스크린샷(640x400 흑백 DOS 화면) 레이아웃을 따른 WinForms GUI
 - 확장: 곡 포맷, 악보(스코어) 변환, OPL 칩 교체를 위한 인터페이스 제공
 
-버전: `Directory.Build.props`의 `<Version>` (현재 1.29.0). 주·부 번호(1.1, 1.2 ...)는 직접 정하고, 작업마다 마지막 번호를 올린다.
+버전: `Directory.Build.props`의 `<Version>` (현재 1.29.0). 주·부 번호(1.1, 1.2 ...)는 직접 정하고, 작업마다 마지막 번호를 올린다. hoot 재생(PC-98 · PC/AT DOS 흉내 · MIDI 판 · 트리) 작업 현황과 다음 할 일은 [docs/hoot-status.md](docs/hoot-status.md).
 
 ## 빌드 / 실행
 

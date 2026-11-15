@@ -49,7 +49,7 @@ public static class ZipFolder
         using (var sha = SHA1.Create())
             key = BitConverter.ToString(sha.ComputeHash(Encoding.UTF8.GetBytes(fi.FullName.ToUpperInvariant() + "|" + fi.Length + "|" + fi.LastWriteTimeUtc.Ticks))).Replace("-", "").Substring(0, 16);
         string dir = Path.Combine(CacheBase, Path.GetFileNameWithoutExtension(fi.Name).Trim() + "_" + key);
-        if (File.Exists(Path.Combine(dir, DoneMark))) return dir;
+        if (File.Exists(Path.Combine(dir, DoneMark))) { AddHootEntries(fi.FullName, dir); return dir; }
 
         CleanOld();
         if (Directory.Exists(dir)) Directory.Delete(dir, true);   // 지난번에 풀다 만 것
@@ -93,7 +93,15 @@ public static class ZipFolder
             try { Directory.Delete(tmp, true); } catch (Exception) { }
             throw;
         }
+        AddHootEntries(fi.FullName, dir);
         return dir;
+    }
+
+    /// <summary>hoot 아카이브 zip이면 그 zip의 기종 흉내 항목을 .hoot 파일로 (<see cref="HootArchive"/>). 실패해도 그만.</summary>
+    private static void AddHootEntries(string zipPath, string dir)
+    {
+        try { HootArchive.WriteEntries(zipPath, dir); }
+        catch (Exception) { }
     }
 
     /// <summary>항목 이름: Latin-1로 읽은 글자 = 원래 바이트. UTF-8로 맞으면 UTF-8, 아니면 한글 자동 판별 (완성형 / 조합형), 둘 다 아니면 CP437.</summary>

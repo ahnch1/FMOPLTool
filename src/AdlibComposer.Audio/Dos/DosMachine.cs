@@ -21,7 +21,7 @@ public class DosMachine : IX86Bus
     public const int StubSeg = 0xF000, DosSeg = 0x0070, FirstMcb = 0x0800, MaxHandles = 64;
     /// <summary>호스트 함정 번호: 0~255 = 그 벡터의 기본 처리기, 이 값 = 바깥(C#)이 부른 far call에서 돌아옴.</summary>
     private const int TrapReturn = 0x0100;
-    private const int ReturnStubOff = 0x0400;
+    private const int ReturnStubOff = 0x0400, IdleOff = 0x0410;
     /// <summary>셸 블록 (PSP + 바깥이 부르는 far call의 스택) 크기.</summary>
     private const int ShellParas = 0x80;
 
@@ -85,6 +85,8 @@ public class DosMachine : IX86Bus
             Poke(StubSeg, v * 4, 0xF1); Poke(StubSeg, v * 4 + 1, v); Poke(StubSeg, v * 4 + 2, 0); Poke(StubSeg, v * 4 + 3, 0xCF);
         }
         Poke(StubSeg, ReturnStubOff, 0xF1); Poke16(StubSeg, ReturnStubOff + 1, TrapReturn); Poke(StubSeg, ReturnStubOff + 3, 0xF4);
+        // 쉬는 곳 (셸 프롬프트 대신): STI; HLT; JMP 앞으로
+        Poke(StubSeg, IdleOff, 0xFB); Poke(StubSeg, IdleOff + 1, 0xF4); Poke(StubSeg, IdleOff + 2, 0xEB); Poke(StubSeg, IdleOff + 3, 0xFC);
         // DOS 데이터: 목록의 목록 (BX−2 = 첫 MCB), InDOS
         Poke16(DosSeg, 0x24, FirstMcb);
         // MCB 하나 (전체 빈 블록)
@@ -486,6 +488,13 @@ public class DosMachine : IX86Bus
 
     public bool HandleOpen(int h) { return h >= 0 && h < MaxHandles && handles[h] != null; }
     public bool HostReturned { get { return hostReturn; } }
+
+    /// <summary>셸로 돌아온 뒤 (상주 · 끝남): CPU를 셸 스택 위의 쉬는 고리(STI · HLT)에 두어 인터럽트(타이머 · hoot)를 계속 받게 한다.</summary>
+    public void Idle()
+    {
+        hostReturn = false;
+        Cpu.SS = shellPsp; Cpu.SP = ShellParas * 16 - 2; Cpu.CS = StubSeg; Cpu.IP = IdleOff; Cpu.Halted = false;
+    }
 
     // ------------------------------------------------------------ 함정 · 인터럽트
 

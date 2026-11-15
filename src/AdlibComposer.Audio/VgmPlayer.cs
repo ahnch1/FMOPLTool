@@ -85,6 +85,7 @@ public sealed class VgmPlayer
     {
         var l = new List<ISoundChip>();
         if (s.SpcImage != null) l.Add(new SnesSpc(s.SpcImage));
+        if (s.SelfRunning != null && s.SelfRunning() is ISoundChip own) l.Add(own);
         if (s.Sn76489Clock > 0) l.Add(new Sn76489(s.Sn76489Clock, Rate, s.SnFeedback, s.SnWidth));
         if (s.Ym2413Clock > 0) l.Add(new Ym2413(s.Ym2413Clock, s.Vrc7));
         if (s.Ym2612Clock > 0) l.Add(new OpnChip(OpnChip.Variant.Ym2612, s.Ym2612Clock));
@@ -172,6 +173,14 @@ public sealed class VgmPlayer
     public static bool[] ScanUsed(VgmSong s)
     {
         if (s.SpcImage != null) return ScanSelfRunning(s);
+        if (s.SelfRunning != null)
+        {
+            // 기종 흉내 (PC-98 DOS 등): 기계를 세우고 돌려 보는 데 몇 초 걸려 다 쓴다고 본다
+            var all = new bool[PlaybackOptions.Voices];
+            int n = ChannelsOf(s).Count;
+            for (int i = 0; i < n && i < all.Length; i++) all[i] = true;
+            return all;
+        }
         var p = new VgmPlayer();
         p.Start(s, PlaySeconds(s) * 1000.0 + 1, null);
         var used = new bool[PlaybackOptions.Voices];

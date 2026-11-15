@@ -64,6 +64,10 @@ public sealed class VgmSong
     public bool Vrc7;
     /// <summary>SPC 파일 전체 (슈퍼 패미컴): 있으면 SPC 칩이 이것으로 스스로 돈다 (명령은 길이뿐).</summary>
     public byte[] SpcImage;
+    /// <summary>스스로 도는 칩을 만드는 함수 (기종 흉내: PC-98 DOS 등). 재생기가 칩을 만들 때마다 부른다 (ISoundChip을 돌려줘야 함). 명령은 길이뿐.</summary>
+    public Func<object> SelfRunning;
+    /// <summary><see cref="SelfRunning"/> 칩 이름 (칩 요약에 보임).</summary>
+    public string SelfRunningName = "";
     /// <summary>SN76489 노이즈 되먹임 · LFSR 너비 (0 = 기본값).</summary>
     public int SnFeedback, SnWidth;
     /// <summary>OKIM6295 핀7 (클럭 칸 bit31).</summary>
@@ -80,7 +84,7 @@ public sealed class VgmSong
     public bool HasOpl { get { return Ym3812Clock > 0 || Ym3526Clock > 0 || Y8950Clock > 0 || Ymf262Clock > 0; } }
     public bool IsOpl3 { get { return Ymf262Clock > 0; } }
     /// <summary>PSG · SCC · OPL 말고 다른 칩 (공통 칩 경로로 내는 것).</summary>
-    public bool HasOther { get { return Sn76489Clock > 0 || Ym2413Clock > 0 || Ym2612Clock > 0 || Ym2151Clock > 0 || Ym2203Clock > 0 || Ym2608Clock > 0 || Okim6295Clock > 0 || NesApuClock > 0 || Huc6280Clock > 0 || Ym2610Clock > 0 || Okim6258Clock > 0 || Saa1099Clock > 0 || GbDmgClock > 0 || SpcImage != null; } }
+    public bool HasOther { get { return Sn76489Clock > 0 || Ym2413Clock > 0 || Ym2612Clock > 0 || Ym2151Clock > 0 || Ym2203Clock > 0 || Ym2608Clock > 0 || Okim6295Clock > 0 || NesApuClock > 0 || Huc6280Clock > 0 || Ym2610Clock > 0 || Okim6258Clock > 0 || Saa1099Clock > 0 || GbDmgClock > 0 || SpcImage != null || SelfRunning != null; } }
     /// <summary>소리 낼 수 있는 칩이 하나라도 있는가.</summary>
     public bool IsPlayable { get { return HasPsg || HasScc || HasOpl || HasOther; } }
     public bool AyIsYm { get { return AyType >= 0x10; } }
@@ -111,6 +115,7 @@ public sealed class VgmSong
         {
             var l = new List<string>();
             if (SpcImage != null) l.Add("SPC700 + S-DSP");
+            if (SelfRunning != null && SelfRunningName.Length > 0) l.Add(SelfRunningName);
             if (Sn76489Clock > 0) l.Add("SN76489");
             if (Ym2413Clock > 0) l.Add(Vrc7 ? "VRC7" : "YM2413");
             if (Ym2612Clock > 0) l.Add("YM2612");

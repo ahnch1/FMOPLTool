@@ -365,7 +365,7 @@ public class DosMachine : IX86Bus
         if (psp < 0) { frames.Pop(); return psp == -2 ? ShellResult.NotFound : ShellResult.NoMemory; }
         Run(maxCycles);
         if (hostReturn) return (ReturnCode >> 8) == 3 ? ShellResult.Resident : ShellResult.Exited;
-        return Cpu.Halted ? ShellResult.Halted : ShellResult.Running;
+        return Cpu.Halted && !HaltIsIdle ? ShellResult.Halted : ShellResult.Running;
     }
 
     /// <summary>COMMAND.COM 안 명령: SET · PATH · CD · ECHO · REM · CLS · PROMPT · BREAK · VERIFY (그 밖은 false = 프로그램으로 찾기).</summary>
@@ -390,6 +390,9 @@ public class DosMachine : IX86Bus
         }
         return false;
     }
+
+    /// <summary>HLT가 인터럽트를 기다리는 것인가 (기종 흉내는 true: 아직 도는 중).</summary>
+    protected virtual bool HaltIsIdle { get { return false; } }
 
     /// <summary>CPU를 cycles만큼 (또는 바깥으로 돌아오거나 HLT까지) 돌린다.</summary>
     public virtual void Run(long cycles)

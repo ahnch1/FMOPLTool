@@ -58,6 +58,8 @@ public sealed class VgmSong
     public int NsfChips;
     /// <summary>YM2413 자리가 VRC7 (NSF): 6채널, VRC7 내장 악기.</summary>
     public bool Vrc7;
+    /// <summary>SPC 파일 전체 (슈퍼 패미컴): 있으면 SPC 칩이 이것으로 스스로 돈다 (명령은 길이뿐).</summary>
+    public byte[] SpcImage;
     /// <summary>SN76489 노이즈 되먹임 · LFSR 너비 (0 = 기본값).</summary>
     public int SnFeedback, SnWidth;
     /// <summary>OKIM6295 핀7 (클럭 칸 bit31).</summary>
@@ -74,7 +76,7 @@ public sealed class VgmSong
     public bool HasOpl { get { return Ym3812Clock > 0 || Ym3526Clock > 0 || Y8950Clock > 0 || Ymf262Clock > 0; } }
     public bool IsOpl3 { get { return Ymf262Clock > 0; } }
     /// <summary>PSG · SCC · OPL 말고 다른 칩 (공통 칩 경로로 내는 것).</summary>
-    public bool HasOther { get { return Sn76489Clock > 0 || Ym2413Clock > 0 || Ym2612Clock > 0 || Ym2151Clock > 0 || Ym2203Clock > 0 || Ym2608Clock > 0 || Okim6295Clock > 0 || NesApuClock > 0 || Huc6280Clock > 0; } }
+    public bool HasOther { get { return Sn76489Clock > 0 || Ym2413Clock > 0 || Ym2612Clock > 0 || Ym2151Clock > 0 || Ym2203Clock > 0 || Ym2608Clock > 0 || Okim6295Clock > 0 || NesApuClock > 0 || Huc6280Clock > 0 || SpcImage != null; } }
     /// <summary>소리 낼 수 있는 칩이 하나라도 있는가.</summary>
     public bool IsPlayable { get { return HasPsg || HasScc || HasOpl || HasOther; } }
     public bool AyIsYm { get { return AyType >= 0x10; } }
@@ -104,6 +106,7 @@ public sealed class VgmSong
         get
         {
             var l = new List<string>();
+            if (SpcImage != null) l.Add("SPC700 + S-DSP");
             if (Sn76489Clock > 0) l.Add("SN76489");
             if (Ym2413Clock > 0) l.Add(Vrc7 ? "VRC7" : "YM2413");
             if (Ym2612Clock > 0) l.Add("YM2612");

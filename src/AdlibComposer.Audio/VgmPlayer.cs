@@ -53,6 +53,7 @@ public sealed class VgmPlayer
     private static List<ISoundChip> CreateOtherChips(VgmSong s)
     {
         var l = new List<ISoundChip>();
+        if (s.SpcImage != null) l.Add(new SnesSpc(s.SpcImage));
         if (s.Sn76489Clock > 0) l.Add(new Sn76489(s.Sn76489Clock, Rate, s.SnFeedback, s.SnWidth));
         if (s.Ym2413Clock > 0) l.Add(new Ym2413(s.Ym2413Clock, s.Vrc7));
         if (s.Ym2612Clock > 0) l.Add(new OpnChip(OpnChip.Variant.Ym2612, s.Ym2612Clock));
@@ -135,11 +136,30 @@ public sealed class VgmPlayer
     /// <summary>곡 끝까지 명령만 돌려 소리를 낸 적 있는 채널을 찾는다 (믹서 '사용' 표시).</summary>
     public static bool[] ScanUsed(VgmSong s)
     {
+        if (s.SpcImage != null) return ScanSelfRunning(s);
         var p = new VgmPlayer();
         p.Start(s, PlaySeconds(s) * 1000.0 + 1, null);
         var used = new bool[PlaybackOptions.Voices];
         Array.Copy(p.everSounded, used, used.Length);
         p.Stop();
+        return used;
+    }
+
+    /// <summary>스스로 도는 칩(SPC): 곡 전체를 돌리면 오래 걸려 (실시간의 8배쯤) 앞 8초만 돌려 소리 낸 보이스를 본다.</summary>
+    private static bool[] ScanSelfRunning(VgmSong s)
+    {
+        var used = new bool[PlaybackOptions.Voices];
+        var chips = CreateOtherChips(s);
+        int at = 0;
+        foreach (var c in chips)
+        {
+            if (c is ISelfRunningChip sr)
+            {
+                sr.Skip(Math.Min(8, PlaySeconds(s)));
+                for (int i = 0; i < c.ChannelCount && at + i < used.Length; i++) used[at + i] = (sr.VoicesUsed & (1 << i)) != 0;
+            }
+            at += c.ChannelCount;
+        }
         return used;
     }
 
@@ -221,10 +241,11 @@ public sealed class VgmPlayer
         playing = pos < s.DataEnd;
         SyncAdjustments();
 
-        // 시작 위치까지 명령만 빨리
+        // 시작 위치까지 명령만 빨리 (스스로 도는 칩은 그만큼 앞으로)
         double target = Math.Max(0, startMs) * Rate / 1000.0;
         while (playing && due <= target) ExecuteOne();
         clock = Math.Min(target, playLength);
+        if (clock > 0) foreach (var x in extras) if (x.Chip is ISelfRunningChip sr) sr.Skip(clock / Rate);
         if (clock >= playLength) playing = false;
     }
 

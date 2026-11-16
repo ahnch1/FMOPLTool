@@ -197,7 +197,7 @@ internal sealed class FileBrowser : UserControl
         // 스크롤바를 끌어도 쪽 번호가 맞도록 (ListView에는 Scroll 이벤트가 없다)
         pageTimer.Tick += delegate
         {
-            int top = list.Items.Count > 0 && list.TopItem != null ? list.TopItem.Index : -1;
+            int top = TopIndex;
             if (top != lastTop) UpdatePager();
         };
         pageTimer.Start();
@@ -626,15 +626,35 @@ internal sealed class FileBrowser : UserControl
 
     // ---------------------------------------------------------------- 쪽 넘기기
 
-    /// <summary>한 쪽 = 지금 목록에 보이는 줄 수.</summary>
+    /// <summary>
+    /// 한 쪽 = 지금 목록에 보이는 줄 수.
+    /// 목록을 비우는 도중(Items.Clear)에는 스크롤바가 없어지며 크기가 바뀌어 여기로 오는데, 그때는 화면 목록은 비었고 Items.Count는 아직 남아
+    /// GetItemRect가 범위 오류를 낸다: 줄 높이를 못 읽으면 1쪽으로 본다 (비우기가 끝나면 다시 계산).
+    /// </summary>
     private int PageSize
     {
         get
         {
             if (list.Items.Count == 0) return 1;
-            int rowH = Math.Max(1, list.GetItemRect(0).Height);
-            int header = list.TopItem != null ? list.GetItemRect(list.TopItem.Index).Top : rowH;
-            return Math.Max(1, (list.ClientSize.Height - Math.Max(0, header)) / rowH);
+            try
+            {
+                int rowH = Math.Max(1, list.GetItemRect(0).Height);
+                var topItem = list.TopItem;
+                int header = topItem != null ? list.GetItemRect(topItem.Index).Top : rowH;
+                return Math.Max(1, (list.ClientSize.Height - Math.Max(0, header)) / rowH);
+            }
+            catch (ArgumentOutOfRangeException) { return 1; }
+        }
+    }
+
+    /// <summary>목록 맨 위 줄 번호 (없거나 목록을 바꾸는 도중이면 -1).</summary>
+    private int TopIndex
+    {
+        get
+        {
+            if (list.Items.Count == 0) return -1;
+            try { var t = list.TopItem; return t != null ? t.Index : -1; }
+            catch (ArgumentOutOfRangeException) { return -1; }
         }
     }
 
@@ -642,7 +662,7 @@ internal sealed class FileBrowser : UserControl
     {
         if (list.Items.Count == 0) return;
         int size = PageSize;
-        int top = list.TopItem != null ? list.TopItem.Index : 0;
+        int top = Math.Max(0, TopIndex);
         int target = Math.Max(0, Math.Min(list.Items.Count - 1, top + dir * size));
         // 아래로: 그 쪽의 마지막 줄을 먼저 보이게 한 뒤 맨 위를 맞춘다 (TopItem만으로는 안 움직일 때가 있다)
         if (dir > 0) list.EnsureVisible(Math.Min(list.Items.Count - 1, target + size - 1));
@@ -657,8 +677,9 @@ internal sealed class FileBrowser : UserControl
         int n = list.Items.Count;
         int size = PageSize;
         int pages = Math.Max(1, (n + size - 1) / size);
-        int top = n > 0 && list.TopItem != null ? list.TopItem.Index : 0;
-        lastTop = n > 0 && list.TopItem != null ? top : -1;
+        int ti = TopIndex;
+        int top = Math.Max(0, ti);
+        lastTop = ti;
         int page = Math.Min(pages, top / size + 1);
         if (top + size >= n) page = pages;   // 맨 아래까지 내려왔으면 마지막 쪽
         pageLabel.Text = current == null ? "" : page + " / " + pages + " 쪽 · " + songCount + (searchMode ? "곡 찾음" : "곡");
@@ -703,7 +724,9 @@ internal sealed class FileBrowser : UserControl
         titleGeneration++;   // 폴더 제목 읽기는 그만
         searchMode = true;
         string baseDir = current;
+        list.BeginUpdate();
         list.Items.Clear();
+        list.EndUpdate();
         list.Visible = true;
         emptyLabel.Visible = false;
         songCount = 0;
@@ -740,17 +763,19 @@ internal sealed class FileBrowser : UserControl
                 title = title ?? "";
                 bool multi = AdlibComposer.Audio.ChipSongs.HasTracks(f);
                 var hit = new SearchHit { Path = f, Title = title, Multi = multi };
-                if (multi && TrackTitlesCheap(f))
+                bool fileMatch = Match(name + " " + title);
+                // 파일 안 곡 줄은 파일 자체는 안 맞고 곡 제목이 맞을 때만 (파일이 맞으면 펼쳐서 보면 된다)
+                if (multi && !fileMatch && TrackTitlesCheap(f))
                 {
                     try
                     {
                         var tracks = AdlibComposer.Audio.ChipSongs.Tracks(f);
                         for (int i = 0; i < tracks.Count; i++)
-                            if (Match(name + " " + tracks[i].title)) hit.Tracks.Add((tracks[i].path, tracks[i].title, i));
+                            if (Match(tracks[i].title)) hit.Tracks.Add((tracks[i].path, tracks[i].title, i));
                     }
                     catch (Exception) { }
                 }
-                if (Match(name + " " + title) || hit.Tracks.Count > 0) { batch.Add(hit); found++; }
+                if (fileMatch || hit.Tracks.Count > 0) { batch.Add(hit); found++; }
                 if (batch.Count >= 50 || (DateTime.UtcNow - lastPost).TotalMilliseconds > 300) { Post(false); lastPost = DateTime.UtcNow; }
             }
             if (gen == searchGeneration) Post(true);

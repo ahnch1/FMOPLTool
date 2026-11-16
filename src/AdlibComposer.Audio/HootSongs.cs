@@ -8,7 +8,7 @@ namespace AdlibComposer.Audio;
 
 /// <summary>
 /// hoot 항목 파일 (<see cref="HootArchive.Extension"/> = 항목 XML 하나, 같은 폴더 = zip을 푼 내용) → 곡. 곡 목록 = titlelist (range 뺌), "파일::n" = n번째 제목.
-/// <para>드라이버별로: pc98dos = PC-98 DOS 흉내 (<see cref="Dos.HootPc98"/>), snes spc = rom type="data" offset이 곡 코드인 .spc,
+/// <para>드라이버별로: msx generic = MSX 기계 흉내 (<see cref="HootMsx"/>), pc98dos = PC-98 DOS 흉내 (<see cref="Dos.HootPc98"/>), snes spc = rom type="data" offset이 곡 코드인 .spc,
 /// msx kss · nes nsf · gb gbs = rom의 그 파일에서 곡 코드 번호의 곡 (길이 · 페이드는 같은 이름 m3u에 그 곡이 있으면 그것, 없으면 그 형식 기본값).
 /// 제목은 hoot 목록의 것 (트리 · 파일 목록과 같게).</para>
 /// </summary>
@@ -46,7 +46,13 @@ public static class HootSongs
         string dir = Path.GetDirectoryName(Path.GetFullPath(file));
         VgmSong v;
         string what;
-        if (driver == "snes")
+        if (driver == "msx" && e.Type.Equals("generic", StringComparison.OrdinalIgnoreCase))
+        {
+            // hoot MSX 범용 드라이버: 시작 코드 · 드라이버 · 곡 데이터를 MSX 기계에서 돌려 미리 렌더
+            v = HootMsx.Render(e, dir, code);
+            what = "MSX 기계 · 곡 0x" + code.ToString("X");
+        }
+        else if (driver == "snes")
         {
             var rom = e.Roms.FirstOrDefault(r => r.Offset == code && r.Text.Length > 0);
             if (rom.Text == null) throw new InvalidDataException("곡 코드 0x" + code.ToString("X") + "의 SPC 파일이 목록에 없습니다.");

@@ -1,4 +1,4 @@
-# hoot 재생 작업 현황 (2026-11-16, v1.29.1)
+# hoot 재생 작업 현황 (2026-11-16, v2.0.0)
 
 다른 PC(회사)에서 이어 하기 위한 기록. 자세한 할 일 목록은 원래 `_incoming/Todo.md`(git에 안 들어감)에 있었고, 그중 이어 하는 데 필요한 것을 여기에 옮겼다.
 
@@ -6,10 +6,10 @@
 
 - **시험 자료는 저장소에 없다**: `_incoming/Hootarchive/` (hoot 배포본: `xml_new/` 목록 · `pc98/` 1,709 zip · `pc/` 480 zip · `snes/` · `msx/` · `nes/` · `gb/` …)는 `.gitignore`. 회사 PC에도 같은 자리(`_incoming/Hootarchive`)에 두면 실제 파일 시험 · 진단이 돈다. 없으면 실제 파일 시험은 `SKIP`으로 넘어간다 (합성 시험은 그대로 통과).
 - 작업 방식: 단계마다 커밋 하나 (`vX.Y.Z: …` 한국어 메시지), `Directory.Build.props` 버전 마지막 번호 올림, README 갱신, SelfTest 전부 통과 후 커밋.
-- 시험: `dotnet run -c Release --project tests/AdlibComposer.SelfTest` (전체, 지금 822개 통과), 묶음만: `-- --test pc98` · `hoot98` · `hootgen` · `pcat` · `hoot`.
-- hoot 문서: http://retropc.net/yui/hoot/PC98.TXT (https 안 됨, http로). PC/AT 문서는 없음.
+- 시험: `dotnet run -c Release --project tests/AdlibComposer.SelfTest` (전체, 지금 835개 통과), 묶음만: `-- --test pc98` · `hoot98` · `hootgen` · `hootmsx` · `pcat` · `hoot`.
+- hoot 문서: http://retropc.net/yui/hoot/PC98.TXT (https 안 됨, http로). 그 밖의 기종(PC/AT · MSX · PC-88 · X1 …) 문서는 없음 — 목록의 시작 코드(rom "patch" 등)를 역어셈블해 규약을 맞춘다.
 
-## 1. 지금까지 (v1.21.0 ~ v1.29.1)
+## 1. 지금까지 (v1.21.0 ~ v2.0.0)
 
 | 판 | 단계 | 내용 |
 |---|---|---|
@@ -23,6 +23,8 @@
 | 1.28.0 | 8-3 | PC/AT DOS 기계 `Dos/PcAtMachine.cs` (AdLib OPL2 · SB16 OPL3 · 스피커) |
 | 1.29.0 | 8-4 | MIDI 판: MPU-401 / MPU-PC98 (`Dos/Mpu401.cs`, UART + 지능 모드) → 살아 있는 MIDI 곡 |
 | 1.29.1 | 8-5 | pc98vx · pc98 (DOS 없는 PC-98, PC-98generic): `HootPc98.BootGeneric` + `Pc98Machine.Generic` (7D0h I/O, 요인 0 → bgm 넣기 → 요인 1) |
+| 1.29.2 ~ .7 | — | UI: Jukebox 첫 페이지 · 열기는 왼쪽 목록 / Jukebox만, 파일 안 이전 · 다음 곡, Note · Orgel 곡 길이 막대, 칩 곡 → 노트(`VgmToSong`, 진행 막대), 목록 찾기, 오류 기록 |
+| 2.0.0 | 8-6 (MSX) | hoot msx generic: `Audio/HootMsx.cs` (MSX 기계 · hoot 포트 02h~07h, 미리 렌더) |
 
 ### 구조 (어디를 보면 되나)
 
@@ -44,6 +46,7 @@
 | PC/AT DOS (adlib · sb16 · beep) | 482 / 488 | `--hootatsurvey pc 1000 6` |
 | MIDI 판 PC/AT | 571 / 586 | `--hootmidisurvey pc 1000 20` |
 | MIDI 판 PC-98 | 360 / 641 | `--hootmidisurvey pc98 1709 20` |
+| MSX generic (PSG · OPLL · SCC · SCC+ · MSX-AUDIO) | 481 / 498 (첫 곡이 조용하면 다음 곡 5개까지) | `--hootmsxsurvey msx 1000 8` |
 | SPC · KSS · NSF · GBS | 717항목 파일 있음 (KSS 71항목은 zip에 .kss 없음) | — |
 
 "소리 남" = 처음 몇 초 안에 키온 · 노트가 나옴. 템포 · 음높이가 hoot와 맞는지는 아직 귀로 비교하지 않았다.
@@ -56,6 +59,7 @@
                 환경 변수 HOOT_MIDI=n (n번째부터 MIDI 바이트), HOOT_STEP=세그먼트 (명령 단위 추적, 느림)
 --hootatsurvey  <pc 폴더> [zip 수] [초]      PC/AT
 --hootmidisurvey <폴더> [zip 수] [초]        MIDI 판
+--hootmsxsurvey <msx 폴더> [zip 수] [초]    MSX generic: 원인 분류 (boot-not-waiting · no-chip-writes · writes-no-keyon · missing-file), 조용하면 많이 쓴 레지스터
 --hoottree      <xml 폴더>                   트리 자료 읽는 시간 · 장비 수
 ```
 
@@ -70,7 +74,14 @@
 - 아직 없음: dummysndrom (26K 사운드 BIOS ROM 흉내, 63항목이 씀), amd98 · soundorchestra · rashin · burai 형식, fm_mix · ssg_mix
 
 ### 8-6. Z80 기계들 — 큼 (Z80 · 칩은 다 있음, 기종별 hoot 규약을 찾아야 함)
-- msx generic 498 / 6,873곡 (옵션 init_pc · mdata_addr · mdata_size · mfile_size, rom code = 주소, bgm = 곡 데이터), pc88 opn 389 · opna 142, x1 psg 83 · opm 71, neogeo 146, megadrive generic_z80 · iyinc · koei 145 — 합계 약 1,500항목 · 2.9만 곡
+- 대상: msx generic 498 / 6,873곡, pc88 opn 389 · opna 142, x1 psg 83 · opm 71, neogeo 146, megadrive generic_z80 · iyinc · koei 145 — 합계 약 1,500항목 · 2.9만 곡
+- **MSX generic — ✅ v2.0.0** (`Audio/HootMsx.cs`, 481 / 498). 문서가 없어 시작 코드 424개를 훑어 맞춘 규약:
+  - hoot 포트: IN 02h = 명령 (1 = 재생, 그 밖 = 정지; 읽으면 비움 — 곡이 코드에 든 시작 코드는 OUT 03h를 안 쓰고 다시 기다림), OUT 02h = 받음, IN 03h~06h = 곡 코드 바이트 0~3 (04h는 템포 나눗수 등으로 씀), OUT 03h,n = bgm n을 mdata_addr에 (mdata_size까지 0, mfile_size까지 복사), IN 07h = use_opll이면 1
+  - 기계: 64KB RAM, VDP 60Hz (IM 1 / IM 2, 99h 읽으면 받음), 작은 BIOS (0038h → 0060h 처리기: H.KEYI FD9Ah · H.TIMI FD9Fh, WRTPSG · RDPSG · GICINI · RDSLT · WRSLT · CALSLT · ENASLT). 칩: PSG A0h~, OPLL 7Ch · 7Dh, MSX-AUDIO C0h · C1h, SCC (9000h ← 3Fh, use_scc면 늘), SCC+ (BFFEh 모드 → B800h~)
+  - rom: code (주소를 넘는 큰 rom = 16KB 뱅크 카트리지, FM-PAC 64KB는 7FF7h 뱅크), binary, sccp (Konami SCC+ 카트리지 RAM → 4000h~), bgm. fmbios · rom 형은 아직
+  - 곡: 재생 명령부터 180초를 미리 렌더 (끝 4초 줄임, 부팅 중 칩 설정은 0초에) → VGM
+  - 남은 무음 17: Cybernetic Hi-School 1~3 (PSG R7만 씀), Golvellius 2 · Rona (칩 쓰기 없음), Ultima IV · mbsp · herzog (볼륨 0), Nemesis SCC+ (PSG만 볼륨 0), 銀河英雄伝説 OPLL/PSG (OPLL 16h~ 쓰는데 키온 없음), Illusion City, Tanteidan X (부팅이 명령 대기에 안 닿음), 福神漬, Disk NG
+- 다음: pc88 (Z80 + OPN/OPNA, 포트 44h~47h · A8h~), x1, neogeo, megadrive
 
 ### 8-7. X68000 — 큼 (MC68000 CPU 새로)
 - x68k generic 553 / 11,679곡 (.OPM · .ZMD · .M …를 원래 드라이버로), MIDI 판 166 (8-4의 MIDI 길 다시 씀)

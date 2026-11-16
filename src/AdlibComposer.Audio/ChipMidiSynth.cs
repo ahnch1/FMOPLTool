@@ -20,6 +20,8 @@ public enum ChipSound
     MegaDrive,
     /// <summary>게임보이: 멜로디 = DMG 사각파 4 + 파형 2 (베이스), 드럼 = 노이즈 2.</summary>
     GameBoy,
+    /// <summary>슈퍼패미컴: S-DSP 둘 — 멜로디 13음 (갈래 파형을 BRR 샘플로, 칩 ADSR, 에코), 드럼 3 (킥 · 스네어 샘플 + 노이즈).</summary>
+    Snes,
 }
 
 /// <summary>
@@ -35,7 +37,8 @@ public enum ChipSound
 /// <para>다른 풍 (<see cref="ChipSound"/>): FM-PAC = YM2413 둘 (하나는 리듬 모드: 멜로디 6 + BD · SD · TOM · CYM · HH, 하나는 멜로디 9) — 갈래마다 내장 악기를 고르고
 /// 엔벨로프는 칩이 낸다. PC엔진 = HuC6280 셋 (멜로디 6 × 2, 드럼 칩: 채널 1 · 2 사인파 톤 드럼 · 채널 5 · 6 노이즈), 갈래의 파형을 5비트로.
 /// NES = 2A03 둘 (사각파 4음: 갈래 파형 → 듀티 12.5 · 25 · 50%, 삼각파 2음 = 베이스 갈래 먼저, 드럼 = 노이즈 둘).
-/// 메가드라이브 = YM2612 둘 (FM 12음, 갈래마다 4연산자 음색, 엔벨로프는 칩이) + SN76489 드럼. 게임보이 = DMG 둘 (NES와 같은 배치: 사각파 4 + 파형 채널 2 + 노이즈 2).</para>
+/// 메가드라이브 = YM2612 둘 (FM 12음, 갈래마다 4연산자 음색, 엔벨로프는 칩이) + SN76489 드럼. 게임보이 = DMG 둘 (NES와 같은 배치: 사각파 4 + 파형 채널 2 + 노이즈 2).
+/// 슈퍼패미컴 = S-DSP 둘 (SPC700 없이 레지스터를 바로): 갈래 파형 한 주기를 BRR로 바꾼 반복 샘플, 칩 ADSR · 가우스 보간 · 에코, 드럼 = 만든 킥 · 스네어 샘플 + DSP 노이즈.</para>
 /// </summary>
 public sealed class ChipMidiSynth
 {
@@ -48,7 +51,7 @@ public sealed class ChipMidiSynth
     public const int DrumVoices = PsgEmulator.Channels;
     /// <summary>풍마다 멜로디 음 수 중 가장 큰 것 (음 표 크기).</summary>
     public const int MaxTones = 15;
-    public const int FmPacVoices = 15, PceVoices = 12, NesVoices = 6, MegaDriveVoices = 12, GameBoyVoices = 6;
+    public const int FmPacVoices = 15, PceVoices = 12, NesVoices = 6, MegaDriveVoices = 12, GameBoyVoices = 6, SnesVoices = 13;
     /// <summary>드럼 음 수 중 가장 큰 것 (PC엔진 4).</summary>
     private const int MaxDrums = 4;
     private const int FrameSamples = Rate / 60;
@@ -159,6 +162,8 @@ public sealed class ChipMidiSynth
     private readonly double[] opn2Acc = new double[2], opn2Prev = new double[2], opn2Cur = new double[2];
     private readonly Sn76489 sn = new Sn76489(Sn76489.DefaultClock, Rate);
     private readonly GbApu[] gb = { new GbApu(GbApu.DefaultClock, Rate), new GbApu(GbApu.DefaultClock, Rate) };
+    private readonly SnesSpc[] snes = { SnesSpc.DspOnly(), SnesSpc.DspOnly() };
+    private readonly double[] snesAcc = new double[2], snesPrev = new double[2], snesCur = new double[2];
     private readonly Tone[] tones = new Tone[MaxTones];
     private readonly DrumVoice[] drums = new DrumVoice[MaxDrums];
     private readonly double[] gain = new double[16];
@@ -191,6 +196,7 @@ public sealed class ChipMidiSynth
                 case ChipSound.Nes: return NesVoices;
                 case ChipSound.MegaDrive: return MegaDriveVoices;
                 case ChipSound.GameBoy: return GameBoyVoices;
+                case ChipSound.Snes: return SnesVoices;
                 default: return ToneVoices;
             }
         }
@@ -217,6 +223,7 @@ public sealed class ChipMidiSynth
     public double NesGain { get; set; } = 0.65;
     public double MegaDriveGain { get; set; } = 0.33;
     public double GameBoyGain { get; set; } = 1.2;
+    public double SnesGain { get; set; } = 0.7;
 
     /// <summary>시험용: FM-PAC 리듬을 친 수.</summary>
     public int FmDrumHits { get; private set; }
@@ -232,6 +239,7 @@ public sealed class ChipMidiSynth
             case ChipSound.Nes: return "NES (패미컴)";
             case ChipSound.MegaDrive: return "메가드라이브";
             case ChipSound.GameBoy: return "게임보이";
+            case ChipSound.Snes: return "슈퍼패미컴";
             default: return "8-bit PSG + SCC";
         }
     }
@@ -247,6 +255,7 @@ public sealed class ChipMidiSynth
             case ChipSound.Nes: return "NES · 2A03 사각파 4 + 삼각파 2 + 노이즈 드럼";
             case ChipSound.MegaDrive: return "메가드라이브 · YM2612 FM 12음 + SN76489 드럼";
             case ChipSound.GameBoy: return "게임보이 · 사각파 4 + 파형 2 + 노이즈 드럼";
+            case ChipSound.Snes: return "슈퍼패미컴 · S-DSP BRR 샘플 13음 + 에코 + 샘플 · 노이즈 드럼";
             default: return "8-bit PSG + SCC · SCC+ 15음 + PSG 드럼";
         }
     }
@@ -262,6 +271,7 @@ public sealed class ChipMidiSynth
             case ChipSound.Nes: return "nes";
             case ChipSound.MegaDrive: return "md";
             case ChipSound.GameBoy: return "gb";
+            case ChipSound.Snes: return "snes";
             default: return "chip";
         }
     }
@@ -331,6 +341,7 @@ public sealed class ChipMidiSynth
             a.Write(0, 0x02, 0x08); a.Write(0, 0x07, 0x08); a.Write(0, 0x11, 0x08);
             a.Write(0, 0x0A, 0x80); a.Write(0, 0x0C, 0x00);
         }
+        for (int i = 0; i < 2; i++) { SnesInit(snes[i]); snesAcc[i] = snesPrev[i] = snesCur[i] = 0; snesKof[i] = 0; snesNon[i] = 0; }
         for (int v = 0; v < MaxTones; v++) tones[v] = new Tone { WaveId = -1, LastDiv = -1, LastVol = -1 };
         for (int v = 0; v < MaxDrums; v++) drums[v] = new DrumVoice();
         for (int c = 0; c < 16; c++) { gain[c] = ChannelGain(100, 127); bend[c] = 0; sustain[c] = false; program[c] = 0; }
@@ -480,6 +491,7 @@ public sealed class ChipMidiSynth
             case ChipSound.Nes: WriteNes(v, force); return;
             case ChipSound.MegaDrive: WriteMd(v, force); return;
             case ChipSound.GameBoy: WriteGb(v, force); return;
+            case ChipSound.Snes: WriteSnes(v, force); return;
         }
         ref var t = ref tones[v];
         int vol = 0;
@@ -936,6 +948,213 @@ public sealed class ChipMidiSynth
         apu.Write(0, 0x13, 0x80);
     }
 
+    // ---- 슈퍼패미컴 (S-DSP 둘: 멜로디 13 + 드럼 3)
+
+    /// <summary>S-DSP RAM 배치: 디렉터리 0200h, 샘플 0400h~, 에코 C000h~ (EDL 3 = 6KB).</summary>
+    private const int SnesDir = 0x0200, SnesSampleBase = 0x0400, SnesEcho = 0xC000;
+    /// <summary>샘플 번호: 0~8 = 갈래 파형 (한 주기 32칸, 반복), 9 = 킥, 10 = 스네어 (한 번).</summary>
+    private const int SnesKick = 9, SnesSnare = 10;
+    /// <summary>파형 샘플 한 주기 칸 수 (피치 = f × 32 / 32000 × 4096).</summary>
+    private const int SnesCycle = 32;
+
+    private static readonly byte[] SnesImage = BuildSnesImage(out SnesDirectory);
+    private static byte[] SnesDirectory;
+
+    /// <summary>16비트 PCM → BRR (필터 0만: 반복이 어긋나지 않게). 마지막 블록에 END (반복이면 LOOP도).</summary>
+    public static byte[] EncodeBrr(short[] pcm, bool loop)
+    {
+        int blocks = (pcm.Length + 15) / 16;
+        var o = new byte[blocks * 9];
+        for (int b = 0; b < blocks; b++)
+        {
+            int max = 0;
+            for (int i = 0; i < 16; i++) { int at = b * 16 + i; if (at < pcm.Length) max = Math.Max(max, Math.Abs((int)pcm[at])); }
+            int shift = 0;
+            while (shift < 12 && (int)Math.Round(max / (double)(1 << shift)) > 7) shift++;   // 풀 때 (n << shift) >> 1 을 다시 ×2 하므로 n ≈ pcm / 2^shift
+            int head = shift << 4;
+            if (b == blocks - 1) head |= 1 | (loop ? 2 : 0);
+            o[b * 9] = (byte)head;
+            for (int i = 0; i < 16; i += 2)
+            {
+                int Nib(int at)
+                {
+                    int s = at < pcm.Length ? pcm[at] : 0;
+                    int n = (int)Math.Round(s / (double)(1 << shift));
+                    return Math.Max(-8, Math.Min(7, n)) & 15;
+                }
+                o[b * 9 + 1 + i / 2] = (byte)(Nib(b * 16 + i) << 4 | Nib(b * 16 + i + 1));
+            }
+        }
+        return o;
+    }
+
+    /// <summary>샘플 RAM 그림 (0400h부터)과 디렉터리 (샘플마다 시작 · 반복 주소).</summary>
+    private static byte[] BuildSnesImage(out byte[] dir)
+    {
+        var parts = new System.Collections.Generic.List<(byte[] data, bool loop)>();
+        for (int w = 0; w < Waves.Length; w++)
+        {
+            var pcm = new short[SnesCycle];
+            for (int i = 0; i < SnesCycle; i++) pcm[i] = (short)(Waves[w][i] * 180);
+            parts.Add((EncodeBrr(pcm, true), true));
+        }
+        // 킥: 사인을 쓸어내림 (0.25초), 스네어: 노이즈 + 짧은 톤 (0.2초)
+        var rnd = new Random(1234);
+        var kick = new short[8000];
+        double ph = 0;
+        for (int i = 0; i < kick.Length; i++)
+        {
+            double t = i / 32000.0;
+            ph += 2 * Math.PI * (45 + 110 * Math.Exp(-t * 30)) / 32000.0;
+            kick[i] = (short)(Math.Sin(ph) * 26000 * Math.Exp(-t * 12));
+        }
+        parts.Add((EncodeBrr(kick, false), false));
+        var snare = new short[6400];
+        ph = 0;
+        for (int i = 0; i < snare.Length; i++)
+        {
+            double t = i / 32000.0;
+            ph += 2 * Math.PI * 190 / 32000.0;
+            double n = rnd.NextDouble() * 2 - 1;
+            snare[i] = (short)((n * 0.75 * Math.Exp(-t * 18) + Math.Sin(ph) * 0.45 * Math.Exp(-t * 35)) * 24000);
+        }
+        parts.Add((EncodeBrr(snare, false), false));
+        int total = 0;
+        foreach (var p in parts) total += p.data.Length;
+        var img = new byte[total];
+        dir = new byte[parts.Count * 4];
+        int at = 0;
+        for (int k = 0; k < parts.Count; k++)
+        {
+            int addr = SnesSampleBase + at;
+            Array.Copy(parts[k].data, 0, img, at, parts[k].data.Length);
+            dir[k * 4] = (byte)addr; dir[k * 4 + 1] = (byte)(addr >> 8);
+            dir[k * 4 + 2] = (byte)addr; dir[k * 4 + 3] = (byte)(addr >> 8);   // 반복 = 처음부터 (한 주기)
+            at += parts[k].data.Length;
+        }
+        return img;
+    }
+
+    /// <summary>S-DSP 하나를 세운다: 샘플 · 디렉터리, 주 볼륨, 에코 (48ms · 되먹임 50% · 작게 16%), 키 오프 모두.</summary>
+    private static void SnesInit(SnesSpc d)
+    {
+        d.Reset();
+        d.LoadRam(SnesSampleBase, SnesImage);
+        d.LoadRam(SnesDir, SnesDirectory);
+        d.WriteDsp(0x5D, SnesDir >> 8);
+        d.WriteDsp(0x0C, 0x7F); d.WriteDsp(0x1C, 0x7F);           // MVOL
+        d.WriteDsp(0x6D, SnesEcho >> 8); d.WriteDsp(0x7D, 3);      // ESA · EDL
+        d.WriteDsp(0x0D, 0x40);                                   // EFB
+        d.WriteDsp(0x2C, 0x14); d.WriteDsp(0x3C, 0x14);           // EVOL
+        d.WriteDsp(0x0F, 0x7F);
+        for (int i = 1; i < 8; i++) d.WriteDsp(i * 0x10 + 0x0F, 0);  // FIR = 그대로
+        d.WriteDsp(0x2D, 0); d.WriteDsp(0x3D, 0); d.WriteDsp(0x4D, 0);
+        d.WriteDsp(0x5C, 0);
+        d.WriteDsp(0x6C, 0x00);                                   // FLG: 소리 · 에코 켬
+    }
+
+    private readonly int[] snesKof = new int[2];
+    private readonly int[] snesNon = new int[2];
+
+    private void SnesKey(int chip, int voice, bool on)
+    {
+        var d = snes[chip];
+        int bit = 1 << voice;
+        if (on)
+        {
+            snesKof[chip] &= ~bit;
+            d.WriteDsp(0x5C, snesKof[chip]);
+            d.WriteDsp(0x4C, bit);
+        }
+        else
+        {
+            snesKof[chip] |= bit;
+            d.WriteDsp(0x5C, snesKof[chip]);
+        }
+    }
+
+    /// <summary>갈래 → ADSR: 어택 (프레임) · 서스테인 · 감쇠를 칩 ADSR 칸으로.</summary>
+    private static void SnesAdsr(Patch p, out int adsr1, out int adsr2)
+    {
+        int ar = p.Attack <= 0 ? 15 : p.Attack < 4 ? 13 : p.Attack < 10 ? 11 : 9;
+        int sl = Math.Max(0, Math.Min(7, (int)Math.Round(p.Sustain * 8) - 1));
+        // 감쇠 빠르기를 다른 풍의 프레임 감쇠 (0.965 ≈ 0.5초)에 맞추고, 서스테인이 있으면 그 크기에서 멈춘다 (다른 풍처럼)
+        int dr = p.Decay >= 0.999 ? 7 : p.Decay >= 0.96 ? 1 : p.Decay >= 0.9 ? 3 : 4;
+        int sr = p.Sustain > 0 ? 0 : 14;
+        adsr1 = 0x80 | dr << 4 | ar;
+        adsr2 = sl << 5 | sr;
+    }
+
+    private void SnesVoice(int v, out int chip, out int voice) { chip = v < 8 ? 0 : 1; voice = v < 8 ? v : v - 8; }
+
+    /// <summary>슈퍼패미컴 음: 샘플 = 갈래 파형, 엔벨로프 = 칩 ADSR (키 오프 = 칩 놓음), 크기 = 보이스 볼륨 (선형 7비트), 에코 켬.</summary>
+    private void WriteSnes(int v, bool force)
+    {
+        ref var t = ref tones[v];
+        SnesVoice(v, out int chip, out int voice);
+        var d = snes[chip];
+        int b = voice << 4;
+        if (!t.Active)
+        {
+            if (force || t.LastVol != 0) { SnesKey(chip, voice, false); t.LastVol = 0; }
+            return;
+        }
+        bool key = t.KeyOn || t.Sustained;
+        double level = Math.Pow(t.Velocity / 127.0, 1.5) * gain[t.Channel];
+        // 보이스 볼륨은 선형 7비트: 서스테인 음이 PSG + SCC (4비트 볼륨)와 비슷한 크기가 되게 0.62배
+        int vol = Math.Max(0, Math.Min(127, (int)Math.Round(level * 127 * 0.62)));
+        int p = Math.Max(1, Math.Min(0x3FFF, (int)Math.Round(Hz(SoundingPitch(ref t)) * SnesCycle / 32000.0 * 4096)));
+        if (force || p != t.LastDiv) { d.WriteDsp(b + 2, p & 0xFF); d.WriteDsp(b + 3, p >> 8); t.LastDiv = p; }
+        int state = vol << 1 | (key ? 1 : 0);
+        if (force)
+        {
+            SnesAdsr(t.Patch, out int a1, out int a2);
+            d.WriteDsp(b + 0, vol); d.WriteDsp(b + 1, vol);
+            d.WriteDsp(b + 4, (int)t.Patch.Wave);
+            d.WriteDsp(b + 5, a1); d.WriteDsp(b + 6, a2);
+            snesNon[chip] &= ~(1 << voice);
+            d.WriteDsp(0x3D, snesNon[chip]);
+            d.WriteDsp(0x4D, 0xFF & ~(chip == 1 ? 0xE0 : 0));   // 에코: 멜로디만
+            SnesKey(chip, voice, true);
+            t.LastVol = state;
+            return;
+        }
+        if (state == t.LastVol) return;
+        if ((t.LastVol >> 1) != vol) { d.WriteDsp(b + 0, vol); d.WriteDsp(b + 1, vol); }
+        if ((t.LastVol & 1) != 0 && !key) SnesKey(chip, voice, false);
+        t.LastVol = state;
+    }
+
+    /// <summary>슈퍼패미컴 드럼 (칩 1의 보이스 5~7): 킥 · 탐 = 킥 샘플 (탐은 높여서), 스네어 = 스네어 샘플, 하이햇 · 심벌 · 클릭 = DSP 노이즈. 처음 한 번 키 온, 끝은 칩 엔벨로프.</summary>
+    private void SnesDrum(int v, DrumKind k, double level, double pitch, int frame)
+    {
+        if (frame != 0) return;
+        var d = snes[1];
+        int voice = 5 + v, b = voice << 4;
+        int vol = Math.Max(0, Math.Min(127, (int)Math.Round(level * 64)));   // 샘플 드럼은 PSG 드럼보다 크다: 반으로
+        int srcn = SnesKick, p = 0x1000, sr = 18, noiseRate = -1;
+        switch (k)
+        {
+            case DrumKind.Kick: break;
+            case DrumKind.Tom: p = (int)(0x1000 * Math.Pow(2, (pitch - 40) / 12.0)); sr = 16; break;
+            case DrumKind.Snare: srcn = SnesSnare; break;
+            case DrumKind.ClosedHat: noiseRate = 0x1F; sr = 27; break;
+            case DrumKind.OpenHat: noiseRate = 0x1F; sr = 20; break;
+            case DrumKind.Cymbal: noiseRate = 0x1D; sr = 16; break;
+            default: noiseRate = 0x1C; sr = 28; break;
+        }
+        p = Math.Max(1, Math.Min(0x3FFF, p));
+        d.WriteDsp(b + 0, vol); d.WriteDsp(b + 1, vol);
+        d.WriteDsp(b + 2, p & 0xFF); d.WriteDsp(b + 3, p >> 8);
+        d.WriteDsp(b + 4, noiseRate >= 0 ? 0 : srcn);
+        d.WriteDsp(b + 5, 0x8F | 7 << 4);   // AR 15 · DR 7
+        d.WriteDsp(b + 6, sr);              // SL 0 · SR
+        if (noiseRate >= 0) { snesNon[1] |= 1 << voice; d.WriteDsp(0x6C, noiseRate); }
+        else snesNon[1] &= ~(1 << voice);
+        d.WriteDsp(0x3D, snesNon[1]);
+        SnesKey(1, voice, true);
+    }
+
     /// <summary>1/60초: 엔벨로프 · 비브라토.</summary>
     private void FrameTones()
     {
@@ -1033,6 +1252,7 @@ public sealed class ChipMidiSynth
         if (sound == ChipSound.Nes) { NesDrum(v, d.Kind, env * d.Level, f); return; }
         if (sound == ChipSound.MegaDrive) { MdDrum(v, d.Kind, env * d.Level, tonePitch, f); return; }
         if (sound == ChipSound.GameBoy) { GbDrum(v, d.Kind, env * d.Level, f); return; }
+        if (sound == ChipSound.Snes) { SnesDrum(v, d.Kind, d.Level, d.Pitch, f); return; }
         int vol = Math.Max(0, Math.Min(15, (int)Math.Round(env * d.Level * 15)));
         if (tonePitch > 0)
         {
@@ -1053,6 +1273,7 @@ public sealed class ChipMidiSynth
             case ChipSound.Nes: nes[v].Write(0, 0x0C, 0x30); break;
             case ChipSound.MegaDrive: sn.Write(0, 0, v < 2 ? 0x9F | v << 5 : 0xFF); break;
             case ChipSound.GameBoy: gb[v].Write(0, 0x11, 0x08); gb[v].Write(0, 0x13, 0x80); break;
+            case ChipSound.Snes: SnesKey(1, 5 + v, false); break;
             case ChipSound.FmPac: break;
             default: psg.Write(8 + v, 0); break;
         }
@@ -1207,6 +1428,21 @@ public sealed class ChipMidiSynth
                 break;
             case ChipSound.GameBoy:
                 foreach (var a in gb) { a.Generate(out int l, out int r); s += (l + r) * 0.5 * GameBoyGain; }
+                break;
+            case ChipSound.Snes:
+                for (int i = 0; i < 2; i++)
+                {
+                    // S-DSP는 32kHz: 44.1kHz로 늘려 (두 샘플 사이를 곧게)
+                    snesAcc[i] += SnesSpc.Rate / (double)Rate;
+                    while (snesAcc[i] >= 1)
+                    {
+                        snesAcc[i] -= 1;
+                        snesPrev[i] = snesCur[i];
+                        snes[i].Generate(out int l, out int r);
+                        snesCur[i] = (l + r) * 0.5;
+                    }
+                    s += (snesPrev[i] + (snesCur[i] - snesPrev[i]) * snesAcc[i]) * SnesGain;
+                }
                 break;
             case ChipSound.Psg:
                 foreach (var t in psgTone) s += t.Generate() * PsgToneGain;

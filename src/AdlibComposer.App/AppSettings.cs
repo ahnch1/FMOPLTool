@@ -41,7 +41,7 @@ internal sealed class AppSettings
     public bool MidiWindowsSynth { get; set; }
     /// <summary>MIDI를 GXSCC 방식 "8-bit" 칩 소리로 (<see cref="MidiChipSound"/>). 켜져 있으면 MidiWindowsSynth보다 앞선다.</summary>
     public bool MidiChipSynth { get; set; }
-    /// <summary>8-bit 칩 소리 풍: PSG + SCC · PSG · FM-PAC · PC엔진 · NES · 메가드라이브 · 게임보이.</summary>
+    /// <summary>8-bit 칩 소리 풍: PSG + SCC · PSG · FM-PAC · PC엔진 · NES · 메가드라이브 · 게임보이 · 슈퍼패미컴.</summary>
     public ChipSound MidiChipSound { get; set; } = ChipSound.PsgScc;
     /// <summary>MIDI FM용 GM 뱅크 (GENMIDI.OP2 또는 BNK). 비우면 뱅크 폴더의 GENMIDI.OP2, 없으면 기본 뱅크를 이름으로 맞춤.</summary>
     public string MidiBank { get; set; } = "";
@@ -171,7 +171,7 @@ internal sealed class AppSettings
         sb.AppendLine("LoadDefaultBank=" + (LoadDefaultBank ? "true" : "false"));
         sb.AppendLine("; OplEmulator = builtin | nuked (Nuked OPL3, cycle-accurate)");
         sb.AppendLine("OplEmulator=" + (UseNukedOpl ? "nuked" : "builtin"));
-        sb.AppendLine("; MidiSynth = fm | windows | psg (8-bit PSG) | chip (8-bit PSG + SCC) | fmpac (MSX FM-PAC) | pce (PC Engine) | nes (NES) | md (Mega Drive) | gb (Game Boy), MidiBank = GENMIDI.OP2 or BNK for FM (empty = GENMIDI.OP2 in BankFolder or resource, else default bank by name)");
+        sb.AppendLine("; MidiSynth = fm | windows | psg (8-bit PSG) | chip (8-bit PSG + SCC) | fmpac (MSX FM-PAC) | pce (PC Engine) | nes (NES) | md (Mega Drive) | gb (Game Boy) | snes (Super Famicom), MidiBank = GENMIDI.OP2 or BNK for FM (empty = GENMIDI.OP2 in BankFolder or resource, else default bank by name)");
         sb.AppendLine("MidiSynth=" + (MidiChipSynth ? ChipMidiSynth.Key(MidiChipSound) : MidiWindowsSynth ? "windows" : "fm"));
         sb.AppendLine("MidiBank=" + MidiBank);
         sb.AppendLine("; MidiModule = gm | mt32 (Roland MT-32 via Munt emulator; needs ROM files in Mt32RomFolder)");

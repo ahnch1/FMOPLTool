@@ -44,7 +44,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
     private readonly CheckBox repeat = new CheckBox();
     private readonly CheckBox rawTone = new CheckBox(), vintageSpeaker = new CheckBox();
     /// <summary>소리: 원래 소리 / 8-bit PSG / PSG + SCC / MSX FM-PAC / PC엔진 / NES (MIDI · ROL · IMS).</summary>
-    private static readonly ChipSound[] ChipStyles = { ChipSound.Psg, ChipSound.PsgScc, ChipSound.FmPac, ChipSound.Pce, ChipSound.Nes, ChipSound.MegaDrive, ChipSound.GameBoy };
+    private static readonly ChipSound[] ChipStyles = { ChipSound.Psg, ChipSound.PsgScc, ChipSound.FmPac, ChipSound.Pce, ChipSound.Nes, ChipSound.MegaDrive, ChipSound.GameBoy, ChipSound.Snes };
     private readonly ComboBox chipBox = new ComboBox();
     private bool syncingChip;
     private Button playButton;
@@ -394,7 +394,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
         sound.Controls.Add(chipBox);
         rawTone.Checked = settings().JukeboxRawTone;
         chipBox.SelectedIndex = ChipIndex();
-        tips.SetToolTip(chipBox, "MIDI · ROL · IMS 곡을 GXSCC처럼 옛 게임기 칩 소리로\n8-bit PSG = PSG만: 사각파 6음 + PSG 드럼\n8-bit PSG + SCC = SCC+ 파형 15음 + PSG 드럼\nMSX FM-PAC = YM2413 내장 악기 15음 + 리듬 모드\nPC엔진 (HES) = HuC6280 파형 12음 + 톤 · 노이즈 드럼\nNES (패미컴) = 사각파 4 + 삼각파 2 (베이스) + 노이즈 드럼\n메가드라이브 = YM2612 FM 12음 + SN76489 드럼\n게임보이 = 사각파 4 + 파형 2 (베이스) + 노이즈 드럼\nROL · IMS는 BNK 악기 이름으로 GM 악기 갈래를 골라 엔벨로프 · 파형을 정한다 · 바꾸면 그 자리에서 새 소리로");
+        tips.SetToolTip(chipBox, "MIDI · ROL · IMS 곡을 GXSCC처럼 옛 게임기 칩 소리로\n8-bit PSG = PSG만: 사각파 6음 + PSG 드럼\n8-bit PSG + SCC = SCC+ 파형 15음 + PSG 드럼\nMSX FM-PAC = YM2413 내장 악기 15음 + 리듬 모드\nPC엔진 (HES) = HuC6280 파형 12음 + 톤 · 노이즈 드럼\nNES (패미컴) = 사각파 4 + 삼각파 2 (베이스) + 노이즈 드럼\n메가드라이브 = YM2612 FM 12음 + SN76489 드럼\n게임보이 = 사각파 4 + 파형 2 (베이스) + 노이즈 드럼\n슈퍼패미컴 = S-DSP BRR 샘플 13음 + 에코 + 샘플 · 노이즈 드럼\nROL · IMS는 BNK 악기 이름으로 GM 악기 갈래를 골라 엔벨로프 · 파형을 정한다 · 바꾸면 그 자리에서 새 소리로");
         chipBox.SelectedIndexChanged += delegate
         {
             if (syncingChip) return;

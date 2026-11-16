@@ -109,6 +109,24 @@ public sealed class SnesSpc : ISoundChip, ISelfRunningChip, ISpcBus
         Reset();
     }
 
+    // ------------------------------------------------------------ DSP만 (CPU 없이 바깥이 레지스터 · RAM을 쓴다)
+
+    private bool dspOnly;
+
+    /// <summary>SPC700 프로그램 없이 S-DSP만: 바깥(8-bit 신디)이 <see cref="WriteDsp"/> · <see cref="LoadRam"/>로 바로 쓴다. 처음 RAM · 레지스터는 모두 0.</summary>
+    public static SnesSpc DspOnly()
+    {
+        var img = new byte[0x10200];
+        img[0x10100 + 0x6C] = 0x60;   // FLG: 음소거 · 에코 쓰기 끔 (바깥이 켠다)
+        return new SnesSpc(img) { dspOnly = true };
+    }
+
+    /// <summary>DSP 레지스터 쓰기 (0~7Fh).</summary>
+    public void WriteDsp(int r, int value) { DspWrite(r & 0x7F, value & 0xFF); }
+
+    /// <summary>64KB RAM에 바이트들 (샘플 · 디렉터리).</summary>
+    public void LoadRam(int at, byte[] data) { Array.Copy(data, 0, ram, at, Math.Min(data.Length, 0x10000 - at)); }
+
     public void Reset()
     {
         var f = image;
@@ -443,6 +461,7 @@ public sealed class SnesSpc : ISoundChip, ISelfRunningChip, ISpcBus
 
     public void Generate(out int left, out int right)
     {
+        if (dspOnly) cpu.Cycles = nextSample;
         while (cpu.Cycles < nextSample) cpu.Step();
         CatchUpTimers();
         nextSample += CyclesPerSample;

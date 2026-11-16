@@ -19,7 +19,7 @@ internal sealed class PreferencesForm : Form
     private static readonly AdlibComposer.Audio.ChipSound[] ChipStyles =
     {
         AdlibComposer.Audio.ChipSound.Psg, AdlibComposer.Audio.ChipSound.PsgScc, AdlibComposer.Audio.ChipSound.FmPac,
-        AdlibComposer.Audio.ChipSound.Pce, AdlibComposer.Audio.ChipSound.Nes, AdlibComposer.Audio.ChipSound.MegaDrive, AdlibComposer.Audio.ChipSound.GameBoy,
+        AdlibComposer.Audio.ChipSound.Pce, AdlibComposer.Audio.ChipSound.Nes, AdlibComposer.Audio.ChipSound.MegaDrive, AdlibComposer.Audio.ChipSound.GameBoy, AdlibComposer.Audio.ChipSound.Snes,
     };
     private readonly ComboBox midiModuleBox = new ComboBox();
     private readonly TextBox mt32RomBox = new TextBox();
@@ -101,7 +101,7 @@ internal sealed class PreferencesForm : Form
         var synthRow = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0, 2, 0, 4) };
         synthRow.Controls.Add(new Label { Text = "MIDI synthesizer", AutoSize = true, Margin = new Padding(0, 6, 8, 0), Width = 170 });
         midiSynthBox.DropDownStyle = ComboBoxStyle.DropDownList;
-        midiSynthBox.Items.AddRange(new object[] { "OPL FM (GM bank)", "Windows synthesizer", "8-bit PSG (GXSCC style)", "8-bit PSG + SCC (GXSCC style)", "8-bit MSX FM-PAC", "8-bit PC Engine (HES)", "8-bit NES", "8-bit Mega Drive", "8-bit Game Boy" });
+        midiSynthBox.Items.AddRange(new object[] { "OPL FM (GM bank)", "Windows synthesizer", "8-bit PSG (GXSCC style)", "8-bit PSG + SCC (GXSCC style)", "8-bit MSX FM-PAC", "8-bit PC Engine (HES)", "8-bit NES", "8-bit Mega Drive", "8-bit Game Boy", "8-bit Super Famicom" });
         midiSynthBox.SelectedIndex = settings.MidiChipSynth ? 2 + Array.IndexOf(ChipStyles, settings.MidiChipSound) : settings.MidiWindowsSynth ? 1 : 0;
         midiSynthBox.Width = 260;
         synthRow.Controls.Add(midiSynthBox);

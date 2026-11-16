@@ -62,7 +62,7 @@ internal sealed class MainForm : Form
     private readonly List<ToolStripMenuItem> gridItems = new List<ToolStripMenuItem>();
     private static readonly System.Globalization.CultureInfo Inv = System.Globalization.CultureInfo.InvariantCulture;
     private readonly List<ToolStripMenuItem> previewItems = new List<ToolStripMenuItem>();
-    private AppPage page = AppPage.Composer;
+    private AppPage page = AppPage.Jukebox;
     private bool composerMode { get { return page == AppPage.Composer; } }
     private bool instrumentMode { get { return page == AppPage.Instrument; } }
 
@@ -89,11 +89,11 @@ internal sealed class MainForm : Form
         Font = ShellTheme.Ui;
         KeyPreview = true;
 
-        composer = new ComposerView(ws) { Dock = DockStyle.Fill };
+        composer = new ComposerView(ws) { Dock = DockStyle.Fill, Visible = false };
         instrument = new InstrumentView(ws) { Dock = DockStyle.Fill, Visible = false };
         browser = new FileBrowser(ws, delegate { return settings; }) { Dock = DockStyle.Left, Width = 300 };
         browser.FileActivated += OpenFromBrowser;
-        jukebox = new JukeboxView(ws, delegate { return settings; }, TryOpenAudio, browser) { Dock = DockStyle.Fill, Visible = false };
+        jukebox = new JukeboxView(ws, delegate { return settings; }, TryOpenAudio, browser) { Dock = DockStyle.Fill };
         note = new NoteView(ws, TryOpenAudio, delegate { return SongFolder(); }) { Dock = DockStyle.Fill, Visible = false };
         trackerView = new TrackerView(ws, delegate { return settings; }, TryOpenAudio) { Dock = DockStyle.Fill, Visible = false };
         organizer = new OrganizerView(delegate { return settings; }) { Dock = DockStyle.Fill, Visible = false };
@@ -122,7 +122,7 @@ internal sealed class MainForm : Form
         timer.Tick += OnTimer;
         timer.Start();
 
-        Shown += delegate { browser.RestoreLastFolder(); TryOpenAudio(); composer.Focus(); };
+        Shown += delegate { browser.RestoreLastFolder(); TryOpenAudio(); jukebox.OnShown(); };   // 첫 페이지 = Jukebox
         EnableDrop(this);
         FormClosing += OnClosing;
         FormClosed += delegate { timer.Stop(); ws.Dispose(); };
@@ -145,6 +145,7 @@ internal sealed class MainForm : Form
     private void BuildShell()
     {
         navBar.Dock = DockStyle.Top;
+        navBar.Selected = page;
         navBar.PageSelected += ShowPage;
 
         browserSplitter.Dock = DockStyle.Left;
@@ -222,7 +223,6 @@ internal sealed class MainForm : Form
         toolbar.Items.AddRange(new ToolStripItem[]
         {
             ToolButton("새 곡", Glyphs.NewFile, "새 곡 (Ctrl+N)", delegate { NewSong(); ShowPage(AppPage.Composer); }),
-            ToolButton("열기", Glyphs.Open, "곡 열기 — ROL / IMS / SOP (Ctrl+O)", delegate { OpenSong(); }),
             ToolButton("저장", Glyphs.Save, "곡 저장 (Ctrl+S)", delegate { SaveSong(false); }),
             new ToolStripSeparator(),
             ToolButton("뱅크 브라우저", Glyphs.Library, "BNK 목록 · 악기 목록 · 불러오기 (Ctrl+B)", delegate { OpenBankBrowser(); }),
@@ -246,6 +246,7 @@ internal sealed class MainForm : Form
 
         page = target;
         navBar.Selected = target;
+        PullFromJukebox(target);
         composer.Visible = target == AppPage.Composer;
         instrument.Visible = target == AppPage.Instrument;
         jukebox.Visible = target == AppPage.Jukebox;
@@ -316,6 +317,7 @@ internal sealed class MainForm : Form
         if (!ConfirmDiscardSong()) return false;
         StopPlayback();
         ws.ReplaceSong(song);
+        pulledSong = jukebox.CurrentPath;   // 채보한 곡을 Jukebox 곡으로 덮지 않도록
         LogSong("채보");
         ShowPage(target);
         return true;
@@ -402,7 +404,7 @@ internal sealed class MainForm : Form
         return AppSettings.ExistingOrNull(fallback);
     }
 
-    // ---------------------------------------------------------------- 끌어다 놓기 (창 어디든)
+    // ---------------------------------------------------------------- 끌어다 놓기 (왼쪽 목록 · Jukebox)
 
     /// <summary>창과 안의 모든 컨트롤에 끌어다 놓기를 켠다.</summary>
     private void EnableDrop(Control c)
@@ -420,20 +422,30 @@ internal sealed class MainForm : Form
         return data.GetData(DataFormats.FileDrop) as string[] ?? new string[0];
     }
 
+    /// <summary>끌어다 놓기는 왼쪽 폴더/파일 목록과 Jukebox 페이지에만 (파일을 여는 곳은 이 둘뿐).</summary>
+    private bool IsDropZone(object sender)
+    {
+        for (var c = sender as Control; c != null; c = c.Parent)
+            if (c == browser || (c == jukebox && page == AppPage.Jukebox)) return true;
+        return false;
+    }
+
     private void OnDragEnter(object sender, DragEventArgs e)
     {
         bool ok = false;
+        if (!IsDropZone(sender)) { e.Effect = DragDropEffects.None; return; }
         foreach (var item in DroppedItems(e.Data))
             if (Directory.Exists(item) || (File.Exists(item) && (FileBrowser.KindOf(item) != MusicFileKind.None || ZipFolder.IsZip(item)))) { ok = true; break; }
         e.Effect = ok ? DragDropEffects.Copy : DragDropEffects.None;
     }
 
     /// <summary>
-    /// 폴더를 놓으면 = [폴더 열기]와 같다 (왼쪽 목록). zip을 놓으면 = 왼쪽 목록에서 그 zip 안으로. 곡 파일을 놓으면 = 그 파일만 연다:
-    /// Composer · Note · Orgel Note는 작업 곡으로, Jukebox는 그 곡만 재생 (여러 곡이면 그것들이 다음 곡 목록), 다른 형식은 여는 페이지로.
+    /// 왼쪽 목록이나 Jukebox 페이지에 놓을 때만. 폴더를 놓으면 = [폴더 열기]와 같다 (왼쪽 목록). zip을 놓으면 = 왼쪽 목록에서 그 zip 안으로.
+    /// 곡 파일을 놓으면 = Jukebox가 그 곡만 재생 (여러 곡이면 그것들이 다음 곡 목록). Composer · Note · Orgel Note · Tracker에서 왼쪽 목록에 놓으면 왼쪽 목록에서 고른 것과 같다.
     /// </summary>
     private void OnDragDrop(object sender, DragEventArgs e)
     {
+        if (!IsDropZone(sender)) return;
         var items = DroppedItems(e.Data);
         string dir = items.FirstOrDefault(Directory.Exists);
         if (dir != null) { browser.OpenFolder(dir); return; }
@@ -461,9 +473,9 @@ internal sealed class MainForm : Form
     private void OpenDropped(List<string> files)
     {
         Activate();
-        if (page == AppPage.Jukebox && files.Any(JukeboxView.CanPlay)) { jukebox.PlayFiles(files); return; }
         var firstKind = FileBrowser.KindOf(files[0]);
-        if (firstKind == MusicFileKind.Midi || firstKind == MusicFileKind.Vgm) { ShowPage(AppPage.Jukebox); jukebox.PlayFiles(files); return; }
+        if (page != AppPage.Jukebox && (firstKind == MusicFileKind.Audio || PullsFromJukebox(page, firstKind))) { OpenFromBrowser(files[0], true); return; }
+        if (files.Any(JukeboxView.CanPlay)) { ShowPage(AppPage.Jukebox); jukebox.PlayFiles(files); return; }
         OpenFromBrowser(files[0], true);
     }
 
@@ -490,7 +502,6 @@ internal sealed class MainForm : Form
         fileMenu.DropDownItems.AddRange(new ToolStripItem[]
         {
             Item("New", delegate { NewSong(); }, Keys.Control | Keys.N),
-            Item("Open...", delegate { OpenSong(); }, Keys.Control | Keys.O),
             Item("Save", delegate { SaveSong(false); }, Keys.Control | Keys.S),
             Item("Save As...", delegate { SaveSong(true); }),
             revertItem,
@@ -1080,9 +1091,9 @@ internal sealed class MainForm : Form
     }
 
     /// <summary>
-    /// 왼쪽 공용 파일 목록에서 고른 파일: 지금 페이지가 그 형식을 열 수 있으면 여기서, 아니면 그 형식을 여는 페이지로 가서 연다.
-    /// ROL · IMS · SOP = Composer / Note / Orgel Note (작업 곡), S3M · STM · MOD · NST = Tracker, MID · WRK = Jukebox, MP3 · WAV … = Transcribe.
-    /// Jukebox는 MP3 · WAV 말고 모두 재생한다.
+    /// 왼쪽 공용 파일 목록에서 고른 파일. 곡 파일은 모두 Jukebox를 거친다:
+    /// Jukebox 페이지면 재생, Composer · Note · Orgel Note(ROL · IMS · SOP)나 Tracker(S3M · STM · MOD · NST)면 Jukebox에 재생 없이 올리고 그 페이지가 불러온다,
+    /// 다른 페이지면 Jukebox로 가서 재생. MP3 · WAV …(Jukebox가 재생하지 않음) = Transcribe.
     /// </summary>
     private void OpenFromBrowser(string path) { OpenFromBrowser(path, false); }
 
@@ -1090,53 +1101,61 @@ internal sealed class MainForm : Form
     private void OpenFromBrowser(string path, bool single)
     {
         if (string.IsNullOrEmpty(path) || !File.Exists(ChipSongs.FilePart(path))) return;   // "파일::n" = 파일 안 n번 곡
-        if (page == AppPage.Jukebox && JukeboxView.CanPlay(path)) { if (single) jukebox.PlayFiles(new List<string> { path }); else jukebox.Play(path); return; }
-        switch (FileBrowser.KindOf(path))
+        var kind = FileBrowser.KindOf(path);
+        if (kind == MusicFileKind.Audio)
         {
-            case MusicFileKind.Adlib:
-                {
-                    var target = page == AppPage.Note || page == AppPage.Orgel ? page : AppPage.Composer;
-                    if (!OpenSongPath(path)) return;
-                    browser.MarkCurrent(path);
-                    if (page != target) ShowPage(target);
-                    else { var p = PageControl(page) as IShellPage; if (p != null) p.OnShown(); }   // Note / Orgel: 새 곡으로 다시 그리기
-                    break;
-                }
-            case MusicFileKind.Tracker:
-                if (!trackerView.ConfirmDiscard()) return;
-                ShowPage(AppPage.Tracker);
-                trackerView.Open(path);
-                browser.MarkCurrent(path);
-                break;
-            case MusicFileKind.Midi:
-            case MusicFileKind.Vgm:
-                ShowPage(AppPage.Jukebox);
-                if (single) jukebox.PlayFiles(new List<string> { path }); else jukebox.Play(path);
-                break;
-            case MusicFileKind.Audio:
-                ShowPage(AppPage.Transcribe);
-                transcribe.Open(path);
-                browser.MarkCurrent(path);
-                break;
+            ShowPage(AppPage.Transcribe);
+            transcribe.Open(path);
+            browser.MarkCurrent(path);
+            return;
         }
+        if (!JukeboxView.CanPlay(path)) return;
+        if (page != AppPage.Jukebox && PullsFromJukebox(page, kind))
+        {
+            jukebox.Cue(path);
+            PullFromJukebox(page);
+            var p = PageControl(page) as IShellPage;
+            if (p != null && page != AppPage.Tracker) p.OnShown();   // Note / Orgel: 새 곡으로 다시 그리기
+            return;
+        }
+        ShowPage(AppPage.Jukebox);
+        if (single) jukebox.PlayFiles(new List<string> { path }); else jukebox.Play(path);
     }
 
-    private void OpenSong()
+    /// <summary>이 페이지가 Jukebox의 이 종류 곡을 불러오는가: ROL · IMS · SOP → Composer · Note · Orgel Note, 트래커 곡 → Tracker.</summary>
+    private static bool PullsFromJukebox(AppPage target, MusicFileKind kind)
     {
-        if (!ConfirmDiscardSong()) return;
-        var readable = new List<ISongFormat>();
-        foreach (var f in ws.Formats.Songs) if (f.CanRead) readable.Add(f);
-        var openFormats = new List<IFileFormat>(readable) { SopFormat.FileInfo };
-        using (var dlg = new OpenFileDialog { Filter = FormatRegistry.BuildFilter(openFormats), Title = "Open song", InitialDirectory = StartDir(ws.Song.FilePath) })
-        {
-            AddSongPlaces(dlg);
-            if (dlg.ShowDialog(this) != DialogResult.OK) return;
-            if (!LoadSongFile(dlg.FileName)) return;
-            browser.MarkCurrent(dlg.FileName);
-            if (page != AppPage.Composer) ShowPage(AppPage.Composer);
-            WarnMissingInstruments();
-        }
+        if (kind == MusicFileKind.Adlib) return target == AppPage.Composer || target == AppPage.Note || target == AppPage.Orgel;
+        return kind == MusicFileKind.Tracker && target == AppPage.Tracker;
     }
+
+    /// <summary>마지막으로 불러온 Jukebox 곡 (작업 곡 / 트래커 곡): 같은 곡을 페이지를 오갈 때마다 다시 읽지 않도록.</summary>
+    private string pulledSong, pulledTracker;
+
+    /// <summary>
+    /// Composer · Note · Orgel Note · Tracker로 갈 때: Jukebox에 올린 곡이 새로 바뀌었으면 그 곡을 작업 곡(트래커 곡)으로 불러온다.
+    /// 저장하지 않은 변경이 있으면 먼저 묻는다. Jukebox 곡이 이 페이지가 열지 못하는 형식이면 지금 곡 그대로.
+    /// </summary>
+    private void PullFromJukebox(AppPage target)
+    {
+        string path = jukebox.CurrentPath;
+        if (path == null) return;
+        var kind = FileBrowser.KindOf(path);
+        if (!PullsFromJukebox(target, kind)) return;
+        if (kind == MusicFileKind.Tracker)
+        {
+            if (SamePath(path, pulledTracker)) return;
+            pulledTracker = path;
+            if (trackerView.ConfirmDiscard()) trackerView.Open(path);
+            return;
+        }
+        if (SamePath(path, pulledSong)) return;
+        pulledSong = path;
+        if (SamePath(path, ws.Song.FilePath)) return;
+        OpenSongPath(path);
+    }
+
+    private static bool SamePath(string a, string b) { return a != null && b != null && string.Equals(a, b, StringComparison.OrdinalIgnoreCase); }
 
     /// <summary>공용 파일 목록에서: 저장할지 묻고 작업 곡으로 연다. 뱅크에 없는 악기는 페이지를 바꾼 뒤 알린다.</summary>
     private bool OpenSongPath(string path)

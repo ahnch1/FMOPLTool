@@ -13,7 +13,7 @@ namespace AdlibComposer.App.Views;
 /// <summary>
 /// Tracker 페이지 (CREATE): Scream Tracker 3를 본뜬 STM / S3M 편집기 (MOD · NST도 S3M 모델로 열고 저장).
 /// F1 = 주문 목록 · 곡 변수 · 채널, F2 = 패턴 편집, F3 = 악기 목록 (샘플 WAV 불러오기/저장, AdLib 파라미터).
-/// F5 = 곡 재생, F6 = 패턴 재생, F7 = 커서부터, F8 = 정지 (ST3 키). 새 곡 S3M/STM, 열기, 저장(확장자에 맞게 바꿔 저장).
+/// F5 = 곡 재생, F6 = 패턴 재생, F7 = 커서부터, F8 = 정지 (ST3 키). 새 곡 S3M/STM, 저장 (곡은 Jukebox에 올린 것 · 왼쪽 목록에서 고른 것을 불러옴)(확장자에 맞게 바꿔 저장).
 /// </summary>
 [System.ComponentModel.DesignerCategory("Code")]
 internal sealed class TrackerView : UserControl, IShellPage
@@ -80,7 +80,6 @@ internal sealed class TrackerView : UserControl, IShellPage
         bar.Items.AddRange(new ToolStripItem[]
         {
             newMenu,
-            Button("열기", Glyphs.Open, "S3M / STM 열기 (Ctrl+O)", delegate { OpenFile(); }),
             Button("저장", Glyphs.Save, "저장 (Ctrl+S)", delegate { Save(false); }),
             Button("다른 이름", Glyphs.Save, "다른 이름 / 다른 형식(S3M ↔ STM)으로 저장", delegate { Save(true); }),
             new ToolStripSeparator(),
@@ -184,18 +183,6 @@ internal sealed class TrackerView : UserControl, IShellPage
         undo.Clear();
         Bind();
         AppLog.Info("트래커", "새 " + (kind == TrackerKind.Stm ? "STM (4채널)" : "S3M (8채널)") + " 곡");
-    }
-
-    private void OpenFile()
-    {
-        if (!ConfirmDiscard()) return;
-        using (var dlg = new OpenFileDialog { Filter = TrackerFiles.OpenFilter, Title = "트래커 곡 열기 (S3M · STM · MOD · NST)" })
-        {
-            string dir = settings().BrowserFolderPath;
-            if (dir != null && Directory.Exists(dir)) dlg.InitialDirectory = dir;
-            if (dlg.ShowDialog(FindForm()) != DialogResult.OK) return;
-            Open(dlg.FileName);
-        }
     }
 
     public void Open(string path)
@@ -410,7 +397,6 @@ internal sealed class TrackerView : UserControl, IShellPage
             case Keys.F7: PlaySong(order, grid.CursorRow); return true;
             case Keys.F8: StopPlay(); return true;
             case Keys.Control | Keys.S: Save(false); return true;
-            case Keys.Control | Keys.O: OpenFile(); return true;
             case Keys.Control | Keys.Z: Undo(); return true;
             case Keys.OemOpenBrackets | Keys.Shift: SetGlobalSpeed(-1); return true;   // {
             case Keys.OemCloseBrackets | Keys.Shift: SetGlobalSpeed(1); return true;   // }

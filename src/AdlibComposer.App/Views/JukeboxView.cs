@@ -145,6 +145,29 @@ internal sealed class JukeboxView : UserControl, IShellPage
         if (string.Equals(currentPath, Path.GetFullPath(songs[0]), StringComparison.OrdinalIgnoreCase)) playlist = songs;
     }
 
+    /// <summary>지금 Jukebox에 올린 곡 파일 (없으면 null). Composer · Note · Orgel Note · Tracker가 이 곡을 불러온다.</summary>
+    public string CurrentPath { get { return currentPath; } }
+
+    /// <summary>재생하지 않고 곡만 올린다 (정지 상태, 다음 곡 목록 = 그 폴더): 다른 페이지에서 왼쪽 목록의 곡을 고를 때.</summary>
+    public void Cue(string path)
+    {
+        cueOnly = true;
+        try { PlayFile(path, true); }
+        finally { cueOnly = false; }
+    }
+
+    private bool cueOnly;
+
+    /// <summary>곡을 올린 뒤: 보통은 처음부터 재생, Cue면 정지 상태로 둔다.</summary>
+    private void Begin()
+    {
+        if (!cueOnly) { StartAt(0); return; }
+        pausedTick = 0;
+        state = PlayState.Stopped;
+        SyncPlayButton();
+        Tick();
+    }
+
     /// <summary>공용 파일 목록에서 고른 곡을 재생한다 (다음 곡 목록 = 그 폴더).</summary>
     public void Play(string path)
     {
@@ -453,7 +476,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
         AppLog.Info("Jukebox", "재생: " + Path.GetFileName(path) + " — 악기 " + loaded + "/" + used.Count + ", 뱅크 " + display.BankFile + (sameName ? " (같은 이름)" : "")
             + (iss != null ? ", 가사 " + iss.Lines.Count + "줄" : ""), missing.Length > 0 ? "뱅크에 없는 악기: " + missing : null);
 
-        StartAt(0);
+        Begin();
     }
 
     /// <summary>SOP 곡: 악기가 곡 안에 들어 있어 뱅크를 찾지 않는다. 가사는 ROL/IMS처럼 같은 이름의 ISS.</summary>
@@ -515,7 +538,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
 
         AppLog.Info("Jukebox", "재생: " + Path.GetFileName(path) + " — SOP " + active + "트랙, 악기 " + used.Count + "개" + (fourOp > 0 ? " (4-op " + fourOp + ")" : "")
             + (iss != null ? ", 가사 " + iss.Lines.Count + "줄" : ""));
-        StartAt(0);
+        Begin();
     }
 
     /// <summary>
@@ -574,7 +597,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
         RebuildMixerRows();
         MarkPlaying();
         AppLog.Info("Jukebox", "재생: " + Path.GetFileName(path) + " — " + (stm ? "STM" : modFile ? "MOD" : "S3M") + " " + channels + "채널, 샘플 " + samples + (adlib > 0 ? ", AdLib " + adlib : "") + ", " + DeckTheme.Clock(totalSeconds));
-        StartAt(0);
+        Begin();
     }
 
     /// <summary>
@@ -641,7 +664,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
         AppLog.Info("Jukebox", "재생: " + Path.GetFileName(path) + " — " + m.FormatName + (m.Standard != MidiStandard.None ? " (" + MidiSysEx.Name(m.Standard) + ")" : "") + (m.UsesBankSelect ? " · 뱅크 셀렉트" : "") + " " + channels + "채널, 프로그램 " + programs.Count + "개, " + DeckTheme.Clock(totalSeconds)
             + ", " + (mt32Rom != null ? "MT-32 에뮬레이터 (" + mt32Rom + ")" : windows ? "Windows 신디사이저" : "FM 뱅크 " + (gmBank != null ? gmBank.Source : "없음")) + (mt32 && mt32Rom == null ? ", MT-32 → GM" : ""),
             m.Comment.Length > 0 ? m.Comment : null);
-        StartAt(0);
+        Begin();
     }
 
     /// <summary>
@@ -707,7 +730,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
         AppLog.Info("Jukebox", "재생: " + Path.GetFileName(path) + " — " + fmtName + ", " + v.ChipSummary + ", 채널 " + active + "/" + vgmChannels.Count + ", " + DeckTheme.Clock(totalSeconds)
             + (v.LoopOffset > 0 ? " (루프 " + DeckTheme.Clock(v.LoopSamples / (double)VgmSong.Rate) + ")" : ""),
             v.UnsupportedChips.Count > 0 ? "소리 내지 않는 칩: " + string.Join(", ", v.UnsupportedChips) : null);
-        StartAt(0);
+        Begin();
     }
 
     /// <summary>"8-bit MIDI"를 바꾸면: MIDI 곡이 열려 있으면 그 곡을 다시 읽어 같은 자리부터 (재생 중이었을 때만 이어서 재생).</summary>

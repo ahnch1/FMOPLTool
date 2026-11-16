@@ -34,7 +34,7 @@ internal sealed class NavBar : Control
     private readonly List<(string Title, Rectangle Bounds)> sections = new List<(string, Rectangle)>();
     private readonly ToolTip tip = new ToolTip();
     private NavItem hover;
-    private AppPage selected = AppPage.Composer;
+    private AppPage selected = AppPage.Jukebox;
     private bool iconsOnly;
 
     public event Action<AppPage> PageSelected;
@@ -47,12 +47,12 @@ internal sealed class NavBar : Control
         Cursor = Cursors.Default;
 
         // 순서 = 흐름: 곡을 듣고(Jukebox) → 고치고(Composer) → 악보로(Note)
-        Add("PLAY", AppPage.Jukebox, "Jukebox", "폴더의 곡 재생 (ROL · IMS · SOP · S3M · STM · MOD · MID · WRK · VGM · KSS · NSF · HES …) · 가사 · 채널 믹서", Glyphs.Jukebox);
-        Add("CREATE", AppPage.Composer, "Composer", "건반 악보 작곡 · 재생 (ROL / IMS)", Glyphs.Composer);
+        Add("PLAY", AppPage.Jukebox, "Jukebox", "첫 페이지 · 왼쪽 목록에서 고르거나 끌어다 놓은 곡 재생 (ROL · IMS · SOP · S3M · STM · MOD · MID · WRK · VGM · KSS · NSF · HES …) · 가사 · 채널 믹서", Glyphs.Jukebox);
+        Add("CREATE", AppPage.Composer, "Composer", "건반 악보 작곡 · 재생 (ROL / IMS / SOP) — Jukebox의 곡을 불러옴", Glyphs.Composer);
         Add("CREATE", AppPage.Instrument, "Instrument Maker", "FM 악기 편집 · 시음 (BNK / INS)", Glyphs.Instrument);
-        Add("CREATE", AppPage.Tracker, "Tracker", "트래커 곡 만들기 (S3M / STM / MOD / NST)", Glyphs.Tracker);
-        Add("SCORE", AppPage.Note, "Note", "오선 악보 보기 · MusicXML / MIDI / PNG · 인쇄", Glyphs.Note);
-        Add("SCORE", AppPage.Orgel, "Orgel Note", "30음 오르골 띠 구멍 위치 · 시험 연주 · 실제 크기 인쇄", Glyphs.Orgel);
+        Add("CREATE", AppPage.Tracker, "Tracker", "트래커 곡 만들기 (S3M / STM / MOD / NST) — Jukebox의 곡을 불러옴", Glyphs.Tracker);
+        Add("SCORE", AppPage.Note, "Note", "오선 악보 보기 · MusicXML / MIDI / PNG · 인쇄 — Jukebox의 곡을 불러옴", Glyphs.Note);
+        Add("SCORE", AppPage.Orgel, "Orgel Note", "30음 오르골 띠 구멍 위치 · 시험 연주 · 실제 크기 인쇄 — Jukebox의 곡을 불러옴", Glyphs.Orgel);
         Add("SCORE", AppPage.Transcribe, "Transcribe", "음악 파일(MP3 · WAV)의 주 멜로디를 악보로 채보 (이 PC에서 분석)", Glyphs.Transcribe);
         Add("TOOLS", AppPage.Organizer, "Organizer", "같은 곡 찾기 · 정리 (ROL / IMS / SOP): 삭제 · 이동 · 시뮬레이션", Glyphs.Organizer);
     }

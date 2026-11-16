@@ -16,7 +16,7 @@ namespace AdlibComposer.App.Views;
 /// <summary>
 /// Transcribe 페이지 (SCORE, Ctrl+8): 음악 파일(MP3 · WAV …)의 주 멜로디를 뽑아 악보로. 화음 · 반주는 보지 않는다. 모두 이 PC에서 계산.
 /// <code>
-/// ┌ [파일 열기] 파일 이름 · 길이                                  진행 / 상태 ┐
+/// ┌ 파일 이름 · 길이 (왼쪽 목록에서 고름)                                  진행 / 상태 ┐
 /// ├ 음역 [C3]~[C6]  감도 ───●──  최소 길이 [90]ms  템포 [100.0] [자동]  격자 [8분] ┤
 /// ├ 피아노 롤: 멜로디 곡선(점) + 음(막대) + 박 격자, 클릭 = 그 위치부터 재생     ┤
 /// └ [▶ 재생] [x] 원곡 [x] 멜로디   음 N개          [악보 보기 (Note)] [Composer에서 편집] ┘
@@ -30,7 +30,7 @@ internal sealed class TranscribeView : UserControl, IShellPage, IPlaybackPage
     private readonly Func<bool> openAudio;
     private readonly Func<Song, AppPage, bool> sendSong;
 
-    private readonly Button btnOpen = new Button(), btnNote = new Button(), btnComposer = new Button(), btnAutoTempo = new Button();
+    private readonly Button btnNote = new Button(), btnComposer = new Button(), btnAutoTempo = new Button();
     private readonly Label lblFile = new Label(), lblStatus = new Label(), lblInfo = new Label();
     private readonly ComboBox cbLow = new ComboBox(), cbHigh = new ComboBox(), cbGrid = new ComboBox();
     private readonly TrackBar tbVoicing = new TrackBar();
@@ -49,7 +49,6 @@ internal sealed class TranscribeView : UserControl, IShellPage, IPlaybackPage
     private CancellationTokenSource cancel;
     private bool busy, playing, filling;
     private int trackGeneration;
-    private string lastDir;
 
     public TranscribeView(Workspace ws, Func<bool> openAudio, Func<Song, AppPage, bool> sendSong)
     {
@@ -89,21 +88,16 @@ internal sealed class TranscribeView : UserControl, IShellPage, IPlaybackPage
 
     private void BuildTop(Panel host)
     {
-        btnOpen.Text = "음악 파일 열기...";
-        btnOpen.SetBounds(12, 9, 130, 28);
-        btnOpen.Font = ShellTheme.UiSemibold;
-        btnOpen.Click += delegate { OpenFile(); };
-        tips.SetToolTip(btnOpen, "MP3 · WAV · WMA · M4A (Windows 코덱으로 읽음). 분석은 이 PC에서만 한다");
         lblFile.AutoSize = false;
-        lblFile.SetBounds(152, 14, 520, 20);
-        lblFile.Text = "파일을 열면 주 멜로디를 찾아 악보로 만든다 (화음 · 반주는 보지 않음)";
+        lblFile.SetBounds(12, 14, 660, 20);
+        lblFile.Text = "왼쪽 목록에서 음악 파일(MP3 · WAV · WMA · M4A)을 고르면 주 멜로디를 찾아 악보로 만든다 (화음 · 반주는 보지 않음)";
         lblFile.ForeColor = ShellTheme.Muted;
         lblStatus.AutoSize = false;
         lblStatus.TextAlign = ContentAlignment.MiddleRight;
         lblStatus.ForeColor = ShellTheme.Muted;
         lblStatus.SetBounds(680, 14, 300, 20);
         lblStatus.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-        host.Controls.AddRange(new Control[] { btnOpen, lblFile, lblStatus });
+        host.Controls.AddRange(new Control[] { lblFile, lblStatus });
 
         int x = 12, y = 48;
         Control Label(string t) { var l = new Label { Text = t, AutoSize = true, Location = new Point(x, y + 4) }; host.Controls.Add(l); x += TextRenderer.MeasureText(t, Font).Width + 4; return l; }
@@ -215,32 +209,15 @@ internal sealed class TranscribeView : UserControl, IShellPage, IPlaybackPage
     private void UpdateButtons()
     {
         bool has = analysis != null && !busy;
-        btnOpen.Enabled = !busy;
         btnNote.Enabled = btnComposer.Enabled = has && result != null && result.Notes.Count > 0;
         btnAutoTempo.Enabled = has;
     }
 
     // ------------------------------------------------------------ 열기 / 분석
 
-    private void OpenFile()
-    {
-        using (var dlg = new OpenFileDialog
-        {
-            Title = "채보할 음악 파일",
-            Filter = "음악 파일 (*.mp3;*.wav;*.wma;*.m4a;*.aac;*.flac)|*.mp3;*.wav;*.wma;*.m4a;*.aac;*.flac|모든 파일 (*.*)|*.*",
-            InitialDirectory = lastDir != null && Directory.Exists(lastDir) ? lastDir : Environment.GetFolderPath(Environment.SpecialFolder.MyMusic),
-        })
-        {
-            if (dlg.ShowDialog(FindForm()) != DialogResult.OK) return;
-            lastDir = Path.GetDirectoryName(dlg.FileName);
-            LoadFile(dlg.FileName);
-        }
-    }
-
     /// <summary>공용 파일 목록에서 고른 음악 파일을 분석한다.</summary>
     public void Open(string file)
     {
-        lastDir = Path.GetDirectoryName(file);
         LoadFile(file);
     }
 

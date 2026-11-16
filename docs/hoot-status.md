@@ -1,4 +1,4 @@
-# hoot 재생 작업 현황 (2026-11-16, v2.0.2)
+# hoot 재생 작업 현황 (2026-11-16, v2.0.3)
 
 다른 PC(회사)에서 이어 하기 위한 기록. 자세한 할 일 목록은 원래 `_incoming/Todo.md`(git에 안 들어감)에 있었고, 그중 이어 하는 데 필요한 것을 여기에 옮겼다.
 
@@ -6,10 +6,10 @@
 
 - **시험 자료는 저장소에 없다**: `_incoming/Hootarchive/` (hoot 배포본: `xml_new/` 목록 · `pc98/` 1,709 zip · `pc/` 480 zip · `snes/` · `msx/` · `nes/` · `gb/` …)는 `.gitignore`. 회사 PC에도 같은 자리(`_incoming/Hootarchive`)에 두면 실제 파일 시험 · 진단이 돈다. 없으면 실제 파일 시험은 `SKIP`으로 넘어간다 (합성 시험은 그대로 통과).
 - 작업 방식: 단계마다 커밋 하나 (`vX.Y.Z: …` 한국어 메시지), `Directory.Build.props` 버전 마지막 번호 올림, README 갱신, SelfTest 전부 통과 후 커밋.
-- 시험: `dotnet run -c Release --project tests/AdlibComposer.SelfTest` (전체, 지금 852개 통과), 묶음만: `-- --test pc98` · `hoot98` · `hootgen` · `hootmsx` · `hoot88` · `hootx1` · `pcat` · `hoot`.
+- 시험: `dotnet run -c Release --project tests/AdlibComposer.SelfTest` (전체, 지금 858개 통과), 묶음만: `-- --test pc98` · `hoot98` · `hootgen` · `hootmsx` · `hoot88` · `hootx1` · `hootneo` · `pcat` · `hoot`.
 - hoot 문서: http://retropc.net/yui/hoot/PC98.TXT (https 안 됨, http로). 그 밖의 기종(PC/AT · MSX · PC-88 · X1 …) 문서는 없음 — 목록의 시작 코드(rom "patch" 등)를 역어셈블해 규약을 맞춘다.
 
-## 1. 지금까지 (v1.21.0 ~ v2.0.2)
+## 1. 지금까지 (v1.21.0 ~ v2.0.3)
 
 | 판 | 단계 | 내용 |
 |---|---|---|
@@ -27,6 +27,7 @@
 | 2.0.0 | 8-6 (MSX) | hoot msx generic: `Audio/HootMsx.cs` (MSX 기계 · hoot 포트 02h~07h, 미리 렌더) |
 | 2.0.1 | 8-6 (PC-88) | hoot pc88 opn · opna: `Audio/HootPc88.cs` (PC-8801 기계 · hoot 포트 00h · 01h · 80h, IM 2 VRTC · RTC · OPN 타이머) |
 | 2.0.2 | 8-6 (X1) | hoot x1 psg · opm: `Audio/HootX1.cs` (X1 기계 · 16비트 I/O · Z80 CTC · I/O VRAM) |
+| 2.0.3 | 8-6 (네오지오) | hoot neogeo: `Audio/HootNeoGeo.cs` (사운드 보드 Z80 + YM2610, M1 ROM 그대로, NMI 명령 · 뱅크 · ADPCM ROM 블록) |
 
 ### 구조 (어디를 보면 되나)
 
@@ -51,6 +52,7 @@
 | MSX generic (PSG · OPLL · SCC · SCC+ · MSX-AUDIO) | 481 / 498 (첫 곡이 조용하면 다음 곡 5개까지) | `--hootmsxsurvey msx 1000 8` |
 | PC-88 (opn · opna) | 487 / 527 — opn 357/385 · opna 130/142 | `--hoot88survey pc88 1000 6` |
 | X1 (psg · opm) | 143 / 152 — opm 65/71 · psg 78/81 | `--hootx1survey x1 1000 8` |
+| 네오지오 | 137 / 146 (음악일 만한 코드 10h 이상 3곡까지) | `--hootneosurvey roms 200 6` |
 | SPC · KSS · NSF · GBS | 717항목 파일 있음 (KSS 71항목은 zip에 .kss 없음) | — |
 
 "소리 남" = 처음 몇 초 안에 키온 · 노트가 나옴. 템포 · 음높이가 hoot와 맞는지는 아직 귀로 비교하지 않았다.
@@ -66,6 +68,7 @@
 --hootmsxsurvey <msx 폴더> [zip 수] [초]    MSX generic: 원인 분류 (boot-not-waiting · no-chip-writes · writes-no-keyon · missing-file), 조용하면 많이 쓴 레지스터
 --hoot88survey  <pc88 폴더> [zip 수] [초]   PC-88: 원인 분류 (no-interrupts 추가)
 --hootx1survey  <x1 폴더> [zip 수] [초]     X1: CTC 채널마다 제어어:시간 상수 · 벡터도
+--hootneosurvey <roms 폴더> [zip 수] [초]   네오지오 (hoot 목록에 neogeo로 있는 zip만)
 --hoottree      <xml 폴더>                   트리 자료 읽는 시간 · 장비 수
 ```
 
@@ -100,7 +103,14 @@
   - **I/O 2000h~FFFFh = VRAM (쓰고 읽는 메모리)**: Sorcerian 등이 그래픽 VRAM을 작업 메모리로 씀. 8255 PPI 1A01h = bit7 수직 귀선 · 서브 CPU 늘 준비됨, 서브 CPU 1900h 읽기 = 0
   - 남은 무음 9: Super Laydock (OPM · PSG), 三国志 1 · 2, 維新の嵐, 戦国群雄伝, 水滸伝 (KOEI — 인터럽트가 없거나 ch3만 시간 상수 1), Hydlide (ch3가 시간 상수를 기다림, 옵션 없음)
   - 아직 없음: opmx2 (OPM 둘) 2, x1 opn 1
-- 다음: neogeo, megadrive
+- **네오지오 — ✅ v2.0.3** (`Audio/HootNeoGeo.cs`, 137 / 146). hoot 전용 시작 코드 없음 — 실제 사운드 보드 (MAME neogeo와 같은 배치):
+  - Z80 4MHz, 0000h~7FFFh M1 고정, 8000h~ · C000h~ · E000h~ · F000h~ = 16 · 8 · 4 · 2KB 뱅크 창 (IN 0Bh · 0Ah · 09h · 08h의 주소 상위 바이트, 처음 02h · 06h · 0Eh · 1Eh), F800h~ RAM
+  - 명령 = NMI (00h 읽기, 08h 쓰기 = NMI 켬 · 18h = 끔), 0Ch = 68000에 답. YM2610 04h~07h, 타이머 A · B (8MHz: A = 144 × (1024 − TA), B = 2304 × (256 − TB) / 8MHz) → IRQ IM 1 (플래그를 지울 때까지)
+  - **SNK 사운드 드라이버 (Mr.Pac Ver 2.0 · MAKOTO Ver 3.0 · "Sound Driver Ver … To SNK")는 처음에 음악이 꺼져 있어 명령 08h를 먼저 보낸다** (aof: 곡 시작 루틴이 FE34h ≠ 0이면 건너뜀, 명령 08h · 09h가 지움). 다른 드라이버 (ADK maglord · mslug 등)는 보내지 않음 (mslug는 받으면 안 남). 옵션 code_play가 있으면 곡 명령 0.1초 뒤 그 명령도
+  - VGM = YM2610 + ADPCM-A ROM (82h) · ADPCM-B ROM (83h, adpcmb가 없으면 A ROM을 같이) 데이터 블록. 180초 미리 렌더
+  - 남은 무음 9: 파일 없음 3 (diggerma · kof2001 · zupapa — zip에 m1 · v1 없음), m1_decrypt (mslug5), bstars · ganryu · pulstar (MAKOTO인데 08h로도 안 됨), s1945p (IRQ 없음), wjammers (음수 offset 줄)
+  - **암호화 V ROM (neo_pcm2_swap · neo_pcm2_snk_1999) 10항목**: 키온은 나지만 ADPCM 소리가 깨짐 (복호 아직)
+- 다음: megadrive (generic_z80 · iyinc · koei)
 
 ### 8-7. X68000 — 큼 (MC68000 CPU 새로)
 - x68k generic 553 / 11,679곡 (.OPM · .ZMD · .M …를 원래 드라이버로), MIDI 판 166 (8-4의 MIDI 길 다시 씀)

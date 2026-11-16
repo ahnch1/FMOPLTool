@@ -64,6 +64,12 @@ public static class HootSongs
             v = HootX1.Render(e, dir, code);
             what = "X1 기계 · 곡 0x" + code.ToString("X");
         }
+        else if (driver == "neogeo")
+        {
+            // hoot 네오지오: 사운드 보드 (Z80 + YM2610)에서 M1 ROM을 돌려 미리 렌더 (ADPCM ROM은 VGM 데이터 블록으로)
+            v = HootNeoGeo.Render(e, dir, code);
+            what = "네오지오 사운드 보드 · 명령 0x" + code.ToString("X2");
+        }
         else if (driver == "snes")
         {
             var rom = e.Roms.FirstOrDefault(r => r.Offset == code && r.Text.Length > 0);

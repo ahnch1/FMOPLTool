@@ -30,7 +30,10 @@ public static class VgmToSong
     }
 
     /// <param name="newSong">빈 곡을 만드는 함수 (보이스 기본 악기가 든 것). null이면 악기 없는 빈 곡.</param>
-    public static Result Convert(VgmSong v, Func<Song> newSong = null, double maxSeconds = MaxSeconds, int tickBeat = 48, double bpm = 120)
+    /// <param name="progress">진행 0~1 (돌린 시간 / 바꿀 길이), 0.1초 분량마다쯤. 다른 스레드에서 불릴 수 있다.</param>
+    /// <param name="cancel">true를 돌려주면 그만두고 null을 돌려준다.</param>
+    public static Result Convert(VgmSong v, Func<Song> newSong = null, double maxSeconds = MaxSeconds, int tickBeat = 48, double bpm = 120,
+        Action<double> progress = null, Func<bool> cancel = null)
     {
         var song = newSong != null ? newSong() : new Song();
         song.TickBeat = tickBeat;
@@ -50,8 +53,14 @@ public static class VgmToSong
 
         int totalTicks = (int)Math.Ceiling(seconds * ticksPerSecond);
         double samplesPerTick = VgmPlayer.Rate / ticksPerSecond, due = 0;
+        int reportEvery = Math.Max(1, (int)(ticksPerSecond / 10));
         for (int tick = 0; tick <= totalTicks; tick++)
         {
+            if (tick % reportEvery == 0)
+            {
+                if (cancel != null && cancel()) { player.Stop(); return null; }
+                progress?.Invoke(totalTicks > 0 ? tick / (double)totalTicks : 1);
+            }
             due += samplesPerTick;
             while (due >= 1) { due -= 1; player.Step(); player.Generate(out _, out _); }
             bool alive = player.IsPlaying && tick < totalTicks;
@@ -76,6 +85,7 @@ public static class VgmToSong
             if (!alive) break;
         }
         player.Stop();
+        progress?.Invoke(1);
         for (int c = 0; c < channels; c++)
         {
             if (open[c] != null && open[c].Duration <= 0) open[c].Duration = Math.Max(1, totalTicks - open[c].StartTick);

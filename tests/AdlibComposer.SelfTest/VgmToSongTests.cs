@@ -28,6 +28,15 @@ public static class VgmToSongTests
 
         var r = VgmToSong.Convert(vgm);
         var back = r.Song;
+
+        // 진행 알림: 0에서 1까지 늘기만 하고 마지막은 1, 취소하면 null
+        var seen = new System.Collections.Generic.List<double>();
+        VgmToSong.Convert(vgm, null, VgmToSong.MaxSeconds, 48, 120, f => seen.Add(f));
+        bool rising = seen.Count > 5 && seen.Zip(seen.Skip(1), (a, b) => b >= a).All(x => x) && seen[0] <= 0.01 && seen[seen.Count - 1] == 1;
+        check("VgmToSong: progress rises 0 → 1", rising, seen.Count + " reports, last " + (seen.Count > 0 ? seen[seen.Count - 1] : -1));
+        int asks = 0;
+        var cancelled = VgmToSong.Convert(vgm, null, VgmToSong.MaxSeconds, 48, 120, null, () => ++asks > 3);
+        check("VgmToSong: cancel returns null early", cancelled == null && asks == 4, "asked " + asks);
         check("VgmToSong: melodic 9-voice song from OPL2", !back.IsSop && back.IsMelodic && r.Notes > 0, r.ChannelsWithNotes + " channels, " + r.Notes + " notes, " + string.Join(" ", r.Used));
 
         // 원래 노트 (melodic 보이스)의 시작 시각 · 음높이가 바꾼 곡의 어느 보이스에 ±30ms · 같은 음으로 있는가

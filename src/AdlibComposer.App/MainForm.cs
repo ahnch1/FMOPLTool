@@ -1171,16 +1171,22 @@ internal sealed class MainForm : Form
         }
         if (!ConfirmDiscardSong()) return;
         VgmToSong.Result r;
+        bool cancelled;
         var sw = System.Diagnostics.Stopwatch.StartNew();
         try
         {
-            Cursor = Cursors.WaitCursor;
-            statusMain.Text = "칩 곡을 노트로 바꾸는 중…";
-            status.Refresh();
-            r = VgmToSong.Convert(v, Workspace.CreateEmptySong);
+            // 곡을 끝까지 돌려야 해서 길거나 기종 흉내(hoot · SPC) 곡은 몇 초 넘게 걸린다: 진행 막대 + 취소 (0.3초 안에 끝나면 창 없음)
+            r = ProgressForm.Run(this, "칩 곡 → 노트", Path.GetFileName(path) + " — 곡을 돌리며 노트로 바꾸는 중…",
+                (report, stop) => VgmToSong.Convert(v, Workspace.CreateEmptySong, VgmToSong.MaxSeconds, 48, 120, report, stop), out cancelled);
         }
         catch (Exception ex) { Fail("칩 곡을 노트로 바꿀 수 없습니다.", ex); return; }
-        finally { Cursor = Cursors.Default; }
+        if (cancelled || r == null)
+        {
+            pulledSong = null;   // 다시 이 페이지로 오면 다시 바꾼다
+            AppLog.Info("곡", "칩 곡 → 노트 취소: " + Path.GetFileName(path));
+            statusMain.Text = "칩 곡을 노트로 바꾸기를 취소했습니다 (지금 곡 그대로)";
+            return;
+        }
         string title = v.Title;
         if (string.IsNullOrWhiteSpace(title)) title = Path.GetFileNameWithoutExtension(ChipSongs.FilePart(path));
         foreach (char c in Path.GetInvalidFileNameChars()) title = title.Replace(c, '_');   // 저장할 때 파일 이름 기본값

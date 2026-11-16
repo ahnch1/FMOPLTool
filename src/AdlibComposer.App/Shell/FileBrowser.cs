@@ -52,6 +52,10 @@ internal sealed class FileBrowser : UserControl
     private readonly Func<AppSettings> settings;
     private readonly ListView list = new ListView();
     private readonly Label pathLabel = new Label();
+    /// <summary>찾기 칸: 파일 이름 · 곡 제목 (Enter = 지금 폴더와 아래 폴더에서 찾기, Esc = 지우고 폴더로).</summary>
+    private readonly TextBox searchBox = new TextBox();
+    private bool searchMode;
+    private int searchGeneration;
     private readonly Label emptyLabel = new Label();
     private readonly Button openButton = new Button(), upButton = new Button(), hootButton = new Button();
     /// <summary>hoot 목록 트리 (hoot 모드에서 목록 대신 보인다).</summary>
@@ -104,6 +108,24 @@ internal sealed class FileBrowser : UserControl
         pathLabel.ForeColor = ShellTheme.Muted;
         pathLabel.AutoEllipsis = true;
         pathLabel.Padding = new Padding(8, 4, 4, 0);
+
+        searchBox.Dock = DockStyle.Top;
+        searchBox.Font = ShellTheme.Ui;
+        searchBox.PlaceholderText = "찾기: 파일 이름 · 제목 (Enter, 아래 폴더까지)";
+        searchBox.Visible = false;
+        searchBox.KeyDown += (s, e) =>
+        {
+            if (e.KeyCode == Keys.Enter) { StartSearch(searchBox.Text); e.Handled = e.SuppressKeyPress = true; }
+            else if (e.KeyCode == Keys.Escape) { ClearSearch(); e.Handled = e.SuppressKeyPress = true; }
+            else if (e.KeyCode == Keys.Down && list.Items.Count > 0)
+            {
+                list.Focus();
+                if (list.SelectedItems.Count == 0) { list.Items[0].Selected = true; list.Items[0].Focused = true; }
+                e.Handled = e.SuppressKeyPress = true;
+            }
+        };
+        tips.SetToolTip(searchBox, "파일 이름이나 곡 안의 제목(파일 안 곡 제목 포함)에 낱말이 모두 든 곡을 지금 폴더와 그 아래 폴더에서 찾는다 (zip 안은 들어가 있을 때만)\n"
+            + "띄어 쓴 낱말 = 모두 들어간 것 · Enter = 찾기 · Esc = 지우고 폴더 목록으로 · ↓ = 결과 목록으로\n결과 목록이 Jukebox 다음 곡 목록이 된다");
 
         list.Dock = DockStyle.Fill;
         list.BorderStyle = BorderStyle.None;
@@ -168,6 +190,7 @@ internal sealed class FileBrowser : UserControl
         Controls.Add(hoot);
         Controls.Add(emptyLabel);
         Controls.Add(pager);
+        Controls.Add(searchBox);
         Controls.Add(pathLabel);
         Controls.Add(bar);
 
@@ -330,6 +353,7 @@ internal sealed class FileBrowser : UserControl
     private void GoUp()
     {
         if (hootMode) { LeaveHoot(); return; }
+        if (searchMode) { ClearSearch(); return; }
         if (AtRoot) return;
         string from = current;
         string parent;
@@ -366,6 +390,8 @@ internal sealed class FileBrowser : UserControl
         list.Visible = false;
         emptyLabel.Visible = true;
         pathLabel.Text = "열린 폴더 없음";
+        EndSearch();
+        searchBox.Visible = false;
         upButton.Enabled = false;
         songCount = 0;
         UpdatePager();
@@ -375,6 +401,8 @@ internal sealed class FileBrowser : UserControl
     private void ShowFolder(string dir)
     {
         SetHootMode(false);
+        if (searchMode || !string.Equals(dir, current, StringComparison.OrdinalIgnoreCase)) { EndSearch(); searchBox.Text = ""; }
+        searchBox.Visible = true;
         current = dir;
         list.Visible = true;
         emptyLabel.Visible = false;
@@ -428,6 +456,7 @@ internal sealed class FileBrowser : UserControl
         catch (Exception ex) { AppLog.Warn("파일", "폴더를 읽을 수 없습니다: " + dir, ex.Message); }
         list.EndUpdate();
         upButton.Enabled = !AtRoot;
+        searchMode = false;
         // 경로: 연 폴더 이름 › 아래 폴더 …
         string shown = DisplayPath(dir);
         string rel = AtRoot ? "" : Path.GetRelativePath(root, shown);
@@ -480,6 +509,7 @@ internal sealed class FileBrowser : UserControl
     {
         hootMode = on;
         hoot.Visible = on;
+        if (on) { EndSearch(); searchBox.Visible = false; }   // hoot 트리는 자기 찾기 칸
         hootButton.BackColor = on ? Color.FromArgb(222, 242, 239) : Color.White;
         tips.SetToolTip(upButton, on ? "폴더 목록으로 돌아가기 · Backspace" : "위 폴더로 (연 폴더 위로는 가지 않는다) · Backspace");
         if (!on) return;
@@ -631,9 +661,174 @@ internal sealed class FileBrowser : UserControl
         lastTop = n > 0 && list.TopItem != null ? top : -1;
         int page = Math.Min(pages, top / size + 1);
         if (top + size >= n) page = pages;   // 맨 아래까지 내려왔으면 마지막 쪽
-        pageLabel.Text = current == null ? "" : page + " / " + pages + " 쪽 · " + songCount + "곡";
+        pageLabel.Text = current == null ? "" : page + " / " + pages + " 쪽 · " + songCount + (searchMode ? "곡 찾음" : "곡");
         prevPage.Enabled = n > 0 && top > 0;
         nextPage.Enabled = n > 0 && top + size < n;
+    }
+
+    // ---------------------------------------------------------------- 찾기 (파일 이름 · 제목)
+
+    /// <summary>찾기를 그만둔다 (뒤에서 찾던 것도 멈춤). 목록은 그대로.</summary>
+    private void EndSearch()
+    {
+        searchGeneration++;
+        searchMode = false;
+    }
+
+    /// <summary>Esc · 위로: 찾기 칸을 지우고 지금 폴더 목록으로.</summary>
+    private void ClearSearch()
+    {
+        searchBox.Text = "";
+        if (current != null && Directory.Exists(current)) { EndSearch(); ShowFolder(current); list.Focus(); }
+    }
+
+    /// <summary>찾은 곡 하나: 파일 (+ 낱말이 든 파일 안 곡들).</summary>
+    private sealed class SearchHit
+    {
+        public string Path, Title;
+        public bool Multi;
+        public readonly List<(string path, string title, int index)> Tracks = new List<(string, string, int)>();
+    }
+
+    /// <summary>
+    /// 지금 폴더와 아래 폴더의 곡 파일 중 이름이나 제목에 낱말(띄어 쓴 것 모두)이 든 것을 다른 스레드에서 찾아 목록에 채운다.
+    /// 제목은 목록의 '제목' 칸과 같은 것 (캐시를 같이 쓴다), 곡이 여럿 든 파일은 파일 안 곡 제목도 본다 (HES · GBS는 곡 목록을 이미 알 때만).
+    /// </summary>
+    private void StartSearch(string text)
+    {
+        if (current == null || !Directory.Exists(current)) return;
+        var words = (text ?? "").Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+        if (words.Length == 0) { ClearSearch(); return; }
+        int gen = ++searchGeneration;
+        titleGeneration++;   // 폴더 제목 읽기는 그만
+        searchMode = true;
+        string baseDir = current;
+        list.Items.Clear();
+        list.Visible = true;
+        emptyLabel.Visible = false;
+        songCount = 0;
+        upButton.Enabled = true;
+        string label = "찾기 '" + string.Join(" ", words) + "'";
+        pathLabel.Text = label + " — 찾는 중…";
+        tips.SetToolTip(pathLabel, DisplayPath(baseDir) + " 와 아래 폴더");
+        UpdatePager();
+        bool Match(string hay) { return words.All(w => hay.IndexOf(w, StringComparison.OrdinalIgnoreCase) >= 0); }
+
+        System.Threading.Tasks.Task.Run(() =>
+        {
+            var batch = new List<SearchHit>();
+            int scanned = 0, found = 0;
+            var lastPost = DateTime.UtcNow;
+            void Post(bool done)
+            {
+                var hits = batch;
+                batch = new List<SearchHit>();
+                int sc = scanned, fd = found;
+                try { BeginInvoke((Action)(() => ApplySearch(gen, hits, label, sc, fd, done))); } catch (Exception) { }
+            }
+            foreach (var f in SongFilesUnder(baseDir, () => gen == searchGeneration))
+            {
+                if (gen != searchGeneration) return;
+                scanned++;
+                string name = Path.GetFileName(f);
+                string title = CachedTitle(f);
+                if (title == null && KindOf(f) != MusicFileKind.Audio)
+                {
+                    title = ReadSongTitle(f);
+                    try { lock (titleCache) titleCache[f] = (File.GetLastWriteTimeUtc(f), title); } catch (Exception) { }
+                }
+                title = title ?? "";
+                bool multi = AdlibComposer.Audio.ChipSongs.HasTracks(f);
+                var hit = new SearchHit { Path = f, Title = title, Multi = multi };
+                if (multi && TrackTitlesCheap(f))
+                {
+                    try
+                    {
+                        var tracks = AdlibComposer.Audio.ChipSongs.Tracks(f);
+                        for (int i = 0; i < tracks.Count; i++)
+                            if (Match(name + " " + tracks[i].title)) hit.Tracks.Add((tracks[i].path, tracks[i].title, i));
+                    }
+                    catch (Exception) { }
+                }
+                if (Match(name + " " + title) || hit.Tracks.Count > 0) { batch.Add(hit); found++; }
+                if (batch.Count >= 50 || (DateTime.UtcNow - lastPost).TotalMilliseconds > 300) { Post(false); lastPost = DateTime.UtcNow; }
+            }
+            if (gen == searchGeneration) Post(true);
+        });
+    }
+
+    /// <summary>파일 안 곡 제목을 돌리지 않고 알 수 있는가 (HES · GBS는 곡을 찾아 둔 뒤에만).</summary>
+    private static bool TrackTitlesCheap(string f)
+    {
+        string ext = Path.GetExtension(f);
+        if (AdlibComposer.Audio.Hes.Extensions.Any(x => string.Equals(x, ext, StringComparison.OrdinalIgnoreCase))) return AdlibComposer.Audio.Hes.TracksKnown(f);
+        if (AdlibComposer.Audio.Gbs.Extensions.Any(x => string.Equals(x, ext, StringComparison.OrdinalIgnoreCase))) return AdlibComposer.Audio.Gbs.TracksKnown(f);
+        return true;
+    }
+
+    /// <summary>폴더와 그 아래 폴더의 곡 파일 (이름순, 숨김 · 시스템 폴더는 뺌, 읽을 수 없는 폴더는 건너뜀).</summary>
+    private static IEnumerable<string> SongFilesUnder(string dir, Func<bool> go)
+    {
+        var stack = new Stack<string>();
+        stack.Push(dir);
+        while (stack.Count > 0 && go())
+        {
+            string d = stack.Pop();
+            string[] files, subs;
+            try
+            {
+                files = Directory.GetFiles(d);
+                subs = Directory.GetDirectories(d);
+            }
+            catch (Exception) { continue; }
+            foreach (var f in files.OrderBy(x => Path.GetFileName(x), StringComparer.OrdinalIgnoreCase))
+                if (KindOf(f) != MusicFileKind.None) yield return f;
+            foreach (var sub in subs.OrderByDescending(x => Path.GetFileName(x), StringComparer.OrdinalIgnoreCase))
+            {
+                try { if ((File.GetAttributes(sub) & (FileAttributes.Hidden | FileAttributes.System)) != 0) continue; } catch (Exception) { continue; }
+                stack.Push(sub);
+            }
+        }
+    }
+
+    private void ApplySearch(int gen, List<SearchHit> hits, string label, int scanned, int found, bool done)
+    {
+        if (gen != searchGeneration || !searchMode) return;
+        if (hits.Count > 0)
+        {
+            list.BeginUpdate();
+            foreach (var h in hits)
+            {
+                var it = new ListViewItem(FileText(h.Path, h.Multi, false), h.Multi ? "multi" : "song")
+                {
+                    Tag = new Entry { Path = h.Path, Multi = h.Multi },
+                    ToolTipText = DisplayPath(h.Path) + (h.Title.Length > 0 ? "\n" + h.Title : "") + (h.Multi ? "\n곡이 여럿 든 파일: 두 번 클릭 / → 로 곡 목록" : ""),
+                };
+                it.SubItems.Add(h.Title);
+                it.SubItems.Add(Path.GetExtension(h.Path).TrimStart('.').ToUpperInvariant());
+                it.SubItems.Add("");
+                it.SubItems.Add("");
+                if (string.Equals(h.Path, AdlibComposer.Audio.ChipSongs.FilePart(currentPath), StringComparison.OrdinalIgnoreCase)) it.Font = new Font(list.Font, FontStyle.Bold);
+                list.Items.Add(it);
+                songCount++;
+                foreach (var (path, title, index) in h.Tracks)
+                {
+                    var t = new ListViewItem((index + 1).ToString("00"), "track")
+                    {
+                        Tag = new Entry { Path = path, IsTrack = true },
+                        IndentCount = 1,
+                        ToolTipText = Path.GetFileName(h.Path) + " — " + (index + 1) + (title.Length > 0 ? ": " + title : "") + "\n두 번 클릭 / Enter: 이 곡 재생",
+                    };
+                    t.SubItems.Add(title);
+                    t.SubItems.Add(""); t.SubItems.Add(""); t.SubItems.Add("");
+                    if (string.Equals(path, currentPath, StringComparison.OrdinalIgnoreCase)) t.Font = new Font(list.Font, FontStyle.Bold);
+                    list.Items.Add(t);
+                }
+            }
+            list.EndUpdate();
+        }
+        pathLabel.Text = label + " — " + found + "곡" + (done ? " (파일 " + scanned + "개 중)" : " · 찾는 중… (파일 " + scanned + "개)");
+        UpdatePager();
     }
 
     // ---------------------------------------------------------------- 목록의 곡 제목 (뒤에서 읽기)

@@ -993,8 +993,9 @@ internal sealed class MainForm : Form
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
     {
         bool inBrowser = browser.ContainsFocus;
-        bool text = FocusedControl() is TextBoxBase || inBrowser;   // 왼쪽 파일 목록: 화살표 · Enter는 목록이 쓴다
-        if (inBrowser && page == AppPage.Jukebox && jukebox.HandleKey(keyData)) return true;
+        bool typing = FocusedControl() is TextBoxBase;   // 찾기 칸 등: 글자 · 공백 · 화살표는 칸이 쓴다
+        bool text = typing || inBrowser;   // 왼쪽 파일 목록: 화살표 · Enter는 목록이 쓴다
+        if (inBrowser && !typing && page == AppPage.Jukebox && jukebox.HandleKey(keyData)) return true;
         switch (keyData)
         {
             case Keys.F5: fileMenu.ShowDropDown(); return true;

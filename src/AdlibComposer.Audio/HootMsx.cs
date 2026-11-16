@@ -39,7 +39,7 @@ public static class HootMsx
         {
             Opll = e.Option("use_opll", 0) != 0,
             SccAlways = e.Option("use_scc", 0) != 0,
-            DataAddr = e.Option("mdata_addr", 0) & 0xFFFF,
+            DataAddr = e.Options.ContainsKey("mdata_addr") ? e.Option("mdata_addr", 0) & 0xFFFF : -1,   // 0도 주소
             DataSize = Math.Max(0, e.Option("mdata_size", 0)),
             FileSize = Math.Max(0, e.Option("mfile_size", 0)),
         };
@@ -332,7 +332,7 @@ public static class HootMsx
         private void Load(int n)
         {
             var d = Bgm(n);
-            if (d == null || DataAddr <= 0) return;
+            if (d == null || DataAddr < 0) return;
             for (int i = 0; i < DataSize && DataAddr + i < 0x10000; i++) Ram[DataAddr + i] = 0;
             int len = FileSize > 0 ? Math.Min(FileSize, d.Length) : d.Length;
             for (int i = 0; i < len && DataAddr + i < 0x10000; i++) Ram[DataAddr + i] = d[i];

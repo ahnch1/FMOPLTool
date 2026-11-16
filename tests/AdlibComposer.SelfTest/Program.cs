@@ -72,6 +72,11 @@ public static class Program
         if (args.Length > 1 && args[0] == "--hootmidisurvey")
             return HootPc98Tests.SurveyMidi(args[1], args.Length > 2 ? int.Parse(args[2]) : 50, args.Length > 3 ? double.Parse(args[3], System.Globalization.CultureInfo.InvariantCulture) : 6);
         if (args.Length > 1 && args[0] == "--hoottree") return HootPc98Tests.TreeStats(args[1]);
+        if (args.Length > 1 && args[0] == "--hoot88survey")
+        {
+            // 진단: --hoot88survey 폴더 [zip 수] [초]
+            return HootPc88Tests.Survey(args[1], args.Length > 2 ? int.Parse(args[2]) : 50, args.Length > 3 ? double.Parse(args[3], System.Globalization.CultureInfo.InvariantCulture) : 8);
+        }
         if (args.Length > 1 && args[0] == "--hootmsxsurvey")
         {
             // 진단: --hootmsxsurvey 폴더 [zip 수] [초]
@@ -89,7 +94,7 @@ public static class Program
             {
                 ("vgm", () => VgmTests.Run(Check)), ("vgmexport", () => VgmExportTests.Run(Check)), ("vgmtosong", () => VgmToSongTests.Run(Check)), ("newchip", () => NewChipTests.Run(Check)),
                 ("chip", () => ChipTests.Run(Check)), ("midi", () => MidiTests.Run(Check)), ("jukebox", () => JukeboxTests.Run(Check)),
-                ("extra", () => ExtraTests.Run(Check)), ("queue", () => EngineQueueTests.Run(Check)), ("nespce", () => NesPceTests.Run(Check)), ("zip", () => ZipTests.Run(Check)), ("droraw", () => DroRawTests.Run(Check)), ("hoot", () => HootTests.Run(Check)), ("spc", () => SpcTests.Run(Check)), ("pcfmt", () => PcFormatTests.Run(Check)), ("ym2610", () => Ym2610Tests.Run(Check)), ("small", () => SmallChipTests.Run(Check)), ("gbs", () => GbsTests.Run(Check)), ("mdx", () => MdxTests.Run(Check)), ("x86", () => X86Tests.Run(Check)), ("dos", () => DosTests.Run(Check)), ("pc98", () => Pc98Tests.Run(Check)), ("hoot98", () => HootPc98Tests.Run(Check)), ("hootgen", () => HootGenericTests.Run(Check)), ("hootmsx", () => HootMsxTests.Run(Check)), ("pcat", () => PcAtTests.Run(Check)),
+                ("extra", () => ExtraTests.Run(Check)), ("queue", () => EngineQueueTests.Run(Check)), ("nespce", () => NesPceTests.Run(Check)), ("zip", () => ZipTests.Run(Check)), ("droraw", () => DroRawTests.Run(Check)), ("hoot", () => HootTests.Run(Check)), ("spc", () => SpcTests.Run(Check)), ("pcfmt", () => PcFormatTests.Run(Check)), ("ym2610", () => Ym2610Tests.Run(Check)), ("small", () => SmallChipTests.Run(Check)), ("gbs", () => GbsTests.Run(Check)), ("mdx", () => MdxTests.Run(Check)), ("x86", () => X86Tests.Run(Check)), ("dos", () => DosTests.Run(Check)), ("pc98", () => Pc98Tests.Run(Check)), ("hoot98", () => HootPc98Tests.Run(Check)), ("hootgen", () => HootGenericTests.Run(Check)), ("hootmsx", () => HootMsxTests.Run(Check)), ("hoot88", () => HootPc88Tests.Run(Check)), ("pcat", () => PcAtTests.Run(Check)),
             };
             foreach (var (name, run) in suites) if (name.Contains(args[1], StringComparison.OrdinalIgnoreCase)) run();
             Console.WriteLine();
@@ -144,6 +149,7 @@ public static class Program
         HootPc98Tests.Run(Check);
         HootGenericTests.Run(Check);
         HootMsxTests.Run(Check);
+        HootPc88Tests.Run(Check);
         PcAtTests.Run(Check);
         RealFileTests.Run(Check);
         Console.WriteLine();

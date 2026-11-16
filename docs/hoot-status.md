@@ -1,4 +1,4 @@
-# hoot 재생 작업 현황 (2026-11-16, v2.0.0)
+# hoot 재생 작업 현황 (2026-11-16, v2.0.1)
 
 다른 PC(회사)에서 이어 하기 위한 기록. 자세한 할 일 목록은 원래 `_incoming/Todo.md`(git에 안 들어감)에 있었고, 그중 이어 하는 데 필요한 것을 여기에 옮겼다.
 
@@ -6,10 +6,10 @@
 
 - **시험 자료는 저장소에 없다**: `_incoming/Hootarchive/` (hoot 배포본: `xml_new/` 목록 · `pc98/` 1,709 zip · `pc/` 480 zip · `snes/` · `msx/` · `nes/` · `gb/` …)는 `.gitignore`. 회사 PC에도 같은 자리(`_incoming/Hootarchive`)에 두면 실제 파일 시험 · 진단이 돈다. 없으면 실제 파일 시험은 `SKIP`으로 넘어간다 (합성 시험은 그대로 통과).
 - 작업 방식: 단계마다 커밋 하나 (`vX.Y.Z: …` 한국어 메시지), `Directory.Build.props` 버전 마지막 번호 올림, README 갱신, SelfTest 전부 통과 후 커밋.
-- 시험: `dotnet run -c Release --project tests/AdlibComposer.SelfTest` (전체, 지금 835개 통과), 묶음만: `-- --test pc98` · `hoot98` · `hootgen` · `hootmsx` · `pcat` · `hoot`.
+- 시험: `dotnet run -c Release --project tests/AdlibComposer.SelfTest` (전체, 지금 844개 통과), 묶음만: `-- --test pc98` · `hoot98` · `hootgen` · `hootmsx` · `hoot88` · `pcat` · `hoot`.
 - hoot 문서: http://retropc.net/yui/hoot/PC98.TXT (https 안 됨, http로). 그 밖의 기종(PC/AT · MSX · PC-88 · X1 …) 문서는 없음 — 목록의 시작 코드(rom "patch" 등)를 역어셈블해 규약을 맞춘다.
 
-## 1. 지금까지 (v1.21.0 ~ v2.0.0)
+## 1. 지금까지 (v1.21.0 ~ v2.0.1)
 
 | 판 | 단계 | 내용 |
 |---|---|---|
@@ -25,6 +25,7 @@
 | 1.29.1 | 8-5 | pc98vx · pc98 (DOS 없는 PC-98, PC-98generic): `HootPc98.BootGeneric` + `Pc98Machine.Generic` (7D0h I/O, 요인 0 → bgm 넣기 → 요인 1) |
 | 1.29.2 ~ .7 | — | UI: Jukebox 첫 페이지 · 열기는 왼쪽 목록 / Jukebox만, 파일 안 이전 · 다음 곡, Note · Orgel 곡 길이 막대, 칩 곡 → 노트(`VgmToSong`, 진행 막대), 목록 찾기, 오류 기록 |
 | 2.0.0 | 8-6 (MSX) | hoot msx generic: `Audio/HootMsx.cs` (MSX 기계 · hoot 포트 02h~07h, 미리 렌더) |
+| 2.0.1 | 8-6 (PC-88) | hoot pc88 opn · opna: `Audio/HootPc88.cs` (PC-8801 기계 · hoot 포트 00h · 01h · 80h, IM 2 VRTC · RTC · OPN 타이머) |
 
 ### 구조 (어디를 보면 되나)
 
@@ -47,6 +48,7 @@
 | MIDI 판 PC/AT | 571 / 586 | `--hootmidisurvey pc 1000 20` |
 | MIDI 판 PC-98 | 360 / 641 | `--hootmidisurvey pc98 1709 20` |
 | MSX generic (PSG · OPLL · SCC · SCC+ · MSX-AUDIO) | 481 / 498 (첫 곡이 조용하면 다음 곡 5개까지) | `--hootmsxsurvey msx 1000 8` |
+| PC-88 (opn · opna) | 487 / 527 — opn 357/385 · opna 130/142 | `--hoot88survey pc88 1000 6` |
 | SPC · KSS · NSF · GBS | 717항목 파일 있음 (KSS 71항목은 zip에 .kss 없음) | — |
 
 "소리 남" = 처음 몇 초 안에 키온 · 노트가 나옴. 템포 · 음높이가 hoot와 맞는지는 아직 귀로 비교하지 않았다.
@@ -60,6 +62,7 @@
 --hootatsurvey  <pc 폴더> [zip 수] [초]      PC/AT
 --hootmidisurvey <폴더> [zip 수] [초]        MIDI 판
 --hootmsxsurvey <msx 폴더> [zip 수] [초]    MSX generic: 원인 분류 (boot-not-waiting · no-chip-writes · writes-no-keyon · missing-file), 조용하면 많이 쓴 레지스터
+--hoot88survey  <pc88 폴더> [zip 수] [초]   PC-88: 원인 분류 (no-interrupts 추가)
 --hoottree      <xml 폴더>                   트리 자료 읽는 시간 · 장비 수
 ```
 
@@ -81,7 +84,13 @@
   - rom: code (주소를 넘는 큰 rom = 16KB 뱅크 카트리지, FM-PAC 64KB는 7FF7h 뱅크), binary, sccp (Konami SCC+ 카트리지 RAM → 4000h~), bgm. fmbios · rom 형은 아직
   - 곡: 재생 명령부터 180초를 미리 렌더 (끝 4초 줄임, 부팅 중 칩 설정은 0초에) → VGM
   - 남은 무음 17: Cybernetic Hi-School 1~3 (PSG R7만 씀), Golvellius 2 · Rona (칩 쓰기 없음), Ultima IV · mbsp · herzog (볼륨 0), Nemesis SCC+ (PSG만 볼륨 0), 銀河英雄伝説 OPLL/PSG (OPLL 16h~ 쓰는데 키온 없음), Illusion City, Tanteidan X (부팅이 명령 대기에 안 닿음), 福神漬, Disk NG
-- 다음: pc88 (Z80 + OPN/OPNA, 포트 44h~47h · A8h~), x1, neogeo, megadrive
+- **PC-88 opn · opna — ✅ v2.0.1** (`Audio/HootPc88.cs`, 487 / 527). 시작 코드 108개 + 실패 항목을 보고 맞춘 규약:
+  - hoot 포트: IN 00h = 명령 (읽으면 비움), OUT 00h = 받음, IN 01h = 곡 코드 아래 바이트 (02h · 03h = 그 위), OUT 01h,n = bgm n을 mdata_addr에 (**없으면 4000h**, 0도 주소) + voice n을 vdata_addr에 (vdata_size · vfile_size), IN 80h = 곡 코드 맨 위 바이트 (음색 묶음 · 변형)
+  - 기계: Z80 3.9936MHz (clock_mul 2 = 2배), 64KB RAM, init_pc 없으면 0에서 시작. 인터럽트 IM 2 (I·256 + 레벨×2): VRTC 레벨 1 (60Hz, use_vrtc 또는 E6h bit1), RTC 레벨 2 (600Hz, use_rtc 또는 E6h bit0), OPN 타이머 A · B 레벨 4 (27h). **벡터 칸이 0이면 넘김** (N88-BASIC이 채우던 F300h 표를 시작 코드가 일부만 씀). E4h 레벨 · 32h SINTM은 무시
+  - 칩: OPN 44h · 45h (44h 읽기 = 타이머 상태, FFh = ID), OPNA 46h · 47h. VGM = YM2203 / YM2608
+  - 남은 무음 40: 인터럽트 없음 6 (byouin_88 · gallforc · hardrank · p1demo1 · shuten88 · tnmbox_88 — VRTC를 E6h 없이 쓰거나 OPN 타이머 인터럽트 켜는 길이 다름), 부팅이 명령 대기에 안 닿음 3 (prajator · rst88v1 · skugyoku), 칩 쓰기 없음 1 (thexder88), 파일 없음 1 (wingsp88 — 반각 가나 이름), 키온 없음 23 (100yen2 · 4 · andrgyns · blassty · castle · castleex · daikokai · europe · ginga · inindou · kami · liberty_88 · lizard88 · lmpereur · luxsor · mazekun · saziri · snatcher · spitfl88 · xzr · yakyufan · yokosuka …: 대부분 인터럽트 몇 번 뒤 PC가 0 근처 → 벡터 · BASIC ROM 루틴을 기대)
+  - 아직 없음: adpcm rom (OPNA ADPCM 메모리), file · shell · conin · prog (디스크 BASIC), use_n88rom, pc88va · pc88vados, 8801-10 · 8801-11 등 형식
+- 다음: x1 (psg · opm), neogeo, megadrive
 
 ### 8-7. X68000 — 큼 (MC68000 CPU 새로)
 - x68k generic 553 / 11,679곡 (.OPM · .ZMD · .M …를 원래 드라이버로), MIDI 판 166 (8-4의 MIDI 길 다시 씀)

@@ -82,7 +82,7 @@ public static class Program
             // 빠른 시험: 이름에 글자가 든 묶음만 (예: --test chip)
             var suites = new (string, Action)[]
             {
-                ("vgm", () => VgmTests.Run(Check)), ("vgmexport", () => VgmExportTests.Run(Check)), ("newchip", () => NewChipTests.Run(Check)),
+                ("vgm", () => VgmTests.Run(Check)), ("vgmexport", () => VgmExportTests.Run(Check)), ("vgmtosong", () => VgmToSongTests.Run(Check)), ("newchip", () => NewChipTests.Run(Check)),
                 ("chip", () => ChipTests.Run(Check)), ("midi", () => MidiTests.Run(Check)), ("jukebox", () => JukeboxTests.Run(Check)),
                 ("extra", () => ExtraTests.Run(Check)), ("queue", () => EngineQueueTests.Run(Check)), ("nespce", () => NesPceTests.Run(Check)), ("zip", () => ZipTests.Run(Check)), ("droraw", () => DroRawTests.Run(Check)), ("hoot", () => HootTests.Run(Check)), ("spc", () => SpcTests.Run(Check)), ("pcfmt", () => PcFormatTests.Run(Check)), ("ym2610", () => Ym2610Tests.Run(Check)), ("small", () => SmallChipTests.Run(Check)), ("gbs", () => GbsTests.Run(Check)), ("mdx", () => MdxTests.Run(Check)), ("x86", () => X86Tests.Run(Check)), ("dos", () => DosTests.Run(Check)), ("pc98", () => Pc98Tests.Run(Check)), ("hoot98", () => HootPc98Tests.Run(Check)), ("hootgen", () => HootGenericTests.Run(Check)), ("pcat", () => PcAtTests.Run(Check)),
             };
@@ -115,6 +115,7 @@ public static class Program
         ChipTests.Run(Check);
         VgmTests.Run(Check);
         VgmExportTests.Run(Check);
+        VgmToSongTests.Run(Check);
         EngineQueueTests.Run(Check);
         NewChipTests.Run(Check);
         MidiSysExTests.Run(Check);

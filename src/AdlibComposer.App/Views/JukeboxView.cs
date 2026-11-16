@@ -148,6 +148,9 @@ internal sealed class JukeboxView : UserControl, IShellPage
     /// <summary>지금 Jukebox에 올린 곡 파일 (없으면 null). Composer · Note · Orgel Note · Tracker가 이 곡을 불러온다.</summary>
     public string CurrentPath { get { return currentPath; } }
 
+    /// <summary>지금 올린 곡이 칩 기록 곡(VGM · NSF · KSS …)이면 그 곡 (Composer · Note · Orgel Note가 노트로 바꿔 불러온다), 아니면 null.</summary>
+    public VgmSong CurrentVgm { get { return vgmSong; } }
+
     /// <summary>재생하지 않고 곡만 올린다 (정지 상태, 다음 곡 목록 = 그 폴더): 다른 페이지에서 왼쪽 목록의 곡을 고를 때.</summary>
     public void Cue(string path)
     {

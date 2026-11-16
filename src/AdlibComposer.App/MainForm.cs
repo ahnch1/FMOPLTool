@@ -1125,7 +1125,7 @@ internal sealed class MainForm : Form
     /// <summary>이 페이지가 Jukebox의 이 종류 곡을 불러오는가: ROL · IMS · SOP → Composer · Note · Orgel Note, 트래커 곡 → Tracker.</summary>
     private static bool PullsFromJukebox(AppPage target, MusicFileKind kind)
     {
-        if (kind == MusicFileKind.Adlib) return target == AppPage.Composer || target == AppPage.Note || target == AppPage.Orgel;
+        if (kind == MusicFileKind.Adlib || kind == MusicFileKind.Vgm) return target == AppPage.Composer || target == AppPage.Note || target == AppPage.Orgel;
         return kind == MusicFileKind.Tracker && target == AppPage.Tracker;
     }
 
@@ -1151,8 +1151,48 @@ internal sealed class MainForm : Form
         }
         if (SamePath(path, pulledSong)) return;
         pulledSong = path;
+        if (kind == MusicFileKind.Vgm) { PullChipSong(path); return; }
         if (SamePath(path, ws.Song.FilePath)) return;
         OpenSongPath(path);
+    }
+
+    /// <summary>
+    /// Jukebox의 칩 기록 곡(VGM · NSF · KSS · HES · GBS · S98 · SPC · hoot …)을 노트로 바꿔 새 작업 곡으로 (저장 안 한 새 곡, 저장 = ROL / SOP).
+    /// 음높이가 있는 채널만, 채널 하나 = 보이스 하나 (9개 넘으면 SOP 20보이스). 템포는 120 BPM 고정.
+    /// </summary>
+    private void PullChipSong(string path)
+    {
+        var v = jukebox.CurrentVgm;
+        if (v == null)
+        {
+            AppLog.Warn("곡", "Jukebox 곡을 노트로 바꾸지 못했습니다: " + Path.GetFileName(ChipSongs.FilePart(path)) + " (칩 기록 곡이 아님 — MIDI로 내는 hoot 항목 등)");
+            return;
+        }
+        if (!ConfirmDiscardSong()) return;
+        VgmToSong.Result r;
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        try
+        {
+            Cursor = Cursors.WaitCursor;
+            statusMain.Text = "칩 곡을 노트로 바꾸는 중…";
+            status.Refresh();
+            r = VgmToSong.Convert(v, Workspace.CreateEmptySong);
+        }
+        catch (Exception ex) { Fail("칩 곡을 노트로 바꿀 수 없습니다.", ex); return; }
+        finally { Cursor = Cursors.Default; }
+        string title = v.Title;
+        if (string.IsNullOrWhiteSpace(title)) title = Path.GetFileNameWithoutExtension(ChipSongs.FilePart(path));
+        foreach (char c in Path.GetInvalidFileNameChars()) title = title.Replace(c, '_');   // 저장할 때 파일 이름 기본값
+        r.Song.Title = title.Trim();
+        r.Song.FilePath = null;
+        StopPlayback();
+        ws.ReplaceSong(r.Song);
+        ws.SongDirty = false;   // 고치기 전에는 다른 곡으로 바꿀 때 묻지 않는다 (Jukebox 곡에서 언제든 다시 바꿀 수 있음)
+        UpdateStatus();
+        string detail = "채널 " + string.Join(" ", r.Used) + (r.ChannelsWithNotes > r.Used.Count ? " (노트가 있는 채널 " + r.ChannelsWithNotes + "개 중 많은 것)" : "")
+            + " · " + r.Seconds.ToString("0") + "초까지 · 120 BPM 고정 · 음색 · 세기는 옮기지 않음 · " + sw.ElapsedMilliseconds + "ms";
+        AppLog.Info("곡", "Jukebox 칩 곡 → 노트: " + Path.GetFileName(path) + " — " + (r.Song.IsSop ? "SOP " : "멜로딕 ") + r.Used.Count + "보이스, 노트 " + r.Notes + "개", detail);
+        statusMain.Text = "칩 곡을 노트로 바꿨습니다 (" + r.Used.Count + "보이스, 노트 " + r.Notes + "개) — 저장하면 ROL / SOP";
     }
 
     private static bool SamePath(string a, string b) { return a != null && b != null && string.Equals(a, b, StringComparison.OrdinalIgnoreCase); }

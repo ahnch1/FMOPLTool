@@ -125,6 +125,7 @@ public static class ChipMidiTests
             engine.Stop();
         }
         PsgOnly(check, bass);
+        Styles(check);
         RealLoudness(check);
     }
 
@@ -176,6 +177,51 @@ public static class ChipMidiTests
         }
     }
 
+    /// <summary>
+    /// 다른 풍 (FM-PAC · PC엔진 · NES): 음높이 (플루트 / 베이스 A3 ≈ 220Hz), 최대 음 수, 드럼, 같은 화음의 크기가 PSG + SCC와 비슷한가.
+    /// </summary>
+    private static void Styles(Action<string, bool, string> check)
+    {
+        MidiPlayer With(ChipSound sound, MidiSong s)
+        {
+            var p = new MidiPlayer(new OplChip(true)) { Synth = MidiSynth.Chip, ChipSound = sound };
+            p.Start(s, 0, null);
+            return p;
+        }
+        var chordEv = new System.Collections.Generic.List<MidiEvent> { Ev(0, 0xC0, 0), Ev(0, 0xC1, 32) };
+        foreach (int n in new[] { 60, 64, 67, 72 }) chordEv.Add(Ev(0, 0x90, n, 100));
+        chordEv.Add(Ev(0, 0x91, 36, 100));
+        var chord = Song(chordEv.ToArray());
+        var p0 = With(ChipSound.PsgScc, chord);
+        Measure(p0, Rate / 10, Rate / 2, out double refRms, out _);
+        var many = new MidiEvent[17];
+        many[0] = Ev(0, 0xC0, 16);
+        for (int i = 0; i < 16; i++) many[i + 1] = Ev(0, 0x90, 40 + i * 3, 100);
+        var kit = Song(Ev(0, 0x99, 36, 120), Ev(0, 0x99, 38, 120), Ev(0, 0x99, 42, 120));
+
+        foreach (var (sound, prog, voices) in new[] { (ChipSound.FmPac, 73, ChipMidiSynth.FmPacVoices), (ChipSound.Pce, 32, ChipMidiSynth.PceVoices), (ChipSound.Nes, 32, ChipMidiSynth.NesVoices), (ChipSound.MegaDrive, 73, ChipMidiSynth.MegaDriveVoices), (ChipSound.GameBoy, 32, ChipMidiSynth.GameBoyVoices) })
+        {
+            string name = ChipMidiSynth.Label(sound);
+            var one = Song(Ev(0, 0xC0, prog), Ev(0, 0x90, 57, 120), Ev(96 * 4, 0x80, 57));
+            var p = With(sound, one);
+            Measure(p, Rate / 10, Rate / 2, out double rms, out int cross);
+            check(name + ": A3 (program " + prog + ") ≈ 220 Hz, audible", Math.Abs(cross - 220) < 8 && rms > 300, cross + " crossings, rms " + rms.ToString("0"));
+            p = With(sound, Song(many));
+            Measure(p, 100, 100, out _, out _);
+            check(name + ": polyphony capped at " + voices + " voices", p.ChipActiveTones == voices, p.ChipActiveTones.ToString());
+            p = With(sound, kit);
+            Measure(p, 0, Rate / 10, out double drumRms, out _);
+            check(name + ": drums sound", drumRms > 200 && (sound == ChipSound.FmPac || p.ChipActiveDrums >= 1), "rms " + drumRms.ToString("0") + ", drums " + p.ChipActiveDrums);
+            p = With(sound, chord);
+            Measure(p, Rate / 10, Rate / 2, out double chordRms, out _);
+            double ratio = chordRms / refRms;
+            check(name + ": chord loudness ≈ PSG + SCC", ratio > 0.6 && ratio < 1.6, chordRms.ToString("0") + " / " + refRms.ToString("0") + " = " + ratio.ToString("0.00"));
+        }
+        check("chip style keys round-trip (psg · chip · fmpac · pce · nes · md · gb)",
+            ChipMidiSynth.TryParse("fmpac", out var a) && a == ChipSound.FmPac && ChipMidiSynth.TryParse("NES", out var b) && b == ChipSound.Nes && ChipMidiSynth.TryParse("md", out var md) && md == ChipSound.MegaDrive && ChipMidiSynth.TryParse("gb", out var gbs) && gbs == ChipSound.GameBoy && ChipMidiSynth.TryParse("chip", out var c) && c == ChipSound.PsgScc && !ChipMidiSynth.TryParse("fm", out _), "");
+        check("FM-PAC instruments: piano 3, e.guitar 15, synth bass 13, flute 4", ChipMidiSynth.OpllInstrument(0) == 3 && ChipMidiSynth.OpllInstrument(29) == 15 && ChipMidiSynth.OpllInstrument(38) == 13 && ChipMidiSynth.OpllInstrument(73) == 4, "");
+    }
+
     /// <summary>_incoming의 MIDI 곡: 8-bit와 FM의 크기가 비슷한가 (앞 20초 RMS).</summary>
     private static void RealLoudness(Action<string, bool, string> check)
     {
@@ -190,6 +236,11 @@ public static class ChipMidiTests
             double ratio = fm > 0 ? chip / fm : 0, ratioPsg = fm > 0 ? psg / fm : 0;
             check("8-bit loudness ≈ FM: " + System.IO.Path.GetFileName(path), ratio > 0.5 && ratio < 2.0, "chip " + chip.ToString("0") + " / fm " + fm.ToString("0") + " = " + ratio.ToString("0.00"));
             check("8-bit PSG loudness ≈ FM: " + System.IO.Path.GetFileName(path), ratioPsg > 0.5 && ratioPsg < 2.0, "psg " + psg.ToString("0") + " / fm " + fm.ToString("0") + " = " + ratioPsg.ToString("0.00"));
+            foreach (var style in new[] { ChipSound.FmPac, ChipSound.Pce, ChipSound.Nes, ChipSound.MegaDrive, ChipSound.GameBoy })
+            {
+                double r = fm > 0 ? Render(song, MidiSynth.Chip, gm, style) / fm : 0;
+                check(ChipMidiSynth.Label(style) + " loudness ≈ FM: " + System.IO.Path.GetFileName(path), r > 0.4 && r < 2.0, r.ToString("0.00"));
+            }
         }
     }
 

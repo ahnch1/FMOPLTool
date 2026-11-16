@@ -1081,7 +1081,7 @@ public static class HootX68k
                     Wr32(0x44 * 4, a1);
                     MfpActive = true;
                     MfpWrite(0x25, (byte)d1);
-                    MfpWrite(0x1D, (byte)((Mfp[0x1D] & 0x70) | (a1 != 0 ? (d1 >> 8) & 7 : 0)));
+                    MfpWrite(0x1D, (byte)((Mfp[0x1D] & 0x70) | (a1 != 0 ? (int)((d1 >> 8) & 7) : 0)));
                     MfpEnable(4, a1 != 0);
                     break;
                 case 0x6C:

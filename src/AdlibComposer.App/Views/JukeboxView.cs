@@ -41,8 +41,10 @@ internal sealed class JukeboxView : UserControl, IShellPage
     private readonly Controls.PianoKeyboardControl keys = new Controls.PianoKeyboardControl { Interactive = false, FocusNote = 60 };
     private readonly Stepper speedStep = new Stepper(), keyStep = new Stepper(), volStep = new Stepper();
     private readonly CheckBox autoNext = new CheckBox();
+    private readonly CheckBox repeat = new CheckBox();
     private readonly CheckBox rawTone = new CheckBox(), vintageSpeaker = new CheckBox();
-    /// <summary>소리: 원래 소리 / 8-bit PSG / 8-bit PSG + SCC (MIDI · ROL · IMS).</summary>
+    /// <summary>소리: 원래 소리 / 8-bit PSG / PSG + SCC / MSX FM-PAC / PC엔진 / NES (MIDI · ROL · IMS).</summary>
+    private static readonly ChipSound[] ChipStyles = { ChipSound.Psg, ChipSound.PsgScc, ChipSound.FmPac, ChipSound.Pce, ChipSound.Nes, ChipSound.MegaDrive, ChipSound.GameBoy };
     private readonly ComboBox chipBox = new ComboBox();
     private bool syncingChip;
     private Button playButton;
@@ -237,7 +239,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
 
     /// <summary>
     /// 배치 (위 → 아래):
-    ///   [왼쪽 1/3 채널 믹서 | 오른쪽 2/3: 곡 정보(곡을 고르세요) / 진행 막대 + 곡 전체 시간 / 재생 버튼 / 속도 · 키 · 볼륨 / 음색 · 스피커]
+    ///   [왼쪽 1/3 채널 믹서 | 오른쪽 2/3: 곡 정보(맨 위 상태 줄 · 곡을 고르세요) / 진행 막대 + 곡 전체 시간 / 재생 버튼 (+ 다음 곡 자동 · 반복) / 속도 · 키 · 볼륨 / 음색 · 스피커]
     ///   [가사 (가로 전체)]
     ///   [건반 120px: 채널마다 울리는 음을 채널 색으로]
     /// </summary>
@@ -333,6 +335,13 @@ internal sealed class JukeboxView : UserControl, IShellPage
         autoNext.AutoSize = true;
         autoNext.Margin = new Padding(14, 11, 0, 0);
         transport.Controls.Add(autoNext);
+        repeat.Text = "반복 재생";
+        repeat.ForeColor = DeckTheme.TextDark;
+        repeat.Font = ShellTheme.Ui;
+        repeat.AutoSize = true;
+        repeat.Margin = new Padding(10, 11, 0, 0);
+        tips.SetToolTip(repeat, "곡이 끝나면 같은 곡을 처음부터 다시 (다음 곡 자동 재생보다 먼저)");
+        transport.Controls.Add(repeat);
         right.Controls.Add(transport, 0, 3);
 
         // 속도 / 키 / 볼륨
@@ -377,19 +386,20 @@ internal sealed class JukeboxView : UserControl, IShellPage
             sound.Controls.Add(cb);
         }
         chipBox.DropDownStyle = ComboBoxStyle.DropDownList;
-        chipBox.Items.AddRange(new object[] { "원래 소리", "8-bit PSG", "8-bit PSG + SCC" });
+        chipBox.Items.Add("원래 소리");
+        foreach (var cs in ChipStyles) chipBox.Items.Add(ChipMidiSynth.Label(cs));
         chipBox.Font = ShellTheme.Ui;
-        chipBox.Width = 130;
+        chipBox.Width = 140;
         chipBox.Margin = new Padding(12, 3, 0, 0);
         sound.Controls.Add(chipBox);
         rawTone.Checked = settings().JukeboxRawTone;
         chipBox.SelectedIndex = ChipIndex();
-        tips.SetToolTip(chipBox, "MIDI · ROL · IMS 곡을 GXSCC처럼 MSX 칩 소리로\n8-bit PSG = PSG만: 사각파 6음 + PSG 드럼\n8-bit PSG + SCC = SCC+ 파형 15음 + PSG 드럼\nROL · IMS는 BNK 악기 이름으로 GM 악기 갈래를 골라 엔벨로프(SCC는 파형도)를 정한다 · 바꾸면 그 자리에서 새 소리로");
+        tips.SetToolTip(chipBox, "MIDI · ROL · IMS 곡을 GXSCC처럼 옛 게임기 칩 소리로\n8-bit PSG = PSG만: 사각파 6음 + PSG 드럼\n8-bit PSG + SCC = SCC+ 파형 15음 + PSG 드럼\nMSX FM-PAC = YM2413 내장 악기 15음 + 리듬 모드\nPC엔진 (HES) = HuC6280 파형 12음 + 톤 · 노이즈 드럼\nNES (패미컴) = 사각파 4 + 삼각파 2 (베이스) + 노이즈 드럼\n메가드라이브 = YM2612 FM 12음 + SN76489 드럼\n게임보이 = 사각파 4 + 파형 2 (베이스) + 노이즈 드럼\nROL · IMS는 BNK 악기 이름으로 GM 악기 갈래를 골라 엔벨로프 · 파형을 정한다 · 바꾸면 그 자리에서 새 소리로");
         chipBox.SelectedIndexChanged += delegate
         {
             if (syncingChip) return;
             settings().MidiChipSynth = chipBox.SelectedIndex > 0;
-            settings().MidiChipPsgOnly = chipBox.SelectedIndex == 1;
+            if (chipBox.SelectedIndex > 0) settings().MidiChipSound = ChipStyles[chipBox.SelectedIndex - 1];
             SaveSettings();
             ReloadMidiSynth();
         };
@@ -728,7 +738,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
         display.Loaded = programs.Count;
         display.Total = programs.Count;
         display.BankFile = mt32Rom != null ? "MT-32 에뮬레이터 · " + mt32Rom
-            : (chip ? (settings().MidiChipPsgOnly ? "8-bit PSG · 사각파 6음 + PSG 드럼" : "8-bit PSG + SCC · SCC+ 15음 + PSG 드럼") : windows ? "Windows MIDI 신디사이저"
+            : (chip ? ChipMidiSynth.Description(settings().MidiChipSound) : windows ? "Windows MIDI 신디사이저"
                 : m.CustomBank != null ? "곡 FM 악기 · " + (m.CustomBank.Source.Length > 0 ? m.CustomBank.Source : "곡 안") + (gmBank != null ? " + " + gmBank.Source : "")
                 : "GM FM · " + (gmBank != null ? gmBank.Source : "(뱅크 없음)")) + (mt32 ? " (MT-32 → GM)" : "");
         display.BankCount = programs.Count;
@@ -861,9 +871,9 @@ internal sealed class JukeboxView : UserControl, IShellPage
         ReloadMidiSynth();
     }
 
-    private int ChipIndex() { return !settings().MidiChipSynth ? 0 : settings().MidiChipPsgOnly ? 1 : 2; }
-    private ChipSound ChipSoundSetting { get { return settings().MidiChipPsgOnly ? ChipSound.Psg : ChipSound.PsgScc; } }
-    private string ChipText() { return settings().MidiChipPsgOnly ? "8-bit PSG" : "8-bit PSG + SCC"; }
+    private int ChipIndex() { return !settings().MidiChipSynth ? 0 : 1 + Math.Max(0, Array.IndexOf(ChipStyles, settings().MidiChipSound)); }
+    private ChipSound ChipSoundSetting { get { return settings().MidiChipSound; } }
+    private string ChipText() { return ChipMidiSynth.Label(settings().MidiChipSound); }
 
     /// <summary>GM FM 뱅크: 설정의 MIDI 뱅크(OP2 / BNK) → 뱅크 폴더 · resource 폴더의 GENMIDI.OP2 → 기본 뱅크(이름 맞춤). 같은 것이면 다시 읽지 않는다.</summary>
     private GmBank LoadGmBank()
@@ -1179,6 +1189,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
         volStep.Invalidate();
         display.SpeedPercent = (int)Math.Round(options.Speed * 100);
         display.Key = options.Transpose;
+        display.VolumePercent = volumePercent;
         display.Invalidate();
     }
 
@@ -1202,6 +1213,13 @@ internal sealed class JukeboxView : UserControl, IShellPage
             state = PlayState.Stopped;
             pausedTick = 0;
             SyncPlayButton();
+            if (repeat.Checked && Visible)
+            {
+                StartAt(0);
+                SyncPlayButton();
+                RefreshMixer();
+                return;
+            }
             if (autoNext.Checked && Visible)
             {
                 var pl = playlist.Count > 0 ? playlist : CurrentListPaths();

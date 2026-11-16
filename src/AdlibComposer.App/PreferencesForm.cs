@@ -15,6 +15,12 @@ internal sealed class PreferencesForm : Form
     private readonly AppSettings settings;
     private readonly TextBox midiBankBox = new TextBox();
     private readonly ComboBox midiSynthBox = new ComboBox();
+    /// <summary>MIDI 신디 목록의 8-bit 칸 순서 (2번째 칸부터).</summary>
+    private static readonly AdlibComposer.Audio.ChipSound[] ChipStyles =
+    {
+        AdlibComposer.Audio.ChipSound.Psg, AdlibComposer.Audio.ChipSound.PsgScc, AdlibComposer.Audio.ChipSound.FmPac,
+        AdlibComposer.Audio.ChipSound.Pce, AdlibComposer.Audio.ChipSound.Nes, AdlibComposer.Audio.ChipSound.MegaDrive, AdlibComposer.Audio.ChipSound.GameBoy,
+    };
     private readonly ComboBox midiModuleBox = new ComboBox();
     private readonly TextBox mt32RomBox = new TextBox();
     private readonly TextBox bankFolderBox = new TextBox();
@@ -95,8 +101,8 @@ internal sealed class PreferencesForm : Form
         var synthRow = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0, 2, 0, 4) };
         synthRow.Controls.Add(new Label { Text = "MIDI synthesizer", AutoSize = true, Margin = new Padding(0, 6, 8, 0), Width = 170 });
         midiSynthBox.DropDownStyle = ComboBoxStyle.DropDownList;
-        midiSynthBox.Items.AddRange(new object[] { "OPL FM (GM bank)", "Windows synthesizer", "8-bit PSG (GXSCC style)", "8-bit PSG + SCC (GXSCC style)" });
-        midiSynthBox.SelectedIndex = settings.MidiChipSynth ? (settings.MidiChipPsgOnly ? 2 : 3) : settings.MidiWindowsSynth ? 1 : 0;
+        midiSynthBox.Items.AddRange(new object[] { "OPL FM (GM bank)", "Windows synthesizer", "8-bit PSG (GXSCC style)", "8-bit PSG + SCC (GXSCC style)", "8-bit MSX FM-PAC", "8-bit PC Engine (HES)", "8-bit NES", "8-bit Mega Drive", "8-bit Game Boy" });
+        midiSynthBox.SelectedIndex = settings.MidiChipSynth ? 2 + Array.IndexOf(ChipStyles, settings.MidiChipSound) : settings.MidiWindowsSynth ? 1 : 0;
         midiSynthBox.Width = 260;
         synthRow.Controls.Add(midiSynthBox);
         root.Controls.Add(synthRow);
@@ -314,7 +320,7 @@ internal sealed class PreferencesForm : Form
             settings.MidiBank = midiBankBox.Text.Trim().Length == 0 ? "" : AppSettings.ToStored(SafeResolve(midiBankBox.Text));
             settings.MidiWindowsSynth = midiSynthBox.SelectedIndex == 1;
             settings.MidiChipSynth = midiSynthBox.SelectedIndex >= 2;
-            settings.MidiChipPsgOnly = midiSynthBox.SelectedIndex == 2;
+            if (settings.MidiChipSynth) settings.MidiChipSound = ChipStyles[midiSynthBox.SelectedIndex - 2];
             settings.MidiMt32 = midiModuleBox.SelectedIndex == 1;
             settings.Mt32RomFolder = AppSettings.ToStored(SafeResolve(mt32RomBox.Text));
             settings.BankFolder = AppSettings.ToStored(SafeResolve(bankFolderBox.Text));

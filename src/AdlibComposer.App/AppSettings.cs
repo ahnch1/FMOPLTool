@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using AdlibComposer.Audio;
 
 namespace AdlibComposer.App;
 
@@ -38,10 +39,10 @@ internal sealed class AppSettings
     public string OrganizerPreferredFolder { get; set; } = "";
     /// <summary>MIDI를 Windows 신디사이저로 (false = OPL FM).</summary>
     public bool MidiWindowsSynth { get; set; }
-    /// <summary>MIDI를 GXSCC 방식 "8-bit" 칩 소리로 (SCC+ 15음 + PSG 드럼). 켜져 있으면 MidiWindowsSynth보다 앞선다.</summary>
+    /// <summary>MIDI를 GXSCC 방식 "8-bit" 칩 소리로 (<see cref="MidiChipSound"/>). 켜져 있으면 MidiWindowsSynth보다 앞선다.</summary>
     public bool MidiChipSynth { get; set; }
-    /// <summary>8-bit이 PSG만인가 (false = PSG + SCC).</summary>
-    public bool MidiChipPsgOnly { get; set; }
+    /// <summary>8-bit 칩 소리 풍: PSG + SCC · PSG · FM-PAC · PC엔진 · NES · 메가드라이브 · 게임보이.</summary>
+    public ChipSound MidiChipSound { get; set; } = ChipSound.PsgScc;
     /// <summary>MIDI FM용 GM 뱅크 (GENMIDI.OP2 또는 BNK). 비우면 뱅크 폴더의 GENMIDI.OP2, 없으면 기본 뱅크를 이름으로 맞춤.</summary>
     public string MidiBank { get; set; } = "";
     /// <summary>MIDI 모듈 규격: true = Roland MT-32 (에뮬레이터 + ROM, 없으면 GM으로 대응), false = General MIDI.</summary>
@@ -118,8 +119,8 @@ internal sealed class AppSettings
                         case "organizerpreferredfolder": s.OrganizerPreferredFolder = value; break;
                         case "midisynth":
                             s.MidiWindowsSynth = value.Equals("windows", StringComparison.OrdinalIgnoreCase);
-                            s.MidiChipPsgOnly = value.Equals("psg", StringComparison.OrdinalIgnoreCase);
-                            s.MidiChipSynth = s.MidiChipPsgOnly || value.Equals("chip", StringComparison.OrdinalIgnoreCase);
+                            s.MidiChipSynth = ChipMidiSynth.TryParse(value, out var chipSound);
+                            s.MidiChipSound = chipSound;
                             break;
                         case "midibank": s.MidiBank = value; break;
                         case "midimodule": s.MidiMt32 = value.Equals("mt32", StringComparison.OrdinalIgnoreCase); break;
@@ -170,8 +171,8 @@ internal sealed class AppSettings
         sb.AppendLine("LoadDefaultBank=" + (LoadDefaultBank ? "true" : "false"));
         sb.AppendLine("; OplEmulator = builtin | nuked (Nuked OPL3, cycle-accurate)");
         sb.AppendLine("OplEmulator=" + (UseNukedOpl ? "nuked" : "builtin"));
-        sb.AppendLine("; MidiSynth = fm | windows | psg (8-bit PSG) | chip (8-bit PSG + SCC), MidiBank = GENMIDI.OP2 or BNK for FM (empty = GENMIDI.OP2 in BankFolder or resource, else default bank by name)");
-        sb.AppendLine("MidiSynth=" + (MidiChipSynth ? (MidiChipPsgOnly ? "psg" : "chip") : MidiWindowsSynth ? "windows" : "fm"));
+        sb.AppendLine("; MidiSynth = fm | windows | psg (8-bit PSG) | chip (8-bit PSG + SCC) | fmpac (MSX FM-PAC) | pce (PC Engine) | nes (NES) | md (Mega Drive) | gb (Game Boy), MidiBank = GENMIDI.OP2 or BNK for FM (empty = GENMIDI.OP2 in BankFolder or resource, else default bank by name)");
+        sb.AppendLine("MidiSynth=" + (MidiChipSynth ? ChipMidiSynth.Key(MidiChipSound) : MidiWindowsSynth ? "windows" : "fm"));
         sb.AppendLine("MidiBank=" + MidiBank);
         sb.AppendLine("; MidiModule = gm | mt32 (Roland MT-32 via Munt emulator; needs ROM files in Mt32RomFolder)");
         sb.AppendLine("MidiModule=" + (MidiMt32 ? "mt32" : "gm"));

@@ -119,8 +119,8 @@ internal class DeckControl : Control
 }
 
 /// <summary>
-/// 곡 정보 상자 (올리브 돋움): 왼쪽 = 검은 칸 줄 (제목 · 곡 파일 + 악기 수 · 뱅크 + 악기 수 · 가사 파일),
-/// 오른쪽 = 검은 칸에 시간 / 곡 전체, 템포 · 속도 · 키, 상태 · 모드.
+/// 곡 정보 상자 (올리브 돋움): 가로로 긴 검은 칸 줄 — 맨 위 상태 줄 (시간 / 곡 전체 · 템포 · 속도 · 키 · 볼륨 · 상태 · 모드),
+/// 제목, 곡 파일 + 악기 수, 뱅크 + 악기 수, 가사 파일.
 /// </summary>
 internal sealed class PlayerDisplay : DeckControl
 {
@@ -136,6 +136,7 @@ internal sealed class PlayerDisplay : DeckControl
     public double Bpm;
     public int SpeedPercent = 100;
     public int Key;
+    public int VolumePercent = 100;
     public string Mode = "";
     /// <summary>곡 파일 줄 오른쪽 칸 (null = "악기 불러옴/전체").</summary>
     public string SongTag;
@@ -150,15 +151,17 @@ internal sealed class PlayerDisplay : DeckControl
         DeckTheme.Bevel(g, new Rectangle(0, 0, Width, Height), true, DeckTheme.Panel, 2);
 
         const int pad = 8, gap = 4;
-        int rowH = Math.Max(18, Math.Min(26, (Height - pad * 2 - gap * 3) / 4));
-        int rightW = Math.Min(250, Math.Max(170, Width / 3));
-        var rt = new Rectangle(Width - pad - rightW, pad, rightW, Height - pad * 2);
-        int lw = Math.Max(60, rt.X - pad - 6);
+        int rowH = Math.Max(18, Math.Min(26, (Height - pad * 2 - gap * 4) / 5));
+        int lw = Math.Max(60, Width - pad * 2);
         var left = TextFormatFlags.Left;
         var center = TextFormatFlags.HorizontalCenter;
 
-        // 왼쪽: 제목 (초록) · 곡 · 뱅크 · 가사
+        // 맨 위: 상태 줄 [시간 / 전체 | 템포 · 속도 · 키 · 볼륨 | 상태 · 모드]
         int y = pad;
+        StatusRow(g, new Rectangle(pad, y, lw, rowH));
+        y += rowH + gap;
+
+        // 제목 (초록) · 곡 · 뱅크 · 가사
         DeckTheme.InsetText(g, new Rectangle(pad, y, lw, rowH), Title, DeckTheme.Info, DeckTheme.Lit, center);
         y += rowH + gap;
         if (!string.IsNullOrEmpty(SongFile))
@@ -172,17 +175,30 @@ internal sealed class PlayerDisplay : DeckControl
         }
         else
             DeckTheme.InsetText(g, new Rectangle(pad, y, lw, rowH), "왼쪽 목록에서 곡을 두 번 클릭하면 재생합니다", DeckTheme.Mono, DeckTheme.Muted, left);
+    }
 
-        // 오른쪽: 시간 · 템포 · 상태
-        DeckTheme.Bevel(g, rt, false, DeckTheme.Inset, 1);
-        var inner = Rectangle.Inflate(rt, -6, -4);
-        int third = inner.Height / 3;
-        TextRenderer.DrawText(g, DeckTheme.Clock(Seconds) + " / " + DeckTheme.Clock(TotalSeconds), DeckTheme.Time,
-            new Rectangle(inner.X, inner.Y, inner.Width, third + 6), DeckTheme.Lcd, DeckTheme.Inset, center | TextFormatFlags.VerticalCenter);
-        TextRenderer.DrawText(g, (Bpm > 0 ? "♩=" + Math.Round(Bpm) + "  " : "") + SpeedPercent + "%  키 " + DeckTheme.KeyText(Key), DeckTheme.Mono,
-            new Rectangle(inner.X, inner.Y + third + 4, inner.Width, third - 4), DeckTheme.Text, DeckTheme.Inset, center | TextFormatFlags.VerticalCenter);
-        TextRenderer.DrawText(g, State + (string.IsNullOrEmpty(Mode) ? "" : "  " + Mode), DeckTheme.Small,
-            new Rectangle(inner.X, inner.Y + third * 2, inner.Width, third), DeckTheme.Muted, DeckTheme.Inset, center | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+    /// <summary>상태 줄: 한 칸 안에 왼쪽 시간 (초록 LCD), 가운데 템포 · 속도 · 키 · 볼륨, 오른쪽 상태 · 모드.</summary>
+    private void StatusRow(Graphics g, Rectangle r)
+    {
+        DeckTheme.InsetText(g, r, "", DeckTheme.Mono, DeckTheme.Text, TextFormatFlags.Left);
+        var inner = Rectangle.Inflate(r, -8, 0);
+        var vc = TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding;
+        string time = DeckTheme.Clock(Seconds) + " / " + DeckTheme.Clock(TotalSeconds);
+        int tw = TextRenderer.MeasureText(g, time, DeckTheme.Mono).Width + 4;
+        TextRenderer.DrawText(g, time, DeckTheme.Mono, new Rectangle(inner.X, inner.Y, tw, inner.Height), DeckTheme.Lcd, DeckTheme.Inset, vc | TextFormatFlags.Left);
+        string adj = (Bpm > 0 ? "♩=" + Math.Round(Bpm) + "  " : "") + "속도 " + SpeedPercent + "%  키 " + DeckTheme.KeyText(Key) + "  볼륨 " + VolumePercent + "%";
+        int aw = TextRenderer.MeasureText(g, adj, DeckTheme.Mono).Width + 4;
+        string st = State + (string.IsNullOrEmpty(Mode) ? "" : "  " + Mode);
+        int restX = inner.X + tw + 14;
+        int restW = Math.Max(0, inner.Right - restX);
+        if (aw + 60 <= restW)
+        {
+            TextRenderer.DrawText(g, adj, DeckTheme.Mono, new Rectangle(restX, inner.Y, aw, inner.Height), DeckTheme.Text, DeckTheme.Inset, vc | TextFormatFlags.Left);
+            TextRenderer.DrawText(g, st, DeckTheme.Small, new Rectangle(restX + aw + 14, inner.Y, Math.Max(0, inner.Right - restX - aw - 14), inner.Height), DeckTheme.Muted, DeckTheme.Inset,
+                vc | TextFormatFlags.Right | TextFormatFlags.EndEllipsis);
+        }
+        else
+            TextRenderer.DrawText(g, adj + "  " + st, DeckTheme.Mono, new Rectangle(restX, inner.Y, restW, inner.Height), DeckTheme.Text, DeckTheme.Inset, vc | TextFormatFlags.Left | TextFormatFlags.EndEllipsis);
     }
 
     /// <summary>[값            ][태그] 두 칸.</summary>

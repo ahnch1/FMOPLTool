@@ -1,4 +1,4 @@
-# hoot 재생 작업 현황 (2026-11-16, v2.0.5)
+# hoot 재생 작업 현황 (2026-11-16, v2.0.6)
 
 다른 PC(회사)에서 이어 하기 위한 기록. 자세한 할 일 목록은 원래 `_incoming/Todo.md`(git에 안 들어감)에 있었고, 그중 이어 하는 데 필요한 것을 여기에 옮겼다.
 
@@ -6,10 +6,10 @@
 
 - **시험 자료는 저장소에 없다**: `_incoming/Hootarchive/` (hoot 배포본: `xml_new/` 목록 · `pc98/` 1,709 zip · `pc/` 480 zip · `snes/` · `msx/` · `nes/` · `gb/` …)는 `.gitignore`. 회사 PC에도 같은 자리(`_incoming/Hootarchive`)에 두면 실제 파일 시험 · 진단이 돈다. 없으면 실제 파일 시험은 `SKIP`으로 넘어간다 (합성 시험은 그대로 통과).
 - 작업 방식: 단계마다 커밋 하나 (`vX.Y.Z: …` 한국어 메시지), `Directory.Build.props` 버전 마지막 번호 올림, README 갱신, SelfTest 전부 통과 후 커밋.
-- 시험: `dotnet run -c Release --project tests/AdlibComposer.SelfTest` (전체, 지금 887개 통과), 묶음만: `-- --test pc98` · `hoot98` · `hootgen` · `hootmsx` · `hoot88` · `hootx1` · `hootneo` · `hootmd` · `hootx68` · `pcat` · `hoot`.
+- 시험: `dotnet run -c Release --project tests/AdlibComposer.SelfTest` (전체, 지금 890개 통과), 묶음만: `-- --test pc98` · `hoot98` · `hootgen` · `hootmsx` · `hoot88` · `hootx1` · `hootneo` · `hootmd` · `hootx68` · `pcat` · `hoot`.
 - hoot 문서: http://retropc.net/yui/hoot/PC98.TXT (https 안 됨, http로). 그 밖의 기종(PC/AT · MSX · PC-88 · X1 …) 문서는 없음 — 목록의 시작 코드(rom "patch" 등)를 역어셈블해 규약을 맞춘다.
 
-## 1. 지금까지 (v1.21.0 ~ v2.0.5)
+## 1. 지금까지 (v1.21.0 ~ v2.0.6)
 
 | 판 | 단계 | 내용 |
 |---|---|---|
@@ -30,6 +30,7 @@
 | 2.0.3 | 8-6 (네오지오) | hoot neogeo: `Audio/HootNeoGeo.cs` (사운드 보드 Z80 + YM2610, M1 ROM 그대로, NMI 명령 · 뱅크 · ADPCM ROM 블록) |
 | 2.0.4 | 8-6 (메가드라이브) | hoot megadrive generic_z80 · iyinc: `Audio/HootMegaDrive.cs` (Z80 사운드 쪽 · 카트리지의 Z80 드라이버를 RAM에, 요청 주소) |
 | 2.0.5 | 8-7 (X68000) | MC68000 `Audio/Cpu/M68000.cs` + hoot x68k generic: `Audio/HootX68k.cs` (OPM · ADPCM · DMA · MFP, E00010h = hoot가 대신 하는 IOCS · DOS) |
+| 2.0.6 | 8-7 (X68000 MIDI) | x68k MIDI 판: YM3802 MIDI 보드 (EAFA00h) → 살아 있는 MIDI 곡 (`HootX68k.LoadMidi`) |
 
 ### 구조 (어디를 보면 되나)
 
@@ -57,6 +58,7 @@
 | 네오지오 | 137 / 146 (음악일 만한 코드 10h 이상 3곡까지) | `--hootneosurvey roms 200 6` |
 | 메가드라이브 (generic_z80 · iyinc) | 93 / 131 (smd zip에 있는 것) — generic_z80 70/108 · iyinc 23/23 | `--hootmdsurvey smd 400 6` |
 | X68000 generic (OPM · ADPCM) | 499 / 553 — generic 328/370 · mfp 171/183 | `--hootx68survey X68k 1000 6` |
+| MIDI 판 X68000 | 141 / 166 (노트) | `--hootx68midisurvey X68k 1000 10` |
 | SPC · KSS · NSF · GBS | 717항목 파일 있음 (KSS 71항목은 zip에 .kss 없음) | — |
 
 "소리 남" = 처음 몇 초 안에 키온 · 노트가 나옴. 템포 · 음높이가 hoot와 맞는지는 아직 귀로 비교하지 않았다.
@@ -75,6 +77,7 @@
 --hootneosurvey <roms 폴더> [zip 수] [초]   네오지오 (hoot 목록에 neogeo로 있는 zip만)
 --hootmdsurvey  <smd 폴더> [zip 수] [초]    메가드라이브 Z80 드라이버
 --hootx68survey <X68k 폴더> [zip 수] [초]  X68000: 원인 분류 (boot-not-waiting · exception-N …), 처리 못 한 IOCS · DOS 부름 횟수
+--hootx68midisurvey <X68k 폴더> [zip 수] [초]  X68000 MIDI 판: 보낸 바이트 · 노트, YM3802 레지스터별 마지막 값 (환경 변수 HOOT_ONLY=zip이름,… 로 고르기)
 --hootx68trace  <zip> [곡 번째] [초]         X68000: 예외 · hoot 부름 (IOCS · DOS의 D0 · D1 · A1) · MFP 쓰기, 1초마다 상태
 --hoottree      <xml 폴더>                   트리 자료 읽는 시간 · 장비 수
 ```
@@ -122,7 +125,7 @@
   - hoot 옵션: 카트리지 ROM의 topaddr부터 size1 (· size2 …) 바이트를 Z80 RAM data1 (· data2 …)에 올리고 0.5초 돌린 뒤, 곡 번호를 reqaddr에 (**없으면 1FFFh** — iyinc · lordmon 본 고리가 1FFFh를 봄), trigadr · trigvalue (trigsubadr · trigsubval)를 씀. 처음 뱅크 = topaddr의 32KB 칸. VGM = YM2612 + SN76489 (세가 되먹임)
   - reqaddr = 1FFFh 항목은 모두 소리 남. 남은 무음 38은 다른 요청 주소를 쓰는 generic_z80 (드라이버마다 요청 방식이 다름 — verytex는 Z80 안에 사운드 테스트 UI가 있어 버튼 입력 0104h로 고름, madoumon은 곡 0 = 요청 없음): advdaisn · arrow · bahamuts · columns1 · columns3j · dahna · ddanpei · djboyj · dynduke · earnest · elvientoj · eswatj · f1circus · kujaku2 · leynos · magichat · mazinsagj · miracle9 · nhktaidr · nikkan · rastan2j · runark · sangoret · shikinjo · shougi · shuramon · smasters · soldeace · sswordj · supermanu · surging · topgear2 · verytex · volfied · waniwani · wboy3 · wimbled · zoom
   - 아직 없음: koei 15 (Z80 드라이버 위치 옵션이 없음), 게임별 형식 수십 개 (68000 드라이버: puyopuyo · sonic · gunstar …), smd 폴더에 없는 generic_z80 29 (g_* 아카이브)
-- 8-6 끝 (MSX · PC-88 · X1 · 네오지오 · 메가드라이브). 다음: 8-7 X68000 (MC68000 새로) — ✅ v2.0.5. 다음: X68000 MIDI 판 · PCM8, 또는 8-8
+- 8-6 끝 (MSX · PC-88 · X1 · 네오지오 · 메가드라이브). 다음: 8-7 X68000 (MC68000 새로) — ✅ v2.0.5 · MIDI 판 v2.0.6. 다음: PCM8, 또는 8-8
 
 ### 8-7. X68000 — ✅ v2.0.5 (FM · ADPCM 판, `Audio/HootX68k.cs`, 499 / 553)
 - **MC68000** (`Audio/Cpu/M68000.cs`): 명령 전부 (BCD · MOVEM · MOVEP · 비트 · 시프트 · 예외 · 사용자 모드). 무작위 명령 약 2만 개를 Unicorn (QEMU)과 맞춰 봄 — 다른 것은 Unicorn 쪽 잘못 (68020 확장 워드 · −(A7) 바이트 걸음 · 메모리 ASR) 이나 정해지지 않은 깃발 (DIV 넘침 N · 잘못된 BCD · CHK, Musashi와 같게). 홀수 주소 워드 접근은 주소 오류 대신 바이트 둘 (bakkon 등이 그렇게 돌아야 함, `AddressErrors` 끔)
@@ -133,7 +136,9 @@
   - OPM IRQ: mfp 없는 판 = 타이머가 넘칠 때마다 레벨 6 자동 벡터 하나 (레벨로 두면 처리기가 없을 때 인터럽트 폭주). mfp 판 = MFP GPIP3 (가장자리), VR 처음 40h
   - rom: code · data, x (Human68k 실행 파일: 머리말 64바이트 빼고 text · data, bss 0, 재배치). zip에 없는 파일은 같은 폴더 다른 zip에서 (`SharedPrograms`가 이제 모든 이름을 색인)
 - 남은 무음 54: boot-not-waiting 32 (같이 쓰는 zmusic.x · cos68snd.bin이 다른 판이라 데이터로 뛰어듦 — jotei3 · 4 · drkysmky · carat · conti · himihana · mayumi · will · xix …, ao: 시작 코드가 FM_DRV.68K 가운데로 JSR, arcus2 · mai: F000h · FD80h F줄, tt: A줄), missing-file 10, writes-no-keyon 10, 예외 2
-- 아직 없음: MIDI 판 194 (YM3802 MIDI 보드 EAFA00h — 8-4의 MIDI 길), PCM8 (TRAP #2, pcm8 옵션 12항목), mxdrv 형식 3, 래스터 · H-SYNC 인터럽트
+- **MIDI 판 — ✅ v2.0.6** (141 / 166): YM3802 (CZ-6BM1, EAFA01h~EAFA0Fh 홀수 = R00~R03 · 묶음 R01의 Rg4~Rg7), midiout이 있을 때만 보드가 있음 (_BUS_ERR도). R56 (TDR) = 보낸 바이트, TSR R54 = 늘 빔, 인터럽트 레벨 4 · 벡터 = R04 & E0h + 원인 × 2. 범용 타이머 (R84 · R85, 1MHz로 셈, ISR bit7)는 있지만 쓰는 곡이 없음 — 거의 모든 드라이버가 OPM · MFP 타이머로 템포를 잡고 IER(R06) = 0. TX 빔 인터럽트는 없음 (bit6으로 걸면 robokid가 맴돔). 곡 = 8-4와 같은 살아 있는 MIDI 곡 (MIDI만, 같이 나는 FM · ADPCM은 버림), midiout_type → MT-32 / GS / GM은 PC-98과 같게
+  - 남은 무음 25: missing-file 16 (ZML · ZMG 등 zip에 없음), bytes-no-note 6, boot-not-waiting 2 (geogseal: 무엇을 기다리는지 모름), no-midi-bytes 1
+- 아직 없음: PCM8 (TRAP #2, pcm8 옵션 12항목 — ADPCM 여러 채널 섞기, VGM으로는 MSM6258 하나뿐이라 새 길이 필요), mxdrv 형식 3, 래스터 · H-SYNC 인터럽트
 
 ### 8-8. 아케이드 · 그 밖 — 아주 큼, 나중 (보드마다 CPU · 칩이 다름, 약 600항목)
 

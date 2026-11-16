@@ -74,6 +74,8 @@ public static class Program
         if (args.Length > 1 && args[0] == "--hoottree") return HootPc98Tests.TreeStats(args[1]);
         if (args.Length > 1 && args[0] == "--hootx68trace")
             return HootX68kTests.TraceZip(args[1], args.Length > 2 ? int.Parse(args[2]) : 0, args.Length > 3 ? double.Parse(args[3], System.Globalization.CultureInfo.InvariantCulture) : 5);
+        if (args.Length > 1 && args[0] == "--hootx68midisurvey")
+            return HootX68kTests.SurveyMidi(args[1], args.Length > 2 ? int.Parse(args[2]) : 50, args.Length > 3 ? double.Parse(args[3], System.Globalization.CultureInfo.InvariantCulture) : 10);
         if (args.Length > 1 && args[0] == "--hootx68survey")
         {
             // 진단: --hootx68survey X68k폴더 [zip 수] [초]

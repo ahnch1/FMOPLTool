@@ -90,6 +90,65 @@ public static class HootX68k
         return m;
     }
 
+    // ------------------------------------------------------------ MIDI 판 (midiout)
+
+    /// <summary>
+    /// "항목.hoot::n" (MIDI 판, YM3802 MIDI 보드) → 살아 있는 MIDI 곡: 재생기가 틱을 달라고 할 때마다 기계를 그만큼 돌려 보낸 바이트를 이벤트로 붙인다
+    /// (<see cref="Dos.HootPc98.LoadMidi"/>와 같은 방식, 4분음표 480틱 · 1초 960틱). 기계는 곡을 열 때 뒤에서 세운다.
+    /// </summary>
+    public static MidiSong LoadMidi(string path)
+    {
+        string file = ChipSongs.FilePart(path);
+        NezM3u.SplitTrack(path, out int n);
+        var e = HootArchive.Load(file);
+        if (e.Titles.Count == 0) throw new InvalidDataException("hoot 항목에 곡 목록(titlelist)이 없습니다.");
+        n = Math.Max(0, Math.Min(n, e.Titles.Count - 1));
+        var (code, title) = e.Titles[n];
+        string dir = Path.GetDirectoryName(Path.GetFullPath(file));
+        const int tps = Dos.HootPc98.MidiTicksPerSecond;
+        var song = new MidiSong
+        {
+            FilePath = path, Title = title, Division = Dos.HootPc98.MidiDivision,
+            FormatName = "hoot x68k MIDI (YM3802)", Comment = e.Name,
+        };
+        song.PrepareLive((int)(DefaultSeconds * tps), Dos.HootPc98.StandardOf(e));
+        var pre = System.Threading.Tasks.Task.Run(() => Boot(e, DirFiles(dir)));
+        Machine m = null;
+        long t0 = 0;
+        int curTick = 0, fed = 0;
+        var parser = new Dos.MidiByteParser();
+        parser.Message = (st, a, b, sx) => song.Events.Add(new MidiEvent { Tick = curTick, Status = (byte)st, Data1 = (byte)a, Data2 = (byte)b, SysEx = sx });
+        song.Extend = target =>
+        {
+            try
+            {
+                if (m == null)
+                {
+                    m = pre.GetAwaiter().GetResult();
+                    foreach (var x in m.MidiOutLog) parser.Feed(x.b);   // 드라이버 초기화 (리셋 SysEx · 음색) = 0틱
+                    fed = m.MidiOutLog.Count;
+                    m.Play(code);
+                    t0 = m.Cpu.Cycles;
+                }
+                target = Math.Min(target, song.LengthTicks + tps);
+                long until = t0 + (long)(target / (double)tps * CpuClock);
+                if (until > m.Cpu.Cycles) m.Run(until - m.Cpu.Cycles);
+                for (; fed < m.MidiOutLog.Count; fed++)
+                {
+                    var x = m.MidiOutLog[fed];
+                    curTick = Math.Max(curTick, (int)((x.t - t0) / CpuClock * tps));
+                    parser.Feed(x.b);
+                }
+                song.RenderedTicks = Math.Max(song.RenderedTicks, target);
+            }
+            catch (Exception)
+            {
+                song.RenderedTicks = int.MaxValue;   // 기계가 멈춤: 더 채우지 않는다
+            }
+        };
+        return song;
+    }
+
     /// <summary>Human68k .X: 머리말 ("HU", 기준 주소, 시작, text · data · bss · 재배치 크기) 뒤 text · data를 at에 올리고 재배치 (기준 주소 → at).</summary>
     public static bool LoadX(Machine m, long at, byte[] d)
     {
@@ -210,6 +269,7 @@ public static class HootX68k
             n = Math.Min(n, Math.Min(opmNextA, opmNextB));
             if (MfpOn) for (int i = 0; i < 4; i++) n = Math.Min(n, timers[i].Next);
             n = Math.Min(n, dmaNext);
+            n = Math.Min(n, midiNextGt);
             nextEvent = n;
         }
 
@@ -284,6 +344,7 @@ public static class HootX68k
                 }
             }
             while (now >= dmaNext) DmaTick();
+            while (now >= midiNextGt) { midiNextGt += MidiGtPeriod; MidiGtFired++; midiIsr |= MidiGtBit; }
             Reschedule();
         }
 
@@ -292,6 +353,7 @@ public static class HootX68k
             int lv = 0;
             if (UseMfp) { if (MfpIrq()) lv = 6; }
             else if (opmEvent || (MfpActive && MfpIrq())) lv = 6;
+            if (lv == 0 && MidiIrq) lv = 4;
             if (lv == 0 && DmaInterrupt && dmaIrq) lv = 3;
             return lv;
         }
@@ -314,6 +376,7 @@ public static class HootX68k
                 opmEvent = false;
                 return opmVector ? 0x43 : -1;
             }
+            if (level == 4) return MidiAcknowledge();
             if (level == 3)
             {
                 DmaInterrupts++;
@@ -387,6 +450,7 @@ public static class HootX68k
                 }
                 return 0xFF;
             }
+            if (a >= 0xEAFA00 && a < 0xEAFA10 && MidiOut != 0) return (a & 1) != 0 ? MidiRead((int)(a & 0xF) >> 1) : (byte)0xFF;
             if (a >= 0xE80000 && a < 0xEC0000) return 0xFF;   // 다른 I/O: 없음
             return Ram[a];   // 텍스트 VRAM 등: 메모리
         }
@@ -426,6 +490,7 @@ public static class HootX68k
                 }
                 return;
             }
+            if (a >= 0xEAFA00 && a < 0xEAFA10 && MidiOut != 0) { if ((a & 1) != 0) MidiWrite((int)(a & 0xF) >> 1, v); return; }
             if (a >= 0xE80000 && a < 0xEC0000) return;
             Ram[a] = v;
         }
@@ -700,6 +765,85 @@ public static class HootX68k
             if ((Dma[ccr] & 0x08) != 0) dmaIrq = true;
             dmaNext = long.MaxValue;
             if (hleAdpcm != 0) { hleAdpcm = 0; AdpcmCommand(1); }   // IOCS ADPCM 출력 끝: ADPCM도 멈춤
+        }
+
+        // ------------------------------------------------------------ MIDI 보드 (YM3802, CZ-6BM1 EAFA00h~)
+
+        /// <summary>YM3802 레지스터: 번호 = 묶음 × 10h + n (R00~R03은 늘 보임, Rg4~Rg7은 R01의 묶음 번호 g로).</summary>
+        public readonly byte[] MidiRegs = new byte[0x100];
+        /// <summary>MIDI로 나간 바이트 (CPU 클럭, 바이트).</summary>
+        public readonly List<(long t, byte b)> MidiOutLog = new List<(long, byte)>();
+        /// <summary>진단: 레지스터별 쓰기 횟수 · 마지막 값.</summary>
+        public readonly SortedDictionary<int, (int n, int last)> MidiWrites = new SortedDictionary<int, (int, int)>();
+        public long MidiGtFired;
+        /// <summary>범용 타이머 (R84 · R85, 14비트)가 세는 클럭.</summary>
+        public static double MidiGtClock = 1000000;
+        /// <summary>ISR bit: 범용 타이머 · TX 빔 (0 = 그 인터럽트 없음 — robokid 등은 TX 빔 인터럽트가 걸리면 처리기가 맴돈다).</summary>
+        public static int MidiGtBit = 0x80, MidiTxBit = 0x00;
+        private int midiIsr;
+        private long midiNextGt = long.MaxValue;
+
+        private int MidiGtr { get { return (MidiRegs[0x84] | (MidiRegs[0x85] & 0x3F) << 8); } }
+        private long MidiGtPeriod { get { return Math.Max(1, (long)(Math.Max(1, MidiGtr) * CpuClock / MidiGtClock)); } }
+        /// <summary>보낼 버퍼는 늘 비어 있음: TX 빔 인터럽트 원인은 켜 두면 늘 걸린다.</summary>
+        private int MidiIsrNow { get { return midiIsr | MidiTxBit; } }
+        private bool MidiIrq { get { return (MidiIsrNow & MidiRegs[0x06]) != 0; } }
+
+        private int MidiHighest()
+        {
+            int p = MidiIsrNow & MidiRegs[0x06];
+            for (int b = 7; b >= 0; b--) if ((p & (1 << b)) != 0) return b;
+            return -1;
+        }
+
+        private int MidiAcknowledge()
+        {
+            int b = MidiHighest();
+            if (b < 0) return 24;
+            return (MidiRegs[0x04] & 0xE0) | (b << 1);
+        }
+
+        private byte MidiRead(int r)
+        {
+            switch (r)
+            {
+                case 0: { int b = Math.Max(0, MidiHighest()); return (byte)((MidiRegs[0x04] & 0xE0) | (b << 1)); }   // IVR
+                case 1: return MidiRegs[0x01];
+                case 2: return (byte)MidiIsrNow;   // ISR
+                case 3: return 0;
+            }
+            int idx = ((MidiRegs[0x01] & 0x0F) << 4) | r;
+            switch (idx)
+            {
+                case 0x54: return 0xC0;   // TSR: 보낼 버퍼 비었음 · 받을 수 있음
+                case 0x34: return 0x00;   // RSR: 받은 것 없음
+                case 0x36: return 0x00;
+                case 0x16: return 0x00;   // FSR
+            }
+            return MidiRegs[idx];
+        }
+
+        private void MidiWrite(int r, byte v)
+        {
+            int idx = r <= 3 ? r : ((MidiRegs[0x01] & 0x0F) << 4) | r;
+            MidiWrites.TryGetValue(idx, out var w);
+            MidiWrites[idx] = (w.n + 1, v);
+            switch (idx)
+            {
+                case 0x01:
+                    MidiRegs[0x01] = (byte)(v & 0x0F);
+                    if ((v & 0x80) != 0) { midiIsr = 0; Array.Clear(MidiRegs, 2, MidiRegs.Length - 2); midiNextGt = long.MaxValue; Reschedule(); }
+                    return;
+                case 0x03: midiIsr &= ~v; return;   // ICR: 그 bit 지움
+                case 0x56: MidiOutLog.Add((Cpu.Cycles, v)); return;   // TDR: 보냄
+                case 0x84:
+                case 0x85:
+                    MidiRegs[idx] = v;
+                    midiNextGt = MidiGtr != 0 ? Cpu.Cycles + MidiGtPeriod : long.MaxValue;
+                    Reschedule();
+                    return;
+            }
+            MidiRegs[idx] = v;
         }
 
         // ------------------------------------------------------------ MFP (MC68901)

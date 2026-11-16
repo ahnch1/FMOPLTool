@@ -16,7 +16,7 @@ public static class HootSongs
 {
     public static readonly string[] Extensions = { HootArchive.Extension };
 
-    /// <summary>MIDI로 내는 hoot 항목 (pc98dos · pcatdos + midiout): Jukebox는 MIDI 재생으로 (<see cref="LoadMidi"/>).</summary>
+    /// <summary>MIDI로 내는 hoot 항목 (pc98dos · pcatdos · x68k + midiout): Jukebox는 MIDI 재생으로 (<see cref="LoadMidi"/>).</summary>
     public static bool IsMidi(string path)
     {
         string file = ChipSongs.FilePart(path);
@@ -25,7 +25,11 @@ public static class HootSongs
         catch (Exception) { return false; }
     }
 
-    public static MidiSong LoadMidi(string path) { return Dos.HootPc98.LoadMidi(path); }
+    public static MidiSong LoadMidi(string path)
+    {
+        var e = HootArchive.Load(ChipSongs.FilePart(path));
+        return e.Driver.Equals("x68k", StringComparison.OrdinalIgnoreCase) ? HootX68k.LoadMidi(path) : Dos.HootPc98.LoadMidi(path);
+    }
 
     public static List<(int Code, string Title)> Tracks(string path)
     {

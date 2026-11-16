@@ -17,6 +17,7 @@ public static class HootX68kTests
         Cpu(check);
         Synthetic(check);
         Real(check);
+        Midi(check);
     }
 
     // ------------------------------------------------------------ CPU
@@ -247,6 +248,114 @@ public static class HootX68kTests
         return 0;
     }
 
+    /// <summary>MIDI 판 한 곡: 보낸 바이트 · 노트 온 수.</summary>
+    /// <summary>MIDI 판: 만든 시작 코드가 YM3802 R56 (묶음 5 = R01 ← 5, EAFA0Dh)에 노트 온을 보냄 → MidiOutLog, 실제 dino68snd MIDI 판 → 살아 있는 MIDI 곡.</summary>
+    private static void Midi(Action<string, bool, string> check)
+    {
+        var mem = new byte[0x800];
+        void At(int a, params ushort[] w) { for (int i = 0; i < w.Length; i++) { mem[a + i * 2] = (byte)(w[i] >> 8); mem[a + i * 2 + 1] = (byte)w[i]; } }
+        At(0, 0x00F0, 0xFFFE, 0x0000, 0x0400);
+        At(0x400,
+            0x13FC, 0x0005, 0x00EA, 0xFA03,                                   // R01 ← 5 (묶음 5)
+            0x13FC, 0x0090, 0x00EA, 0xFA0D, 0x13FC, 0x003C, 0x00EA, 0xFA0D, 0x13FC, 0x0064, 0x00EA, 0xFA0D,   // R56 ← 90 3C 64
+            0x4A39, 0x00E0, 0x0000, 0x4A39, 0x00E0, 0x0800, 0x60F2);          // 기다림
+        var files = new Dictionary<string, byte[]> { ["boot.bin"] = mem };
+        string xml = "<game><name>[X68000] Midi</name><driver type=\"generic\">x68k</driver><options><option name=\"midiout\" value=\"1\"/><option name=\"midiout_type\" value=\"4\"/></options>"
+            + "<romlist archive=\"x68midi\"><rom type=\"code\">boot.bin</rom></romlist><titlelist><title code=\"0x01\">one</title></titlelist></game>";
+        var e = HootArchive.Parse(xml);
+        check("hoot x68k midi: entry is MIDI-playable", HootArchive.MidiPlayable(e.Driver) && Audio.Dos.HootPc98.IsMidiEntry(e), e.Driver);
+        var m = HootX68k.Boot(e, n => files.TryGetValue(n, out var d) ? d : null);
+        check("hoot x68k midi: YM3802 R56 bytes go out", m.Waiting && string.Join(" ", m.MidiOutLog.Select(x => x.b.ToString("X2"))) == "90 3C 64", string.Join(" ", m.MidiOutLog.Select(x => x.b.ToString("X2"))));
+
+        string root = SopTests.FindDir("_incoming");
+        string zip = root == null ? null : Path.Combine(root, "Hootarchive", "X68k", "dino68snd.zip");
+        if (zip == null || !File.Exists(zip)) { Console.WriteLine("SKIP  hoot x68k midi real file (dino68snd.zip not found)"); return; }
+        string dir = ZipFolder.Extract(zip);
+        string hp = Directory.GetFiles(dir, "*" + HootArchive.Extension).FirstOrDefault(h => { var x = HootArchive.Load(h); return x.Driver == "x68k" && x.Options.ContainsKey("midiout"); });
+        if (hp == null) { check("hoot x68k midi dino68snd: MIDI .hoot written", false, "none"); return; }
+        var ent = HootArchive.Load(hp);
+        int idx = Math.Max(0, ent.Titles.FindIndex(t => t.Title.IndexOf("stop", StringComparison.OrdinalIgnoreCase) < 0));
+        var song = HootSongs.LoadMidi(hp + "::" + idx);
+        song.Extend(10 * Audio.Dos.HootPc98.MidiTicksPerSecond);
+        int notes = song.Events.Count(x => (x.Status & 0xF0) == 0x90 && x.Data2 > 0);
+        check("hoot x68k midi dino68snd: HootSongs.IsMidi + live MIDI song has notes in 10 s", HootSongs.IsMidi(hp) && notes > 20 && song.Events.Max(x => x.Tick) > 960, notes + " note-ons, last tick " + song.Events.Max(x => x.Tick) + ", " + song.FormatName);
+    }
+
+    public static (bool sound, string cause, string note) MeasureMidi(HootArchive.Entry e, string dir, int code, double seconds)
+    {
+        var m = HootX68k.Boot(e, HootX68k.DirFiles(dir));
+        bool waited = m.Waiting;
+        int before = m.MidiOutLog.Count;
+        m.Play(code);
+        m.RunSeconds(seconds);
+        var bytes = m.MidiOutLog.Skip(before).Select(x => x.b).ToList();
+        int notes = 0, st = 0;
+        for (int i = 0; i < bytes.Count; i++)
+        {
+            int b = bytes[i];
+            if (b >= 0xF8) continue;
+            if (b >= 0x80) { st = b; if ((b & 0xF0) == 0x90 && i + 2 < bytes.Count && bytes[i + 2] > 0 && bytes[i + 2] < 0x80) notes++; continue; }
+            if ((st & 0xF0) == 0x90 && i + 1 < bytes.Count && i > 0 && bytes[i - 1] < 0x80 && bytes[i - 2 < 0 ? 0 : i - 2] >= 0x80 == false && bytes[i + 1] > 0 && bytes[i + 1] < 0x80) { }
+        }
+        // 이어진 상태 바이트 (running status)도 세기
+        notes = 0; st = 0; int k = 0;
+        foreach (int b in bytes)
+        {
+            if (b >= 0xF8) continue;
+            if (b >= 0x80) { st = b; k = 0; continue; }
+            k++;
+            if ((st & 0xF0) == 0x90 && k % 2 == 0 && b > 0) notes++;
+        }
+        bool sound = notes > 0;
+        string cause = sound ? "sound" : m.Missing.Count > 0 ? "missing-file" : !waited ? "boot-not-waiting" : bytes.Count == 0 ? "no-midi-bytes" : "bytes-no-note";
+        string note = "notes " + notes + " bytes " + bytes.Count + " init " + before + ", gt " + m.MidiGtFired + " opm-int " + m.OpmInterrupts + " mfp-int " + m.MfpInterrupts + ", exc " + m.Cpu.LastException
+            + ", regs " + string.Join(" ", m.MidiWrites.Where(kv => kv.Key != 0x56 && kv.Key != 0x01).Select(kv => kv.Key.ToString("X2") + "=" + kv.Value.last.ToString("X2") + "x" + kv.Value.n))
+            + (m.Missing.Count > 0 ? ", missing " + string.Join(" ", m.Missing.Take(2)) : "");
+        return (sound, cause, note);
+    }
+
+    /// <summary>진단: --hootx68midisurvey X68k폴더 [zip 수] [초].</summary>
+    public static int SurveyMidi(string folder, int count, double seconds)
+    {
+        string only = Environment.GetEnvironmentVariable("HOOT_ONLY");   // 진단: 쉼표로 나눈 zip 이름만
+        var zips = Directory.GetFiles(folder, "*.zip").OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+            .Where(z => only == null || only.Split(',').Any(o => Path.GetFileNameWithoutExtension(z).Equals(o, StringComparison.OrdinalIgnoreCase))).Take(count).ToList();
+        var stats = new SortedDictionary<string, (int total, int sound)>();
+        var causes = new SortedDictionary<string, int>();
+        foreach (var zip in zips)
+        {
+            string dir;
+            try { dir = ZipFolder.Extract(zip); } catch (Exception) { continue; }
+            foreach (var h in Directory.GetFiles(dir, "*" + HootArchive.Extension))
+            {
+                var e = HootArchive.Load(h);
+                if (!e.Driver.Equals("x68k", StringComparison.OrdinalIgnoreCase) || e.Titles.Count == 0 || !e.Options.ContainsKey("midiout")) continue;
+                string key = "type " + e.Option("midiout_type", 0);
+                stats.TryGetValue(key, out var stt); stt.total++;
+                (bool ok, string cause, string note) r = (false, "none", "");
+                try
+                {
+                    int tried = 0;
+                    foreach (var (code, title) in e.Titles)
+                    {
+                        if (title.IndexOf("stop", StringComparison.OrdinalIgnoreCase) >= 0 && e.Titles.Count > 1) continue;
+                        r = MeasureMidi(e, dir, code, seconds);
+                        if (r.ok || ++tried >= 3) break;
+                    }
+                }
+                catch (Exception ex) { r = (false, "exception", ex.GetType().Name + ": " + ex.Message); }
+                if (r.ok) stt.sound++;
+                stats[key] = stt;
+                causes.TryGetValue(r.cause, out int c); causes[r.cause] = c + 1;
+                Console.WriteLine((r.ok ? "OK    " : "MUTE  ") + Path.GetFileName(zip) + " | " + key + " | " + r.cause + " | " + r.note);
+            }
+        }
+        Console.WriteLine();
+        foreach (var kv in stats) Console.WriteLine("x68k midi " + kv.Key + ": " + kv.Value.sound + " / " + kv.Value.total);
+        foreach (var kv in causes) Console.WriteLine("  " + kv.Key + ": " + kv.Value);
+        return 0;
+    }
+
     /// <summary>진단: --hootx68survey X68k폴더 [zip 수] [초].</summary>
     public static int Survey(string folder, int count, double seconds)
     {
@@ -261,7 +370,7 @@ public static class HootX68kTests
             foreach (var h in Directory.GetFiles(dir, "*" + HootArchive.Extension))
             {
                 var e = HootArchive.Load(h);
-                if (!e.Driver.Equals("x68k", StringComparison.OrdinalIgnoreCase) || e.Titles.Count == 0) continue;
+                if (!e.Driver.Equals("x68k", StringComparison.OrdinalIgnoreCase) || e.Titles.Count == 0 || e.Options.ContainsKey("midiout")) continue;   // MIDI 판은 --hootx68midisurvey
                 string key = e.Type.ToLowerInvariant() + (e.Option("mfp", 0) != 0 ? " mfp" : "");
                 stats.TryGetValue(key, out var st); st.total++;
                 (bool ok, string cause, string note) r = (false, "none", "");

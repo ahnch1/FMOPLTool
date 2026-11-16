@@ -18,8 +18,8 @@ namespace AdlibComposer.Formats;
 public static class HootArchive
 {
     public const string Extension = ".hoot";
-    /// <summary>항목을 써 둔 표시 (재생할 수 있는 드라이버가 늘면 이름을 바꿔 이미 푼 zip에도 다시 쓴다: 2 = SPC · KSS · NSF · GBS 더함, 3 = PC/AT DOS, 4 = MIDI 판).</summary>
-    private const string Mark = ".fmopl_hoot4";
+    /// <summary>항목을 써 둔 표시 (재생할 수 있는 드라이버가 늘면 이름을 바꿔 이미 푼 zip에도 다시 쓴다: 2 = SPC · KSS · NSF · GBS 더함, 3 = PC/AT DOS, 4 = MIDI 판, 5 = pc98vx · pc98).</summary>
+    private const string Mark = ".fmopl_hoot5";
 
     /// <summary>
     /// 재생할 수 있는 hoot 드라이버 · 형식: pc98dos opn · opna · 86 · beep · pcatdos adlib · soundblaster16 · beep (기계 흉내), 그리고 이미 읽는 파일을 곡 코드로 고르는 것 —
@@ -31,7 +31,7 @@ public static class HootArchive
         string d = (driver ?? "").Trim().ToLowerInvariant(), t = (type ?? "").Trim().ToLowerInvariant();
         switch (d)
         {
-            case "pc98dos": return t == "opn" || t == "opna" || t == "86" || t == "beep";
+            case "pc98dos": case "pc98vx": case "pc98": return t == "opn" || t == "opna" || t == "86" || t == "beep";
             case "pcatdos": return t == "adlib" || t == "soundblaster16" || t == "beep";
             case "snes": return t == "spc";
             case "msx": return t == "kss";
@@ -41,11 +41,18 @@ public static class HootArchive
         return false;
     }
 
-    /// <summary>MIDI 판(옵션 midiout)을 낼 수 있는 드라이버: DOS 기계 (pc98dos · pcatdos)의 MPU-401 · MPU-PC98.</summary>
+    /// <summary>MIDI 판(옵션 midiout)을 낼 수 있는 드라이버: 기계 흉내 (pc98dos · pc98vx · pc98 · pcatdos)의 MPU-401 · MPU-PC98.</summary>
     public static bool MidiPlayable(string driver)
     {
         string d = (driver ?? "").Trim().ToLowerInvariant();
-        return d == "pc98dos" || d == "pcatdos";
+        return d == "pc98dos" || d == "pcatdos" || IsPc98Generic(d);
+    }
+
+    /// <summary>DOS 없는 PC-98 (hoot PC-98generic): pc98vx, 옛 방식 pc98.</summary>
+    public static bool IsPc98Generic(string driver)
+    {
+        string d = (driver ?? "").Trim().ToLowerInvariant();
+        return d == "pc98vx" || d == "pc98";
     }
 
     /// <summary>항목 하나를 재생할 수 있는가 (드라이버 · 형식 · MIDI 판).</summary>
@@ -262,12 +269,33 @@ public static class HootArchive
         }
         var tl = e.Element("titlelist");
         if (tl != null)
+        {
             foreach (var t in tl.Elements("title"))
                 if (TryNumber((string)t.Attribute("code"), out long code)) r.Titles.Add(((int)code, Clean(t.Value)));
+            // 제목 없이 range만 있는 항목 (예: "BGM %02x"): range가 곧 곡 목록 (보통은 효과음이라 뺀다)
+            if (r.Titles.Count == 0)
+                foreach (var rg in tl.Elements("range"))
+                {
+                    if (!TryNumber((string)rg.Attribute("min"), out long lo) || !TryNumber((string)rg.Attribute("max"), out long hi)) continue;
+                    string fmt = Clean(rg.Value);
+                    for (long c = lo; c <= hi && r.Titles.Count < 256; c++) r.Titles.Add(((int)c, RangeTitle(fmt, c)));
+                }
+        }
         return r;
     }
 
     public static Entry Load(string path) { return Parse(File.ReadAllText(path)); }
+
+    /// <summary>range 이름 무늬 ("BGM %02x" · "%d") → 그 코드의 제목.</summary>
+    public static string RangeTitle(string fmt, long code)
+    {
+        return Regex.Replace(fmt, @"%0?(\d*)([xXdu])", m =>
+        {
+            int w = m.Groups[1].Value.Length > 0 ? int.Parse(m.Groups[1].Value) : 0;
+            string s = m.Groups[2].Value == "x" ? code.ToString("x") : m.Groups[2].Value == "X" ? code.ToString("X") : code.ToString();
+            return s.PadLeft(w, '0');
+        });
+    }
 
     private static string Clean(string s) { return Regex.Replace(s ?? "", @"\s+", " ").Trim(); }
 }

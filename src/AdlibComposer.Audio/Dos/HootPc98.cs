@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using AdlibComposer.Audio.Chips;
+using AdlibComposer.Audio.Cpu;
 using AdlibComposer.Formats;
 
 namespace AdlibComposer.Audio.Dos;
@@ -48,6 +49,9 @@ public static class HootPc98
 
     public static bool IsPcAt(HootArchive.Entry e) { return e.Driver.Equals("pcatdos", StringComparison.OrdinalIgnoreCase); }
 
+    /// <summary>DOS 없는 PC-98 항목 (hoot PC-98generic: pc98vx, 옛 방식 pc98).</summary>
+    public static bool IsGeneric(HootArchive.Entry e) { return HootArchive.IsPc98Generic(e.Driver); }
+
     public static Pc98Machine.Board BoardOf(HootArchive.Entry e)
     {
         switch (e.Type.ToLowerInvariant())
@@ -83,7 +87,7 @@ public static class HootPc98
     {
         if (IsPcAt(e)) { var c = CardOf(e); return "PC/AT (" + (c == PcAtMachine.Card.AdLib ? "OPL2" : c == PcAtMachine.Card.SoundBlaster16 ? "OPL3" : "BEEP") + ")"; }
         var b = BoardOf(e);
-        return "PC-98 (" + (b == Pc98Machine.Board.Opn ? "YM2203" : b == Pc98Machine.Board.Opna ? "YM2608" : "BEEP") + ")";
+        return "PC-98" + (IsGeneric(e) ? "" : " DOS") + " (" + (b == Pc98Machine.Board.Opn ? "YM2203" : b == Pc98Machine.Board.Opna ? "YM2608" : "BEEP") + ")";
     }
 
     /// <summary>"항목.hoot::n" → 곡 (길이만 든 VGM + 스스로 도는 기계 칩).</summary>
@@ -110,7 +114,7 @@ public static class HootPc98
         int taken = 0;
         double beepClock = at ? Beeper.PcAtClock : Beeper.Pc98Clock;
         v.SelfRunning = () => new HootDosChip(() => System.Threading.Interlocked.Exchange(ref taken, 1) == 0 ? pre.GetAwaiter().GetResult() : BootDirAny(dir, e, out _),
-            MainChipOf(e), beepClock, code, at ? "PC/AT DOS" : "PC-98 DOS");
+            MainChipOf(e), beepClock, code, at ? "PC/AT DOS" : IsGeneric(e) ? "PC-98" : "PC-98 DOS");
         v.SourceFormat = "hoot " + e.Driver + " (" + e.Type + ", 곡 코드 0x" + code.ToString("X") + ", 길이 " + DefaultSeconds + "초 고정)";
         return v;
     }
@@ -120,7 +124,7 @@ public static class HootPc98
     /// <summary>MIDI로 내는 항목 (옵션 midiout): 기계의 MPU-401 / MPU-PC98 출력을 MIDI 곡으로.</summary>
     public static bool IsMidiEntry(HootArchive.Entry e)
     {
-        return e.Options.ContainsKey("midiout") && (IsPcAt(e) || e.Driver.Equals("pc98dos", StringComparison.OrdinalIgnoreCase));
+        return e.Options.ContainsKey("midiout") && HootArchive.MidiPlayable(e.Driver);
     }
 
     /// <summary>hoot midiout_type → 규격: 1 (Munt) · 2 MT-32 · 3 CM-64 → MT-32, 4 SC-55 · 6 Vermouth · 7 SC-88 · 9 SC-88Pro → GS, 8 → GM.</summary>
@@ -225,6 +229,7 @@ public static class HootPc98
     /// <summary>항목의 기계 (PC-98 또는 PC/AT)를 만들고 rom 줄대로 세운다. 돌려주는 기계는 <see cref="IHootMachine"/>.</summary>
     public static DosMachine BootAny(DosFileSystem fs, HootArchive.Entry e, out List<DosMachine.ShellResult> shells, string library = null, string ownZip = null)
     {
+        if (IsGeneric(e)) { shells = new List<DosMachine.ShellResult>(); return BootGeneric(fs, e); }
         DosMachine m;
         if (IsPcAt(e)) m = new PcAtMachine(fs, CardOf(e), Math.Max(1, e.Option("clockmul", 4)));
         else m = new Pc98Machine(fs, BoardOf(e), Math.Max(1, e.Option("clockmul", 8))) { Trace = TraceBoot };
@@ -277,6 +282,92 @@ public static class HootPc98
         if (m.HostReturned) m.Idle();
         hm.KeepRunning = true;
         return m;
+    }
+
+    /// <summary>PC-98generic 부팅: 7E8h에 81h (hoot 인터럽트 켬)를 쓰고 IF가 켜질 때까지 이만큼까지 돌린다.</summary>
+    public const long GenericBootCycles = 200_000_000;
+
+    /// <summary>
+    /// hoot PC-98generic (pc98vx · pc98, PC98.TXT): DOS 없이 rom 줄 code (파일을 주소에) · binary (16진 바이트 패치) · string (글자 패치)을 메모리에 놓고,
+    /// bgm · bgm2 · strlist (offset = 번호)는 기계가 재생 때 넣도록 맡긴 뒤 bootcs:bootip로 뛴다.
+    /// 주소: addressing (목록에는 adressing으로도 씀) 0 = 선형, 1 = 세그먼트 &lt;&lt; 16 | 오프셋. pc98 = PIC 자동 EOI.
+    /// </summary>
+    public static Pc98Machine BootGeneric(DosFileSystem fs, HootArchive.Entry e)
+    {
+        var m = new Pc98Machine(fs, BoardOf(e), Math.Max(1, e.Option("clockmul", 8))) { Trace = TraceBoot };
+        if (e.Driver.Equals("pc98", StringComparison.OrdinalIgnoreCase)) m.SetAutoEoi(true);
+        m.MpuPresent = IsMidiEntry(e);   // hoot는 MIDI 판에만 MPU를 붙인다
+        ((IHootMachine)m).HootVector = e.Option("funcvect", 0x7F) & 0xFF;
+        bool real = e.Option("addressing", e.Option("adressing", 0)) == 1;
+        int Addr(long v) { return real ? X86.Linear((int)(v >> 16) & 0xFFFF, (int)v & 0xFFFF) : (int)(v & 0xFFFFF); }
+        var bgm = new Dictionary<int, string>();
+        var bgm2 = new Dictionary<int, string>();
+        var str = new Dictionary<int, string>();
+        var sjis = KoreanText.ShiftJis;
+        void Put(long off, byte[] d)
+        {
+            int at = Addr(off);
+            for (int i = 0; i < d.Length && at + i < 0xF0000; i++) m.Mem[at + i] = d[i];
+        }
+        foreach (var (type, off, text) in e.Roms)
+        {
+            switch (type)
+            {
+                case "code":
+                    if (off >= 0 && fs.TryGet(text, out var d)) Put(off, d);
+                    else if (off >= 0) m.MissingFiles.Add(text);
+                    break;
+                case "binary":
+                    if (off >= 0) { var b = HexBytes(text); if (b != null) Put(off, b); else if (fs.TryGet(text, out var bf)) Put(off, bf); }
+                    break;
+                case "string":
+                    if (off >= 0) Put(off, sjis.GetBytes(text));
+                    break;
+                case "bgm": bgm[(int)off] = text; break;
+                case "bgm2": bgm2[(int)off] = text; break;
+                case "strlist": str[(int)off] = text; break;
+            }
+        }
+        byte[] FileOf(Dictionary<int, string> names, int n)
+        {
+            if (!names.TryGetValue(n, out var name)) return null;
+            if (fs.TryGet(name, out var d)) return d;
+            if (m.MissingFiles.Count < 64) m.MissingFiles.Add(name);
+            return null;
+        }
+        var g = new Pc98Machine.GenericData
+        {
+            Bgm = n => FileOf(bgm, n),
+            Bgm2 = n => FileOf(bgm2, n),
+            Str = n => str.TryGetValue(n, out var s) ? sjis.GetBytes(s) : null,
+        };
+        g.Addr[0] = e.Option("dataaddr", 0) == 0 ? 0 : Addr(e.Option("dataaddr", 0));
+        g.Addr[1] = e.Option("data2addr", 0) == 0 ? 0 : Addr(e.Option("data2addr", 0));
+        g.Size[0] = Math.Max(0, e.Option("filesize", 0));
+        g.Size[1] = Math.Max(0, e.Option("file2size", 0));
+        m.Generic = g;
+        m.StartAt(e.Option("bootcs", 0), e.Option("bootip", 0));
+        for (long spent = 0; spent < GenericBootCycles; spent += 2_000_000)
+        {
+            m.Run(2_000_000);
+            if ((m.HootArmed && m.Cpu.GetFlag(X86.IF)) || m.Cpu.UnknownOps > 0) break;
+        }
+        m.AutoIdle = true;
+        return m;
+    }
+
+    /// <summary>"00 14 ab" → 바이트 (16진이 아니면 null).</summary>
+    private static byte[] HexBytes(string s)
+    {
+        var parts = (s ?? "").Split(new[] { ' ', '\t', '\r', '\n', ',' }, StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 0) return null;
+        var b = new byte[parts.Length];
+        for (int i = 0; i < parts.Length; i++)
+        {
+            string p = parts[i].StartsWith("0x", StringComparison.OrdinalIgnoreCase) ? parts[i].Substring(2) : parts[i];
+            if (p.Length == 0 || p.Length > 2 || !byte.TryParse(p, System.Globalization.NumberStyles.HexNumber, null, out b[i])) return null;
+        }
+        return b;
     }
 
     /// <summary>PC-98 항목 · 곡 하나를 seconds초 돌려 칩 쓰기 VGM으로 (내보내기 · 시험). 처음 칩 설정(재생 전 쓰기)은 앞에 기다림 없이.</summary>

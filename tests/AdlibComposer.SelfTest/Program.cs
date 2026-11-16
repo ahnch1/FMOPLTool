@@ -84,7 +84,7 @@ public static class Program
             {
                 ("vgm", () => VgmTests.Run(Check)), ("vgmexport", () => VgmExportTests.Run(Check)), ("newchip", () => NewChipTests.Run(Check)),
                 ("chip", () => ChipTests.Run(Check)), ("midi", () => MidiTests.Run(Check)), ("jukebox", () => JukeboxTests.Run(Check)),
-                ("extra", () => ExtraTests.Run(Check)), ("queue", () => EngineQueueTests.Run(Check)), ("nespce", () => NesPceTests.Run(Check)), ("zip", () => ZipTests.Run(Check)), ("droraw", () => DroRawTests.Run(Check)), ("hoot", () => HootTests.Run(Check)), ("spc", () => SpcTests.Run(Check)), ("pcfmt", () => PcFormatTests.Run(Check)), ("ym2610", () => Ym2610Tests.Run(Check)), ("small", () => SmallChipTests.Run(Check)), ("gbs", () => GbsTests.Run(Check)), ("mdx", () => MdxTests.Run(Check)), ("x86", () => X86Tests.Run(Check)), ("dos", () => DosTests.Run(Check)), ("pc98", () => Pc98Tests.Run(Check)), ("hoot98", () => HootPc98Tests.Run(Check)), ("pcat", () => PcAtTests.Run(Check)),
+                ("extra", () => ExtraTests.Run(Check)), ("queue", () => EngineQueueTests.Run(Check)), ("nespce", () => NesPceTests.Run(Check)), ("zip", () => ZipTests.Run(Check)), ("droraw", () => DroRawTests.Run(Check)), ("hoot", () => HootTests.Run(Check)), ("spc", () => SpcTests.Run(Check)), ("pcfmt", () => PcFormatTests.Run(Check)), ("ym2610", () => Ym2610Tests.Run(Check)), ("small", () => SmallChipTests.Run(Check)), ("gbs", () => GbsTests.Run(Check)), ("mdx", () => MdxTests.Run(Check)), ("x86", () => X86Tests.Run(Check)), ("dos", () => DosTests.Run(Check)), ("pc98", () => Pc98Tests.Run(Check)), ("hoot98", () => HootPc98Tests.Run(Check)), ("hootgen", () => HootGenericTests.Run(Check)), ("pcat", () => PcAtTests.Run(Check)),
             };
             foreach (var (name, run) in suites) if (name.Contains(args[1], StringComparison.OrdinalIgnoreCase)) run();
             Console.WriteLine();
@@ -136,6 +136,7 @@ public static class Program
         DosTests.Run(Check);
         Pc98Tests.Run(Check);
         HootPc98Tests.Run(Check);
+        HootGenericTests.Run(Check);
         PcAtTests.Run(Check);
         RealFileTests.Run(Check);
         Console.WriteLine();

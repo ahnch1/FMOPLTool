@@ -40,6 +40,8 @@ public sealed class Pc98Machine : DosMachine, IHootMachine
 
     /// <summary>MPU-PC98 (E0D0h 데이터 · E0D2h 상태 / 명령): 나간 MIDI 바이트는 기록 종류 4.</summary>
     public readonly Mpu401 Mpu = new Mpu401();
+    /// <summary>MPU-PC98 보드가 꽂혀 있는가 (false = E0D0h · E0D2h가 빈 버스 FFh: MIDI 판이 아닌 PC-98generic 항목 — 드라이버가 MPU를 찾으면 MIDI로만 낸다).</summary>
+    public bool MpuPresent = true;
     /// <summary>MPU-PC98 인터럽트: INT2 = IRQ6 (벡터 0Eh, 보드 기본).</summary>
     public int MpuIrq = 6;
 
@@ -244,18 +246,147 @@ public sealed class Pc98Machine : DosMachine, IHootMachine
     // hoot 인터럽트는 처음부터 켜져 있다 (MMP_HOOT 같은 셸은 7E8h를 쓰지 않는다, PMD_98은 준비하는 동안만 80h로 끔)
     private bool hootEnabled = true, hootPending;
     public bool HootInterruptEnabled { get { return hootEnabled; } }
+    /// <summary>프로그램이 7E8h에 81h (hoot 인터럽트 켬)를 쓴 적이 있다 (PC-98generic 부팅이 끝난 표시).</summary>
+    public bool HootArmed { get; private set; }
 
     private bool InVsync { get { return Cpu.Cycles % vsyncPeriod < vsyncPeriod / 16; } }
     private bool InHblank { get { long h = Math.Max(2, (long)(CpuHz / 24830)); return Cpu.Cycles % h < h / 5; } }
 
-    /// <summary>곡 재생 요청 (hoot): 곡 코드 번호의 핸들을 표준 입력에 이중화하고 요인 0으로 hoot 인터럽트.</summary>
+    /// <summary>
+    /// 곡 재생 요청 (hoot). pc98dos: 곡 코드 번호의 핸들을 표준 입력에 이중화하고 요인 0으로 hoot 인터럽트.
+    /// pc98vx · pc98 (<see cref="Generic"/>): 요인 0으로 hoot 인터럽트 → 처리기가 돌아오면 코드 아래 16비트 번호의 bgm / bgm2를 dataaddr에 넣고 → 넣었으면 요인 1로 한 번 더.
+    /// </summary>
     public void Play(int code)
     {
-        if (HandleOpen(code & 0xFFFF)) Duplicate(code & 0xFFFF, 0);
+        if (Generic == null && HandleOpen(code & 0xFFFF)) Duplicate(code & 0xFFFF, 0);
         hootCode = code; hootCause = 0; hootPending = true;
+        genericLoadAfter = Generic != null;
     }
 
-    public void Stop() { hootCause = 2; hootPending = true; }
+    public void Stop() { hootCause = 2; hootPending = true; genericLoadAfter = false; }
+
+    // ------------------------------------------------------------ hoot PC-98generic (pc98vx · pc98: DOS 없이)
+
+    /// <summary>
+    /// hoot PC-98generic 항목의 곡 자료 (pc98vx · pc98): bgm / bgm2 (번호 → 파일 내용), strlist (번호 → 글자), 넣을 주소 · 크기 (0 = 넣지 않음).
+    /// 있으면 hoot 인터럽트를 F000의 함정을 거쳐 넣어 처리기가 돌아온 때를 알고, I/O 7D0h~7D7h (기능 · 인자)를 받는다.
+    /// </summary>
+    public sealed class GenericData
+    {
+        public Func<int, byte[]> Bgm = _ => null, Bgm2 = _ => null;
+        public Func<int, byte[]> Str = _ => null;
+        /// <summary>넣을 곳 (선형 주소, 0 = 넣지 않음): [0] 주 (dataaddr) · [1] 둘째 (data2addr).</summary>
+        public readonly int[] Addr = new int[2];
+        /// <summary>넣을 크기 한도 (filesize · file2size, 0 = 파일 전부).</summary>
+        public readonly int[] Size = new int[2];
+        /// <summary>요인 1로 넣은 횟수 (진단 · 시험).</summary>
+        public int Loads;
+    }
+
+    /// <summary>PC-98generic 항목 (null = pc98dos).</summary>
+    public GenericData Generic;
+    private bool genericLoadAfter, inHootHandler;
+    private long hootHandlerStart;
+    private int genericStatus = 0xFF;
+    private readonly byte[] genericParams = new byte[6];   // 7D2h~7D7h
+    private const int HootReturnOff = 0x0420, HootReturnTrap = 0x0201;
+
+    /// <summary>pc98 (옛 방식): PIC 자동 EOI (드라이버가 EOI를 보내지 않아도 다음 인터럽트를 받는다).</summary>
+    public void SetAutoEoi(bool on) { master.AutoEoi = on; slave.AutoEoi = on; }
+
+    /// <summary>bootcs:bootip에서 시작 (DOS 없이: 파일은 이미 메모리에).</summary>
+    public void StartAt(int cs, int ip)
+    {
+        Poke(StubSeg, HootReturnOff, 0xF1); Poke16(StubSeg, HootReturnOff + 1, HootReturnTrap); Poke(StubSeg, HootReturnOff + 3, 0xCF);
+        Cpu.CS = cs & 0xFFFF; Cpu.IP = ip & 0xFFFF; Cpu.Halted = false;
+    }
+
+    private int GenericParam(int i) { return genericParams[i * 2] | (genericParams[i * 2 + 1] << 8); }
+    private void SetGenericParam(int i, int v) { genericParams[i * 2] = (byte)v; genericParams[i * 2 + 1] = (byte)(v >> 8); }
+
+    private void CopyIn(int linear, byte[] d, int from, int count)
+    {
+        for (int i = 0; i < count && from + i < d.Length; i++)
+        {
+            int a = (linear + i) & 0xFFFFF;
+            if (a >= 0xF0000) break;   // 함정 · BIOS 자리는 지키기
+            Mem[a] = d[from + i];
+        }
+    }
+
+    /// <summary>hoot 인터럽트 처리기가 돌아옴 (F000:0420 함정): 재생 요청이면 bgm / bgm2를 넣고 요인 1로.</summary>
+    protected override void MachineTrap(int id)
+    {
+        if (id != HootReturnTrap) return;
+        inHootHandler = false;
+        if (!genericLoadAfter || Generic == null) return;
+        genericLoadAfter = false;
+        int n = hootCode & 0xFFFF;
+        bool loaded = false;
+        for (int k = 0; k < 2; k++)
+        {
+            int at = Generic.Addr[k];
+            if (at == 0) continue;
+            var d = k == 0 ? Generic.Bgm(n) : Generic.Bgm2(n);
+            if (d == null) continue;
+            CopyIn(at, d, 0, Generic.Size[k] > 0 ? Math.Min(d.Length, Generic.Size[k]) : d.Length);
+            loaded = true;
+        }
+        if (loaded) { hootCause = 1; hootPending = true; Generic.Loads++; }
+    }
+
+    private void DeliverHoot()
+    {
+        hootPending = false;
+        Cpu.Vector(FuncVector);
+        Interrupts++; HootDelivered++;
+        if (Generic == null) return;
+        // 처리기의 IRET이 F000:0420 함정으로 오게: 원래 틀 위에 하나 더 (함정 뒤 IRET이 원래 자리로)
+        int flags = PeekWord(Cpu.SS, Cpu.SP + 4) & ~X86.IF;
+        Cpu.Push(flags); Cpu.Push(StubSeg); Cpu.Push(HootReturnOff);
+        inHootHandler = true; hootHandlerStart = Cpu.Cycles;
+    }
+
+    /// <summary>7D0h 기능 (PC98.TXT "PC-98generic"): 10h · 11h dataaddr 설정 · 얻기, 18h strlist, 20h · 21h bgm 넣기, 30h · 31h 넣기 (인자 블록).</summary>
+    private void GenericFunction(int f)
+    {
+        var g = Generic;
+        int p1 = GenericParam(0), p2 = GenericParam(1), p3 = GenericParam(2);
+        int at = X86.Linear(p3, p2);
+        genericStatus = 0xFF;
+        switch (f)
+        {
+            case 0x10:
+                if ((p1 & 0xFF) > 1) return;
+                g.Addr[p1 & 1] = at; genericStatus = 0; return;
+            case 0x11:
+                if ((p1 & 0xFF) > 1) return;
+                SetGenericParam(1, g.Addr[p1 & 1] & 0xF); SetGenericParam(2, g.Addr[p1 & 1] >> 4); genericStatus = 0; return;
+            case 0x18:
+                {
+                    var s = g.Str(p1);
+                    if (s == null) return;
+                    CopyIn(at, s, 0, s.Length); CopyIn(at + s.Length, new byte[1], 0, 1);
+                    genericStatus = 0; return;
+                }
+            case 0x20: case 0x21:
+                {
+                    var d = f == 0x20 ? g.Bgm(p1) : g.Bgm2(p1);
+                    if (d == null) return;
+                    CopyIn(at, d, 0, d.Length); genericStatus = 0; return;
+                }
+            case 0x30: case 0x31:
+                {
+                    var d = f == 0x30 ? g.Bgm(p1) : g.Bgm2(p1);
+                    if (d == null) return;
+                    int off = PeekWord(p3, p2), seg = PeekWord(p3, p2 + 2);
+                    long pos = (uint)(PeekWord(p3, p2 + 4) | (PeekWord(p3, p2 + 6) << 16)), size = (uint)(PeekWord(p3, p2 + 8) | (PeekWord(p3, p2 + 10) << 16));
+                    if (pos > d.Length) return;
+                    CopyIn(X86.Linear(seg, off), d, (int)pos, (int)Math.Min(size, d.Length - pos));
+                    genericStatus = 0; return;
+                }
+        }
+    }
 
     // ------------------------------------------------------------ 포트
 
@@ -283,7 +414,7 @@ public sealed class Pc98Machine : DosMachine, IHootMachine
     public override byte In(int port)
     {
         if (Trace) Count(TracePorts, port);
-        if (Trace && (port == 0xE0D0 || port == 0xE0D2))
+        if (Trace && MpuPresent && (port == 0xE0D0 || port == 0xE0D2))
         {
             byte r = port == 0xE0D0 ? (byte)Mpu.ReadData() : (byte)Mpu.ReadStatus();
             TraceIoAdd("r" + port.ToString("X") + "=" + r.ToString("X2") + (Cpu.GetFlag(X86.IF) ? "" : "!IF") + "@" + Cpu.CS.ToString("X4") + ":" + Cpu.IP.ToString("X4"));
@@ -307,8 +438,8 @@ public sealed class Pc98Machine : DosMachine, IHootMachine
             case 0x75: case 0x3FDD: return (byte)PitRead(2);
             case 0x60: case 0xA0: return (byte)(0x04 | (InVsync ? 0x20 : 0) | (InHblank ? 0x40 : 0));   // GDC 상태: FIFO 빔, 수직 귀선, 수평 귀선 (24.83kHz)
             case 0x31: case 0x33: case 0x35: return 0x00;
-            case 0xE0D0: return (byte)Mpu.ReadData();
-            case 0xE0D2: return (byte)Mpu.ReadStatus();
+            case 0xE0D0: return MpuPresent ? (byte)Mpu.ReadData() : (byte)0xFF;
+            case 0xE0D2: return MpuPresent ? (byte)Mpu.ReadStatus() : (byte)0xFF;
             case 0x42: return 0xDF;   // 프린터 8255 포트 B: bit5 = 0 → 5 · 10MHz 계열 (PIT 2.4576MHz)
             case 0x7FD9: return 0;    // 마우스: 움직임 없음
             case 0x7FDB: return 0xFF; // 버튼 안 눌림
@@ -317,6 +448,12 @@ public sealed class Pc98Machine : DosMachine, IHootMachine
             case 0x7E1: return 0;
             case 0x7E2: return (byte)hootCode; case 0x7E3: return (byte)(hootCode >> 8);
             case 0x7E4: return (byte)(hootCode >> 16); case 0x7E5: return (byte)(hootCode >> 24);
+        }
+        if (Generic != null && port >= 0x7D0 && port <= 0x7D7)
+        {
+            if (port == 0x7D0) return (byte)genericStatus;
+            if (port >= 0x7D2) return genericParams[port - 0x7D2];
+            return 0;
         }
         if (Sound != Board.None)
         {
@@ -353,8 +490,8 @@ public sealed class Pc98Machine : DosMachine, IHootMachine
             case 0x64: vsyncArmed = true; return;
             case 0x60: case 0x62: case 0xA0: case 0xA2: case 0x68: case 0x6A: case 0x7C: case 0x7E: return;   // GDC · 표시 (무시)
             case 0x5F: return;   // 기다림
-            case 0xE0D0: Mpu.WriteData(v); return;
-            case 0xE0D2: Mpu.WriteCommand(v); return;
+            case 0xE0D0: if (MpuPresent) Mpu.WriteData(v); return;
+            case 0xE0D2: if (MpuPresent) Mpu.WriteCommand(v); return;
             case 0x7FDD: mouseC = v; MouseTimerChanged(); return;
             case 0x7FDF:
                 if ((v & 0x80) == 0) { int bit = (v >> 1) & 7; mouseC = (v & 1) != 0 ? mouseC | (1 << bit) : mouseC & ~(1 << bit); }
@@ -364,8 +501,14 @@ public sealed class Pc98Machine : DosMachine, IHootMachine
             case 0xBFDB: mouseHz = MouseRates[v & 3]; MouseTimerChanged(); return;
             case 0x7E8:
                 if (v == 0x80) hootEnabled = false;
-                else if (v == 0x81) hootEnabled = true;
+                else if (v == 0x81) { hootEnabled = true; HootArmed = true; }
                 return;
+        }
+        if (Generic != null && port >= 0x7D0 && port <= 0x7D7)
+        {
+            if (port == 0x7D0) GenericFunction(v);
+            else if (port >= 0x7D2) genericParams[port - 0x7D2] = value;
+            return;
         }
         if (Sound != Board.None)
         {
@@ -451,7 +594,8 @@ public sealed class Pc98Machine : DosMachine, IHootMachine
             if (now >= nextMpu) { Mpu.Clock(); nextMpu += MpuPeriod; }
             if (Mpu.IrqPending != mpuIrqUp) { mpuIrqUp = Mpu.IrqPending; if (mpuIrqUp) RaiseIrq(MpuIrq); else LowerIrq(MpuIrq); }
             else if (mpuIrqUp) RaiseIrq(MpuIrq);
-            if (hootPending && hootEnabled && Cpu.GetFlag(X86.IF)) { hootPending = false; Cpu.Vector(FuncVector); Interrupts++; HootDelivered++; }
+            if (inHootHandler && now - hootHandlerStart > (long)CpuHz) MachineTrap(HootReturnTrap);   // 1초 넘게 돌아오지 않는 처리기: 돌아온 것으로
+            if (hootPending && hootEnabled && !inHootHandler && Cpu.GetFlag(X86.IF)) DeliverHoot();
             else DeliverIrq();
             if (Cpu.Halted)
             {

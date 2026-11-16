@@ -502,6 +502,7 @@ public class DosMachine : IX86Bus
 
     private void Trap(int id)
     {
+        if (id > TrapReturn) { MachineTrap(id); return; }
         if (id == TrapReturn)
         {
             // 바깥이 부른 far call이 돌아옴
@@ -512,6 +513,9 @@ public class DosMachine : IX86Bus
         }
         Interrupt(id & 0xFF);
     }
+
+    /// <summary>기종 흉내가 F000 영역에 둔 함정 (F1 id, id &gt; 0x100) — 기본은 아무것도 안 함.</summary>
+    protected virtual void MachineTrap(int id) { }
 
     /// <summary>기본 벡터 처리기 (F000:n×4)에서. 이 뒤에 IRET이 이어진다. 기종 흉내가 덮어 BIOS를 더한다.</summary>
     protected virtual void Interrupt(int n)

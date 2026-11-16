@@ -249,8 +249,9 @@ public static class HootPc98Tests
             foreach (var h in Directory.GetFiles(dir, "*" + HootArchive.Extension))
             {
                 var e = HootArchive.Load(h);
-                if (!e.Driver.Equals("pc98dos", StringComparison.OrdinalIgnoreCase)) continue;
-                string key = e.Type.ToLowerInvariant();
+                if (!e.Driver.Equals("pc98dos", StringComparison.OrdinalIgnoreCase) && !HootPc98.IsGeneric(e)) continue;
+                if (HootPc98.IsMidiEntry(e)) continue;
+                string key = (HootPc98.IsGeneric(e) ? e.Driver.ToLowerInvariant() + " " : "") + e.Type.ToLowerInvariant();
                 stats.TryGetValue(key, out var st);
                 st.total++;
                 string note;
@@ -260,7 +261,7 @@ public static class HootPc98Tests
                     int vec = m.FuncVector;
                     bool hooked = m.PeekWord(0, vec * 4 + 2) != DosMachine.StubSeg;
                     int logBoot = m.Log.Count;
-                    m.Play(e.Titles.Count > 0 ? e.Titles[0].Code : 0);
+                    m.Play(FirstCode(e));
                     m.Run((long)(m.CpuHz * seconds));
                     int keyOns = m.Log.Count(x => x.kind == 0 && ((x.reg == 0x28 && (x.val & 0xF0) != 0) || (x.reg == 0x10 && (x.val & 0xBF) != 0 && (x.val & 0x80) == 0) || (x.reg >= 8 && x.reg <= 10 && (x.val & 0x1F) != 0))), beeps = m.Log.Count(x => x.kind == 2 && x.val != 0);
                     int fmWrites = m.Log.Count(x => x.kind <= 1);
@@ -296,11 +297,22 @@ public static class HootPc98Tests
         return 0;
     }
 
+    /// <summary>진단에서 돌릴 곡: 첫 제목, PC-98generic은 bgm이 있는 첫 제목 (곡 코드 0 = "음악 멈춤"인 항목이 많다).</summary>
+    private static int FirstCode(HootArchive.Entry e)
+    {
+        if (e.Titles.Count == 0) return 0;
+        if (HootPc98.IsGeneric(e))
+            foreach (var t in e.Titles)
+                if (e.Roms.Any(r => (r.Type == "bgm" || r.Type == "bgm2") && r.Offset == (t.Code & 0xFFFF))) return t.Code;
+        var music = e.Titles.FirstOrDefault(t => t.Title.IndexOf("stop", StringComparison.OrdinalIgnoreCase) < 0 && t.Title.IndexOf("停止", StringComparison.Ordinal) < 0);
+        return music.Title != null ? music.Code : e.Titles[0].Code;
+    }
+
     /// <summary>진단: --hoot98trace zip [항목 번호] [초] — 항목을 세우고 첫 곡을 재생하며 1초마다 기계 상태 · 인터럽트 · 포트를 찍는다.</summary>
     public static int TraceEntry(string zip, int which, double seconds)
     {
         string dir = ZipFolder.Extract(zip);
-        var hoots = Directory.GetFiles(dir, "*" + HootArchive.Extension).Where(h => HootArchive.Load(h).Driver == "pc98dos").OrderBy(x => x, StringComparer.Ordinal).ToList();
+        var hoots = Directory.GetFiles(dir, "*" + HootArchive.Extension).Where(h => { var he = HootArchive.Load(h); return he.Driver == "pc98dos" || HootPc98.IsGeneric(he); }).OrderBy(x => x, StringComparer.Ordinal).ToList();
         if (hoots.Count == 0) { Console.WriteLine("no pc98dos entry"); return 1; }
         var e = HootArchive.Load(hoots[Math.Min(which, hoots.Count - 1)]);
         Console.WriteLine(e.Name + "  " + e.Type + "  " + string.Join(", ", e.Options.Select(o => o.Key + "=" + o.Value)));
@@ -331,7 +343,7 @@ public static class HootPc98Tests
         m.TraceVectors.Clear(); m.TracePorts.Clear();
         Console.WriteLine("console: " + m.ConsoleText.Replace("\r", " ").Replace("\n", " | "));
         m.Trace = true;
-        int code = e.Titles.Count > 0 ? e.Titles[0].Code : 0;
+        int code = FirstCode(e);
         m.Play(code);
         int log0 = m.Log.Count;
         for (int s = 0; s < seconds; s++)
@@ -437,7 +449,7 @@ public static class HootPc98Tests
                     var m = HootPc98.BootDirAny(dir, e, out var shells);
                     var hm = (IHootMachine)m;
                     int bootBytes = hm.ChipLog.Count(x => x.kind == 4);
-                    hm.Play(e.Titles.Count > 0 ? e.Titles[0].Code : 0);
+                    hm.Play(FirstCode(e));
                     m.Run((long)(hm.ClockHz * seconds));
                     int noteOns = 0, bytes = 0;
                     var parser = new MidiByteParser { Message = (st, a, b, sx) => { if ((st & 0xF0) == 0x90 && b > 0) noteOns++; } };

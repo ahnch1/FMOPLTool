@@ -1,4 +1,4 @@
-# hoot 재생 작업 현황 (2026-11-16, v1.29.0)
+# hoot 재생 작업 현황 (2026-11-16, v1.29.1)
 
 다른 PC(회사)에서 이어 하기 위한 기록. 자세한 할 일 목록은 원래 `_incoming/Todo.md`(git에 안 들어감)에 있었고, 그중 이어 하는 데 필요한 것을 여기에 옮겼다.
 
@@ -6,10 +6,10 @@
 
 - **시험 자료는 저장소에 없다**: `_incoming/Hootarchive/` (hoot 배포본: `xml_new/` 목록 · `pc98/` 1,709 zip · `pc/` 480 zip · `snes/` · `msx/` · `nes/` · `gb/` …)는 `.gitignore`. 회사 PC에도 같은 자리(`_incoming/Hootarchive`)에 두면 실제 파일 시험 · 진단이 돈다. 없으면 실제 파일 시험은 `SKIP`으로 넘어간다 (합성 시험은 그대로 통과).
 - 작업 방식: 단계마다 커밋 하나 (`vX.Y.Z: …` 한국어 메시지), `Directory.Build.props` 버전 마지막 번호 올림, README 갱신, SelfTest 전부 통과 후 커밋.
-- 시험: `dotnet run -c Release --project tests/AdlibComposer.SelfTest` (전체, 지금 808개 통과), 묶음만: `-- --test pc98` · `hoot98` · `pcat` · `hoot`.
+- 시험: `dotnet run -c Release --project tests/AdlibComposer.SelfTest` (전체, 지금 822개 통과), 묶음만: `-- --test pc98` · `hoot98` · `hootgen` · `pcat` · `hoot`.
 - hoot 문서: http://retropc.net/yui/hoot/PC98.TXT (https 안 됨, http로). PC/AT 문서는 없음.
 
-## 1. 지금까지 (v1.21.0 ~ v1.29.0)
+## 1. 지금까지 (v1.21.0 ~ v1.29.1)
 
 | 판 | 단계 | 내용 |
 |---|---|---|
@@ -22,13 +22,14 @@
 | 1.27.0 | 8-2 | PC-98 무음 고치기: 보드 INT5 (IRQ12), 마우스 타이머 IRQ13, 공용 드라이버, Shift_JIS 이름 |
 | 1.28.0 | 8-3 | PC/AT DOS 기계 `Dos/PcAtMachine.cs` (AdLib OPL2 · SB16 OPL3 · 스피커) |
 | 1.29.0 | 8-4 | MIDI 판: MPU-401 / MPU-PC98 (`Dos/Mpu401.cs`, UART + 지능 모드) → 살아 있는 MIDI 곡 |
+| 1.29.1 | 8-5 | pc98vx · pc98 (DOS 없는 PC-98, PC-98generic): `HootPc98.BootGeneric` + `Pc98Machine.Generic` (7D0h I/O, 요인 0 → bgm 넣기 → 요인 1) |
 
 ### 구조 (어디를 보면 되나)
 
 - `Formats/HootArchive.cs` — hoot 목록 색인 (zip 이름 = `<romlist archive>`), `.hoot` 파일 쓰기 (`WriteEntries` · `WriteEntry`), 재생 가능 판단 (`Playable` · `PlayableGame` · `MidiPlayable`), `MissingRom`, `FindFile`. 표시 파일 `.fmopl_hoot4` (재생 가능 범위가 늘면 숫자를 올려 이미 푼 zip에도 다시 씀)
 - `Formats/ZipFolder.cs` — zip 풀 때 `.hoot` 쓰기, `SourceZip(dir)` (푼 폴더 → 원래 zip)
 - `Audio/HootSongs.cs` — `.hoot` 읽기를 드라이버별로: pc98dos · pcatdos → `HootPc98`, snes · msx · nes · gb → 그 파일 재생기, `IsMidi` / `LoadMidi`
-- `Audio/Dos/HootPc98.cs` — 항목 → 기계 세우기 (`BootAny` · `BootDirAny`: rom 줄 file · conin · device · code · string · shell 차례로), `IHootMachine`, `HootDosChip` (기계를 품은 칩: OPN/OPNA · OPL2/OPL3 + BEEP), MIDI 판 `LoadMidi`
+- `Audio/Dos/HootPc98.cs` — 항목 → 기계 세우기 (`BootAny` · `BootDirAny`: rom 줄 file · conin · device · code · string · shell 차례로; pc98vx · pc98은 `BootGeneric`: code · binary(16진 패치) · string을 주소에, bgm · bgm2 · strlist는 `Pc98Machine.GenericData`로, bootcs:bootip에서 시작), `IHootMachine`, `HootDosChip` (기계를 품은 칩: OPN/OPNA · OPL2/OPL3 + BEEP), MIDI 판 `LoadMidi`
 - `Audio/Dos/Pc98Machine.cs` · `PcAtMachine.cs` · `Pic8259.cs` · `Mpu401.cs` · `SharedPrograms.cs` (zip에 없는 셸 프로그램 = 같은 폴더 다른 zip)
 - `Formats/MidiSong.cs` (`Extend` · `RenderedTicks` · `PrepareLive`) + `Audio/MidiPlayer.cs` — 살아 있는 MIDI 곡 (재생기가 1초 앞까지 오디오 스레드에서 채움)
 - `App/Shell/HootTree.cs` · `FileBrowser.cs` ([hoot] 버튼) · `Views/JukeboxView.cs` (.hoot MIDI 판 → MIDI 재생, MT-32 판 강제)
@@ -38,6 +39,8 @@
 | 대상 | 소리 남 | 측정 |
 |---|---|---|
 | PC-98 DOS FM (opn · opna · 86 · beep) | 300 zip 표본 226 / 301 (약 75%) | `--hoot98survey pc98 300 6` |
+| PC-98 pc98vx · pc98 FM (opn · opna · 86 · beep) | 354항목 중 314 (약 89%) — vx opn 168/198 · opna 18/20 · 86 9/9 · beep 36/40, pc98 opn 77/81 | `--hoot98survey _vx 400 6` (pc98vx · pc98 항목이 든 zip 285개를 따로 모은 폴더) |
+| MIDI 판 pc98vx · pc98 | 97 / 109 | `--hootmidisurvey _vx 400 20` |
 | PC/AT DOS (adlib · sb16 · beep) | 482 / 488 | `--hootatsurvey pc 1000 6` |
 | MIDI 판 PC/AT | 571 / 586 | `--hootmidisurvey pc 1000 20` |
 | MIDI 판 PC-98 | 360 / 641 | `--hootmidisurvey pc98 1709 20` |
@@ -58,13 +61,13 @@
 
 ## 2. 다음 할 일 (8단계 계획, 품 대비 곡 수 순서)
 
-### 8-5. pc98vx (DOS 없는 PC-98) — 다음 차례, 보통
-- 대상: opn 198 / 5,712곡 · beep 40 · opna 25 · 86 9 (≈ 272항목 · 8,064곡), MIDI 판 105
-- hoot 규약 (PC98.TXT "PC-98generic"): 파일 code · binary · string (offset = 주소), bgm / bgm2 (offset = 데이터 번호), strlist. 옵션 bootcs · bootip · funcvect · addressing (0 플랫 · 1 리얼) · dataaddr · filesize · data2addr · file2size · datamax · strlistmax
-- 부팅: 파일을 읽고 bootcs:bootip로 뛴다. 재생: 요인 0으로 hoot 인터럽트 → code 아래 16비트 번호의 bgm / bgm2를 dataaddr에 넣음 (주소 0이면 안 넣음) → 넣었으면 요인 1로 hoot 인터럽트. 정지 = 요인 2
-- I/O 7D0h (상태 / 기능), 7D2h~7D7h (인자 1~3): 10h dataaddr 설정 · 11h 얻기 · 18h strlist · 20h/21h BGM 넣기 · 30h/31h 확장 넣기 (+00 오프셋 · +02 세그먼트 · +04 파일 위치 · +08 크기)
-- pc98 (구형) = PIC 자동 EOI · 버스트 클럭, pc98vx = 보통
-- `Pc98Machine`을 DOS 없이 쓰는 길 (DosMachine 위라 벡터 · 메모리는 있음) + `HootPc98.BootAny`에 driver pc98vx / pc98
+### 8-5. pc98vx (DOS 없는 PC-98) — ✅ v1.29.1
+- `HootPc98.BootGeneric`: DOS 없이 code (파일을 주소에) · binary (16진 바이트 패치, 아니면 파일) · string, addressing (목록에 `adressing`으로도 씀) 0 = 선형 · 1 = 세그먼트 << 16 | 오프셋, bootcs:bootip에서 시작, 7E8h ← 81h + IF가 켜질 때까지 (최대 2억 클럭) 돌린다. pc98 = PIC 자동 EOI, 버스트 클럭 모드는 흉내 내지 않음
+- `Pc98Machine.Generic`: hoot 인터럽트를 F000:0420 함정 (F1 0201h + IRET)을 거쳐 넣어 처리기가 돌아온 때를 안다 (1초 넘게 안 돌아오면 돌아온 것으로). 재생 = 요인 0 → bgm / bgm2 (곡 코드 아래 16비트 번호)를 dataaddr / data2addr에 filesize까지 → 넣었으면 요인 1. 7D0h 기능 10h · 11h · 18h · 20h · 21h · 30h · 31h, 상태 0 / FFh
+- MPU-PC98은 MIDI 판에만 (`Pc98Machine.MpuPresent`): FM 판에 MPU가 보이면 Wolfteam 등 드라이버가 MIDI로만 냄 (pc98dos는 아직 늘 꽂혀 있음 — 같은 문제가 있는지 확인할 것)
+- titlelist에 제목 없이 range만 있으면 range = 곡 목록 (`HootArchive.Parse`), 진단은 bgm이 있는 첫 곡 · "Stop"이 아닌 첫 곡을 돌림
+- 남은 무음 (40): writes-no-keyon 19 (sorc98v2/v3 · biblem · lesserm98 · dorse_sa · eldmnon · yaksa · ed3r …), no-chip-writes 13 (schwarz 1~3 · navitn · arugies · wg2 · trader(포트 43h) · tentochi · aftdark · fh98 · fukujin1 · rolw1), unknown-op 2 (dolly · revery: 0000:0063 — 벡터 표 자리 실행), vector-not-hooked 2 (valis2), hoot-disabled 2 (jnbgszm · mv2)
+- 아직 없음: dummysndrom (26K 사운드 BIOS ROM 흉내, 63항목이 씀), amd98 · soundorchestra · rashin · burai 형식, fm_mix · ssg_mix
 
 ### 8-6. Z80 기계들 — 큼 (Z80 · 칩은 다 있음, 기종별 hoot 규약을 찾아야 함)
 - msx generic 498 / 6,873곡 (옵션 init_pc · mdata_addr · mdata_size · mfile_size, rom code = 주소, bgm = 곡 데이터), pc88 opn 389 · opna 142, x1 psg 83 · opm 71, neogeo 146, megadrive generic_z80 · iyinc · koei 145 — 합계 약 1,500항목 · 2.9만 곡

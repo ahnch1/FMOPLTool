@@ -1,4 +1,4 @@
-# hoot 재생 작업 현황 (2026-11-16, v2.0.3)
+# hoot 재생 작업 현황 (2026-11-16, v2.0.4)
 
 다른 PC(회사)에서 이어 하기 위한 기록. 자세한 할 일 목록은 원래 `_incoming/Todo.md`(git에 안 들어감)에 있었고, 그중 이어 하는 데 필요한 것을 여기에 옮겼다.
 
@@ -6,10 +6,10 @@
 
 - **시험 자료는 저장소에 없다**: `_incoming/Hootarchive/` (hoot 배포본: `xml_new/` 목록 · `pc98/` 1,709 zip · `pc/` 480 zip · `snes/` · `msx/` · `nes/` · `gb/` …)는 `.gitignore`. 회사 PC에도 같은 자리(`_incoming/Hootarchive`)에 두면 실제 파일 시험 · 진단이 돈다. 없으면 실제 파일 시험은 `SKIP`으로 넘어간다 (합성 시험은 그대로 통과).
 - 작업 방식: 단계마다 커밋 하나 (`vX.Y.Z: …` 한국어 메시지), `Directory.Build.props` 버전 마지막 번호 올림, README 갱신, SelfTest 전부 통과 후 커밋.
-- 시험: `dotnet run -c Release --project tests/AdlibComposer.SelfTest` (전체, 지금 858개 통과), 묶음만: `-- --test pc98` · `hoot98` · `hootgen` · `hootmsx` · `hoot88` · `hootx1` · `hootneo` · `pcat` · `hoot`.
+- 시험: `dotnet run -c Release --project tests/AdlibComposer.SelfTest` (전체, 지금 865개 통과), 묶음만: `-- --test pc98` · `hoot98` · `hootgen` · `hootmsx` · `hoot88` · `hootx1` · `hootneo` · `hootmd` · `pcat` · `hoot`.
 - hoot 문서: http://retropc.net/yui/hoot/PC98.TXT (https 안 됨, http로). 그 밖의 기종(PC/AT · MSX · PC-88 · X1 …) 문서는 없음 — 목록의 시작 코드(rom "patch" 등)를 역어셈블해 규약을 맞춘다.
 
-## 1. 지금까지 (v1.21.0 ~ v2.0.3)
+## 1. 지금까지 (v1.21.0 ~ v2.0.4)
 
 | 판 | 단계 | 내용 |
 |---|---|---|
@@ -28,6 +28,7 @@
 | 2.0.1 | 8-6 (PC-88) | hoot pc88 opn · opna: `Audio/HootPc88.cs` (PC-8801 기계 · hoot 포트 00h · 01h · 80h, IM 2 VRTC · RTC · OPN 타이머) |
 | 2.0.2 | 8-6 (X1) | hoot x1 psg · opm: `Audio/HootX1.cs` (X1 기계 · 16비트 I/O · Z80 CTC · I/O VRAM) |
 | 2.0.3 | 8-6 (네오지오) | hoot neogeo: `Audio/HootNeoGeo.cs` (사운드 보드 Z80 + YM2610, M1 ROM 그대로, NMI 명령 · 뱅크 · ADPCM ROM 블록) |
+| 2.0.4 | 8-6 (메가드라이브) | hoot megadrive generic_z80 · iyinc: `Audio/HootMegaDrive.cs` (Z80 사운드 쪽 · 카트리지의 Z80 드라이버를 RAM에, 요청 주소) |
 
 ### 구조 (어디를 보면 되나)
 
@@ -53,6 +54,7 @@
 | PC-88 (opn · opna) | 487 / 527 — opn 357/385 · opna 130/142 | `--hoot88survey pc88 1000 6` |
 | X1 (psg · opm) | 143 / 152 — opm 65/71 · psg 78/81 | `--hootx1survey x1 1000 8` |
 | 네오지오 | 137 / 146 (음악일 만한 코드 10h 이상 3곡까지) | `--hootneosurvey roms 200 6` |
+| 메가드라이브 (generic_z80 · iyinc) | 93 / 131 (smd zip에 있는 것) — generic_z80 70/108 · iyinc 23/23 | `--hootmdsurvey smd 400 6` |
 | SPC · KSS · NSF · GBS | 717항목 파일 있음 (KSS 71항목은 zip에 .kss 없음) | — |
 
 "소리 남" = 처음 몇 초 안에 키온 · 노트가 나옴. 템포 · 음높이가 hoot와 맞는지는 아직 귀로 비교하지 않았다.
@@ -69,6 +71,7 @@
 --hoot88survey  <pc88 폴더> [zip 수] [초]   PC-88: 원인 분류 (no-interrupts 추가)
 --hootx1survey  <x1 폴더> [zip 수] [초]     X1: CTC 채널마다 제어어:시간 상수 · 벡터도
 --hootneosurvey <roms 폴더> [zip 수] [초]   네오지오 (hoot 목록에 neogeo로 있는 zip만)
+--hootmdsurvey  <smd 폴더> [zip 수] [초]    메가드라이브 Z80 드라이버
 --hoottree      <xml 폴더>                   트리 자료 읽는 시간 · 장비 수
 ```
 
@@ -110,7 +113,12 @@
   - VGM = YM2610 + ADPCM-A ROM (82h) · ADPCM-B ROM (83h, adpcmb가 없으면 A ROM을 같이) 데이터 블록. 180초 미리 렌더
   - 남은 무음 9: 파일 없음 3 (diggerma · kof2001 · zupapa — zip에 m1 · v1 없음), m1_decrypt (mslug5), bstars · ganryu · pulstar (MAKOTO인데 08h로도 안 됨), s1945p (IRQ 없음), wjammers (음수 offset 줄)
   - **암호화 V ROM (neo_pcm2_swap · neo_pcm2_snk_1999) 10항목**: 키온은 나지만 ADPCM 소리가 깨짐 (복호 아직)
-- 다음: megadrive (generic_z80 · iyinc · koei)
+- **메가드라이브 generic_z80 · iyinc — ✅ v2.0.4** (`Audio/HootMegaDrive.cs`, 93 / 131). 68000은 흉내 내지 않고 Z80 사운드 쪽만:
+  - Z80 3.58MHz, 0000h~1FFFh Z80 RAM (거울 ~3FFFh), 4000h~4003h YM2612 (읽기 = 타이머 플래그 — 메가드라이브는 YM2612 IRQ가 없어 드라이버가 상태를 봄, A = 144 × (1024 − TA), B = 2304 × (256 − TB) / 7.67MHz), 6000h 뱅크 (bit0을 9비트로 밀어 넣음), 7F11h PSG, 8000h~ = 카트리지 32KB 창, 수직 귀선 60Hz INT (IM 1)
+  - hoot 옵션: 카트리지 ROM의 topaddr부터 size1 (· size2 …) 바이트를 Z80 RAM data1 (· data2 …)에 올리고 0.5초 돌린 뒤, 곡 번호를 reqaddr에 (**없으면 1FFFh** — iyinc · lordmon 본 고리가 1FFFh를 봄), trigadr · trigvalue (trigsubadr · trigsubval)를 씀. 처음 뱅크 = topaddr의 32KB 칸. VGM = YM2612 + SN76489 (세가 되먹임)
+  - reqaddr = 1FFFh 항목은 모두 소리 남. 남은 무음 38은 다른 요청 주소를 쓰는 generic_z80 (드라이버마다 요청 방식이 다름 — verytex는 Z80 안에 사운드 테스트 UI가 있어 버튼 입력 0104h로 고름, madoumon은 곡 0 = 요청 없음): advdaisn · arrow · bahamuts · columns1 · columns3j · dahna · ddanpei · djboyj · dynduke · earnest · elvientoj · eswatj · f1circus · kujaku2 · leynos · magichat · mazinsagj · miracle9 · nhktaidr · nikkan · rastan2j · runark · sangoret · shikinjo · shougi · shuramon · smasters · soldeace · sswordj · supermanu · surging · topgear2 · verytex · volfied · waniwani · wboy3 · wimbled · zoom
+  - 아직 없음: koei 15 (Z80 드라이버 위치 옵션이 없음), 게임별 형식 수십 개 (68000 드라이버: puyopuyo · sonic · gunstar …), smd 폴더에 없는 generic_z80 29 (g_* 아카이브)
+- 8-6 끝 (MSX · PC-88 · X1 · 네오지오 · 메가드라이브). 다음: 8-7 X68000 (MC68000 새로)
 
 ### 8-7. X68000 — 큼 (MC68000 CPU 새로)
 - x68k generic 553 / 11,679곡 (.OPM · .ZMD · .M …를 원래 드라이버로), MIDI 판 166 (8-4의 MIDI 길 다시 씀)

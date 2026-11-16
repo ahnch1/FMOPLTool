@@ -70,6 +70,12 @@ public static class HootSongs
             v = HootNeoGeo.Render(e, dir, code);
             what = "네오지오 사운드 보드 · 명령 0x" + code.ToString("X2");
         }
+        else if (driver == "megadrive")
+        {
+            // hoot 메가드라이브 Z80 드라이버: 카트리지 ROM의 Z80 드라이버를 Z80 RAM에 올려 사운드 쪽만 흉내 내 미리 렌더
+            v = HootMegaDrive.Render(e, dir, code);
+            what = "메가드라이브 Z80 · 곡 0x" + code.ToString("X2");
+        }
         else if (driver == "snes")
         {
             var rom = e.Roms.FirstOrDefault(r => r.Offset == code && r.Text.Length > 0);

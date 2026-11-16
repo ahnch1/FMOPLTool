@@ -76,6 +76,12 @@ public static class HootSongs
             v = HootMegaDrive.Render(e, dir, code);
             what = "메가드라이브 Z80 · 곡 0x" + code.ToString("X2");
         }
+        else if (driver == "x68k")
+        {
+            // hoot X68000: 시작 코드 · 드라이버 (.x 재배치) · 곡 데이터를 X68000 기계 (MC68000 · OPM · ADPCM · DMA · MFP)에서 돌려 미리 렌더
+            v = HootX68k.Render(e, dir, code);
+            what = "X68000 기계 · 곡 0x" + code.ToString("X");
+        }
         else if (driver == "snes")
         {
             var rom = e.Roms.FirstOrDefault(r => r.Offset == code && r.Text.Length > 0);

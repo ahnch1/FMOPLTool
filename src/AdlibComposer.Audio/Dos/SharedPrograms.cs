@@ -9,7 +9,7 @@ namespace AdlibComposer.Audio.Dos;
 
 /// <summary>
 /// 여러 게임이 같이 쓰는 드라이버 · 재생기 (NAX.COM · DOFMDX98.COM · FMUDRV2 …): hoot 항목의 셸 프로그램이 그 zip에 없으면
-/// 같은 폴더(예: pc98\)의 다른 zip에서 같은 이름의 .COM / .EXE를 찾는다. 판이 여럿이면 가장 많은 zip에 든 같은 내용을 고른다.
+/// 같은 폴더(예: pc98\)의 다른 zip에서 같은 이름의 .COM / .EXE를 찾는다 (X68000: zmusic.x · cos68snd.bin 같은 파일은 이름 그대로). 판이 여럿이면 가장 많은 zip에 든 같은 내용을 고른다.
 /// <para>폴더마다 처음 한 번 zip 목록(중앙 디렉터리)만 훑어 이름 → zip 색인을 만든다 (1,700개에 1~2초).</para>
 /// </summary>
 public static class SharedPrograms
@@ -32,8 +32,7 @@ public static class SharedPrograms
                     using (var zip = ZipFile.OpenRead(z))
                         foreach (var e in zip.Entries)
                         {
-                            string ext = Path.GetExtension(e.Name).ToUpperInvariant();
-                            if (ext != ".COM" && ext != ".EXE") continue;
+                            if (e.Name.Length == 0) continue;
                             string key = e.Name.ToUpperInvariant();
                             if (!idx.TryGetValue(key, out var l)) idx[key] = l = new List<(string, string)>();
                             l.Add((z, e.FullName));
@@ -46,7 +45,7 @@ public static class SharedPrograms
         }
     }
 
-    /// <summary>프로그램 이름("NAX", "fmudrv2.com" …)의 파일 (이름 · 내용). 없으면 null.</summary>
+    /// <summary>프로그램 이름("NAX", "fmudrv2.com" …)의 파일 (이름 · 내용). 확장자가 있으면 그 이름 그대로 찾는다. 없으면 null.</summary>
     public static (string name, byte[] data)? Find(string folder, string program, string exceptZip = null)
     {
         if (string.IsNullOrEmpty(folder) || !Directory.Exists(folder) || string.IsNullOrWhiteSpace(program)) return null;

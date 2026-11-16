@@ -158,9 +158,65 @@ internal sealed class JukeboxView : UserControl, IShellPage
 
     private bool cueOnly;
 
+    // 파일 안 곡 줄
+    private RowStyle trackRowStyle;
+    private readonly FlowLayoutPanel trackRow = new FlowLayoutPanel();
+    private readonly Label trackLabel = new Label();
+    /// <summary>지금 곡이 든 파일의 곡 목록 (곡이 하나뿐인 파일이면 null).</summary>
+    private List<(string path, string title)> fileTracks;
+    private string fileTracksOf;
+
+    /// <summary>곡이 여럿 든 파일이면 그 목록, 아니면 null (같은 파일이면 다시 읽지 않는다).</summary>
+    private List<(string path, string title)> TracksOfCurrent()
+    {
+        string file = currentPath == null ? null : ChipSongs.FilePart(currentPath);
+        if (file == null) return null;
+        if (!string.Equals(file, fileTracksOf, StringComparison.OrdinalIgnoreCase))
+        {
+            fileTracksOf = file;
+            fileTracks = null;
+            try { if (ChipSongs.HasTracks(file)) { var t = ChipSongs.Tracks(file); if (t.Count > 1) fileTracks = t; } }
+            catch (Exception ex) { AppLog.Warn("Jukebox", "곡 목록을 읽지 못했습니다: " + Path.GetFileName(file) + " — " + ex.Message); }
+        }
+        return fileTracks;
+    }
+
+    private int TrackIndex(List<(string path, string title)> t)
+    {
+        int i = t.FindIndex(x => string.Equals(x.path, currentPath, StringComparison.OrdinalIgnoreCase));
+        return Math.Max(0, i);
+    }
+
+    /// <summary>파일 안 곡 줄: 곡이 여럿 든 파일이면 "곡 n / m · 제목"과 이전 / 다음 버튼, 아니면 숨김.</summary>
+    private void UpdateTrackRow()
+    {
+        var t = TracksOfCurrent();
+        bool show = t != null;
+        if (trackRow.Visible != show)
+        {
+            trackRow.Visible = show;
+            trackRowStyle.Height = show ? 38 : 0;
+        }
+        if (!show) return;
+        int i = TrackIndex(t);
+        string title = t[i].title;
+        trackLabel.Text = "파일 안 곡 " + (i + 1) + " / " + t.Count + (string.IsNullOrEmpty(title) ? "" : "  ·  " + title);
+    }
+
+    /// <summary>곡이 여럿 든 파일에서 이전(-1) / 다음(+1) 곡 (다음 곡 목록은 그대로).</summary>
+    private void PlayTrackInFile(int dir)
+    {
+        var t = TracksOfCurrent();
+        if (t == null) return;
+        int next = TrackIndex(t) + dir;
+        if (next < 0 || next >= t.Count) return;
+        PlayFile(t[next].path, false);
+    }
+
     /// <summary>곡을 올린 뒤: 보통은 처음부터 재생, Cue면 정지 상태로 둔다.</summary>
     private void Begin()
     {
+        UpdateTrackRow();
         if (!cueOnly) { StartAt(0); return; }
         pausedTick = 0;
         state = PlayState.Stopped;
@@ -202,9 +258,11 @@ internal sealed class JukeboxView : UserControl, IShellPage
         mixer.PitchStep += (v, d) => SetVoicePitch(v, options.VoiceTranspose[v] + d);
         top.Controls.Add(mixer, 0, 0);
 
-        var right = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5, Margin = new Padding(0, 0, 0, 8), BackColor = DeckTheme.Back };
+        var right = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 6, Margin = new Padding(0, 0, 0, 8), BackColor = DeckTheme.Back };
         right.RowStyles.Add(new RowStyle(SizeType.Percent, 100));    // 곡 정보 (곡을 고르세요)
         right.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));    // 진행 + 곡 전체 시간
+        trackRowStyle = new RowStyle(SizeType.Absolute, 0);           // 파일 안 곡 (곡이 여럿 든 파일일 때만 보임)
+        right.RowStyles.Add(trackRowStyle);
         right.RowStyles.Add(new RowStyle(SizeType.Absolute, 50));    // 재생 버튼
         right.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));    // 속도 / 키 / 볼륨
         right.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));    // 음색 / 스피커
@@ -236,6 +294,26 @@ internal sealed class JukeboxView : UserControl, IShellPage
         tips.SetToolTip(lenLabel, "곡 전체 시간");
         right.Controls.Add(seekRow, 0, 1);
 
+        // 파일 안 곡: 곡이 여럿 든 파일(NSF · KSS · HES · GBS · hoot · XMI …)의 이전 / 다음 곡
+        trackRow.Dock = DockStyle.Fill;
+        trackRow.Margin = new Padding(0);
+        trackRow.BackColor = DeckTheme.Back;
+        trackRow.WrapContents = false;
+        trackRow.Padding = new Padding(0, 4, 0, 0);
+        trackRow.Visible = false;
+        foreach (var b in new[] { DeckButton('', "이전", "파일 안 이전 곡 (Shift+PageUp)", delegate { PlayTrackInFile(-1); }),
+                                  DeckButton('', "다음", "파일 안 다음 곡 (Shift+PageDown)", delegate { PlayTrackInFile(1); }) })
+        {
+            b.Height = 30;
+            trackRow.Controls.Add(b);
+        }
+        trackLabel.AutoSize = true;
+        trackLabel.Font = DeckTheme.Info;
+        trackLabel.ForeColor = DeckTheme.TextDark;
+        trackLabel.Margin = new Padding(6, 7, 0, 0);
+        trackRow.Controls.Add(trackLabel);
+        right.Controls.Add(trackRow, 0, 2);
+
         // 재생 버튼
         var transport = new FlowLayoutPanel { Dock = DockStyle.Fill, Margin = new Padding(0), BackColor = DeckTheme.Back, WrapContents = false, Padding = new Padding(0, 4, 0, 0) };
         transport.Controls.Add(DeckButton('', "", "이전 곡 (PageUp)", delegate { PlayNeighbor(-1); }));
@@ -252,7 +330,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
         autoNext.AutoSize = true;
         autoNext.Margin = new Padding(14, 11, 0, 0);
         transport.Controls.Add(autoNext);
-        right.Controls.Add(transport, 0, 2);
+        right.Controls.Add(transport, 0, 3);
 
         // 속도 / 키 / 볼륨
         var adjust = new FlowLayoutPanel { Dock = DockStyle.Fill, Margin = new Padding(0), BackColor = DeckTheme.Back, WrapContents = false };
@@ -281,7 +359,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
         reset.Width = 84;
         reset.Margin = new Padding(0, 5, 0, 0);
         adjust.Controls.Add(reset);
-        right.Controls.Add(adjust, 0, 3);
+        right.Controls.Add(adjust, 0, 4);
 
         // 음색 / 스피커
         var sound = new FlowLayoutPanel { Dock = DockStyle.Fill, Margin = new Padding(0), BackColor = DeckTheme.Back, WrapContents = false };
@@ -317,7 +395,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
         tips.SetToolTip(vintageSpeaker, "모니터 옆에 놓던 작은 PC 스피커로 듣는 소리 흉내 (저음이 빠지고 중고음이 튐)");
         rawTone.CheckedChanged += delegate { settings().JukeboxRawTone = rawTone.Checked; ApplySound(); SaveSettings(); };
         vintageSpeaker.CheckedChanged += delegate { settings().JukeboxVintageSpeaker = vintageSpeaker.Checked; ApplySound(); SaveSettings(); };
-        right.Controls.Add(sound, 0, 4);
+        right.Controls.Add(sound, 0, 5);
 
         // ---------------------------------------------------------------- 가운데: 가사 (가로 전체)
         lyrics.Dock = DockStyle.Fill;
@@ -1371,6 +1449,8 @@ internal sealed class JukeboxView : UserControl, IShellPage
             case Keys.Control | Keys.Right: SeekSeconds(5); return true;
             case Keys.Control | Keys.PageUp: PlayNeighbor(-1); return true;
             case Keys.Control | Keys.PageDown: PlayNeighbor(1); return true;
+            case Keys.Shift | Keys.PageUp: PlayTrackInFile(-1); return true;
+            case Keys.Shift | Keys.PageDown: PlayTrackInFile(1); return true;
             case Keys.Add: case Keys.Oemplus: SetVolume(volumePercent + 10); return true;
             case Keys.Subtract: case Keys.OemMinus: SetVolume(volumePercent - 10); return true;
         }

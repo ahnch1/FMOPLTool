@@ -66,7 +66,7 @@ internal sealed class ScoreCanvas : Control
         {
             using (var f = new Font("Segoe UI", 10f))
             using (var sf = new StringFormat { Alignment = StringAlignment.Center })
-                g.DrawString("이 곡에는 보여 줄 노트가 없습니다. Composer에서 노트를 넣거나 곡을 열어 보세요.", f, Brushes.Gray, new RectangleF(0, 60, Width, 40), sf);
+                g.DrawString("이 곡에는 보여 줄 노트가 없습니다. Composer에서 노트를 넣거나 왼쪽 목록 · Jukebox에서 곡을 고르세요.", f, Brushes.Gray, new RectangleF(0, 60, Width, 40), sf);
             return;
         }
         renderer.Hits.Clear();

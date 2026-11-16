@@ -38,6 +38,9 @@ internal sealed class NoteView : UserControl, IShellPage, IPlaybackPage
     private readonly ToolStripLabel infoLabel = new ToolStripLabel();
     private readonly Panel scroller = new Panel();
     private readonly ScoreCanvas canvas = new ScoreCanvas();
+    /// <summary>맨 위 곡 전체 길이 막대: 누르거나 끌어 놓은 지점부터 재생.</summary>
+    private readonly SongPositionBar posBar = new SongPositionBar { Dock = DockStyle.Top };
+    private TempoMap tempo;
     private readonly HashSet<int> hiddenVoices = new HashSet<int>();
     private int zoomIndex = 3;
     private Song lastSong;
@@ -95,7 +98,9 @@ internal sealed class NoteView : UserControl, IShellPage, IPlaybackPage
         canvas.MouseWheel += OnWheel;
         canvas.NoteClicked += delegate (ScoreHit h) { if (NoteActivated != null) NoteActivated(h.Voice, h.Tick, h.Pitch); };
         canvas.NoteHovered += delegate (ScoreHit h) { infoLabel.Text = h != null ? h.Label : Hint; };
-        canvas.CursorMoved += t => { if (playing) StartPlay(t); };
+        canvas.CursorMoved += t => { posBar.Position = t; if (playing) StartPlay(t); };
+        posBar.SecondsAt = t => tempo != null ? tempo.SecondsAt((int)t) : 0;
+        posBar.SeekRequested += t => { canvas.CursorTick = t; canvas.Invalidate(); StartPlay(t); };
 
         voicePanel.VoiceToggled += (v, on) => { if (on) hiddenVoices.Remove(v); else hiddenVoices.Add(v); Rebuild(); };
         voicePanel.AllToggled += on => { hiddenVoices.Clear(); if (!on) hiddenVoices.UnionWith(voicePanel.Voices); RebuildVoiceMenu(); Rebuild(); };
@@ -103,6 +108,7 @@ internal sealed class NoteView : UserControl, IShellPage, IPlaybackPage
 
         Controls.Add(scroller);
         Controls.Add(voicePanel);
+        Controls.Add(posBar);
         Controls.Add(bar);
     }
 
@@ -165,6 +171,9 @@ internal sealed class NoteView : UserControl, IShellPage, IPlaybackPage
         FitCanvasWidth();
         voicePanel.UpdateTitle();
         infoLabel.Text = Hint;
+        tempo = new TempoMap(ws.Song);
+        posBar.LengthTicks = ws.Song.LengthTicks;
+        posBar.Position = playing ? ws.Audio.PositionTick : canvas.CursorTick;
         if (playing) StartPlay(ws.Audio.PositionTick);   // 보이스를 켜고 끄면 그 자리에서 다시
     }
 
@@ -195,7 +204,7 @@ internal sealed class NoteView : UserControl, IShellPage, IPlaybackPage
 
     public bool CanPlay { get { return score != null && score.Voices.Count > 0; } }
     public bool IsPlaying { get { return playing; } }
-    public void PlayFromStart() { canvas.CursorTick = 0; StartPlay(0); }
+    public void PlayFromStart() { canvas.CursorTick = 0; posBar.Position = 0; StartPlay(0); }
     public void PlayFromCursor() { StartPlay(canvas.CursorTick); }
 
     /// <summary>보이는 보이스만 소리 낸다 (숨긴 보이스는 끔). SOP 곡은 Composer처럼 OPL3 SOP 재생기로.</summary>
@@ -223,6 +232,7 @@ internal sealed class NoteView : UserControl, IShellPage, IPlaybackPage
     {
         if (!playing) return;
         canvas.CursorTick = ws.Audio.PositionTick;
+        posBar.Position = canvas.CursorTick;
         ws.Audio.Stop();
         playing = false;
         playTimer.Stop();
@@ -239,11 +249,13 @@ internal sealed class NoteView : UserControl, IShellPage, IPlaybackPage
             playTimer.Stop();
             canvas.PlayTick = -1;
             canvas.CursorTick = 0;
+            posBar.Position = 0;
             canvas.Invalidate();
             return;
         }
         double t = ws.Audio.PositionTick;
         canvas.PlayTick = t;
+        posBar.Position = t;
         int top, bottom;
         if (canvas.SystemBounds(t, out top, out bottom))
         {

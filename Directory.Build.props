@@ -3,7 +3,7 @@
     <ImplicitUsings>disable</ImplicitUsings>
     <Nullable>disable</Nullable>
     <LangVersion>latest</LangVersion>
-    <Version>1.29.2</Version>
+    <Version>1.29.3</Version>
     <Company>AdlibComposer</Company>
     <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
   </PropertyGroup>

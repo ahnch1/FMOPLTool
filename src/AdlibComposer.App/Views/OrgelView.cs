@@ -56,6 +56,8 @@ internal sealed class OrgelView : UserControl, IShellPage, IPlaybackPage
     private OrgelStrip strip;
     private OrgelOptions options;
     private bool playing;
+    /// <summary>맨 위 곡 전체 길이 막대 (시간 = 돌리는 빠르기): 누르거나 끌어 놓은 지점부터 시험 연주.</summary>
+    private readonly SongPositionBar posBar = new SongPositionBar { Dock = DockStyle.Top };
 
     public OrgelView(Workspace ws, Func<bool> openAudio, Func<string> exportFolder)
     {
@@ -117,7 +119,9 @@ internal sealed class OrgelView : UserControl, IShellPage, IPlaybackPage
         });
 
         canvas.Dock = DockStyle.Fill;
-        canvas.CursorMoved += t => { if (playing) StartPlay(t); };
+        canvas.CursorMoved += t => { posBar.Position = t; if (playing) StartPlay(t); };
+        posBar.SecondsAt = t => t / TicksPerSecond;
+        posBar.SeekRequested += t => { canvas.SetCursor(t); canvas.Follow(t); StartPlay(t); };
         canvas.ZoomRequested += d => SetZoom(zoomIndex + d);
         canvas.DescribePunch = DescribePunch;
         canvas.DescribeMissing = m => "못 내는 음: " + NoteHelper.Name(m.SourceNote + transpose) + " (원래 " + NoteHelper.Name(m.SourceNote) + ", 보이스 " + (m.Voice + 1) + ")  " + Where(m.Tick);
@@ -144,6 +148,7 @@ internal sealed class OrgelView : UserControl, IShellPage, IPlaybackPage
         Controls.Add(canvas);
         Controls.Add(voicePanel);
         Controls.Add(summary);
+        Controls.Add(posBar);
         Controls.Add(bar);
 
         timer.Tick += delegate { OnTimer(); };
@@ -207,6 +212,8 @@ internal sealed class OrgelView : UserControl, IShellPage, IPlaybackPage
         ApplyZoom();
         canvas.Strip = strip;
         UpdateLabels();
+        posBar.LengthTicks = strip.LengthTicks;
+        posBar.Position = playing ? ws.Audio.PositionTick : canvas.CursorTick;
         if (playing) StartPlay(ws.Audio.PositionTick);
     }
 
@@ -302,6 +309,7 @@ internal sealed class OrgelView : UserControl, IShellPage, IPlaybackPage
         bpm = Math.Max(20, Math.Min(400, v));
         if (playing) ws.Audio.SetMusicBoxSpeed(TicksPerSecond);
         UpdateLabels();
+        posBar.Invalidate();   // 시간이 바뀐다
     }
 
     private double TicksPerSecond { get { return bpm / 60.0 * Math.Max(1, ws.Song.TickBeat); } }
@@ -314,7 +322,7 @@ internal sealed class OrgelView : UserControl, IShellPage, IPlaybackPage
     // IPlaybackPage: 툴바의 공통 재생 버튼
     public bool CanPlay { get { return strip != null && strip.Punches.Count > 0; } }
     public bool IsPlaying { get { return playing; } }
-    public void PlayFromStart() { canvas.SetCursor(0); StartPlay(0); }
+    public void PlayFromStart() { canvas.SetCursor(0); posBar.Position = 0; StartPlay(0); }
     public void PlayFromCursor() { StartPlay(canvas.CursorTick); }
 
     private void StartPlay(double from)
@@ -332,6 +340,7 @@ internal sealed class OrgelView : UserControl, IShellPage, IPlaybackPage
     {
         if (!playing) return;
         if (ws.Audio.IsPlaying) canvas.SetCursor(ws.Audio.PositionTick);
+        posBar.Position = canvas.CursorTick;
         ws.Audio.Stop();
         playing = false;
         timer.Stop();
@@ -342,9 +351,10 @@ internal sealed class OrgelView : UserControl, IShellPage, IPlaybackPage
     private void OnTimer()
     {
         if (!playing) return;
-        if (!ws.Audio.IsPlaying) { StopPlay(); canvas.SetCursor(0); return; }
+        if (!ws.Audio.IsPlaying) { StopPlay(); canvas.SetCursor(0); posBar.Position = 0; return; }
         double t = ws.Audio.PositionTick;
         canvas.PlayTick = t;
+        posBar.Position = t;
         canvas.Follow(t);
         canvas.Invalidate();
     }

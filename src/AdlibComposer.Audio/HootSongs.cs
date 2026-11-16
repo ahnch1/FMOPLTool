@@ -58,6 +58,12 @@ public static class HootSongs
             v = HootPc88.Render(e, dir, code);
             what = "PC-88 기계 · 곡 0x" + code.ToString("X");
         }
+        else if (driver == "x1")
+        {
+            // hoot X1: 시작 코드 · 드라이버 · 곡 데이터를 X1 기계(Z80 · CTC · PSG · OPM)에서 돌려 미리 렌더
+            v = HootX1.Render(e, dir, code);
+            what = "X1 기계 · 곡 0x" + code.ToString("X");
+        }
         else if (driver == "snes")
         {
             var rom = e.Roms.FirstOrDefault(r => r.Offset == code && r.Text.Length > 0);

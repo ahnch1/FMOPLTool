@@ -1,4 +1,4 @@
-# hoot 재생 작업 현황 (2026-11-16, v2.0.1)
+# hoot 재생 작업 현황 (2026-11-16, v2.0.2)
 
 다른 PC(회사)에서 이어 하기 위한 기록. 자세한 할 일 목록은 원래 `_incoming/Todo.md`(git에 안 들어감)에 있었고, 그중 이어 하는 데 필요한 것을 여기에 옮겼다.
 
@@ -6,10 +6,10 @@
 
 - **시험 자료는 저장소에 없다**: `_incoming/Hootarchive/` (hoot 배포본: `xml_new/` 목록 · `pc98/` 1,709 zip · `pc/` 480 zip · `snes/` · `msx/` · `nes/` · `gb/` …)는 `.gitignore`. 회사 PC에도 같은 자리(`_incoming/Hootarchive`)에 두면 실제 파일 시험 · 진단이 돈다. 없으면 실제 파일 시험은 `SKIP`으로 넘어간다 (합성 시험은 그대로 통과).
 - 작업 방식: 단계마다 커밋 하나 (`vX.Y.Z: …` 한국어 메시지), `Directory.Build.props` 버전 마지막 번호 올림, README 갱신, SelfTest 전부 통과 후 커밋.
-- 시험: `dotnet run -c Release --project tests/AdlibComposer.SelfTest` (전체, 지금 844개 통과), 묶음만: `-- --test pc98` · `hoot98` · `hootgen` · `hootmsx` · `hoot88` · `pcat` · `hoot`.
+- 시험: `dotnet run -c Release --project tests/AdlibComposer.SelfTest` (전체, 지금 852개 통과), 묶음만: `-- --test pc98` · `hoot98` · `hootgen` · `hootmsx` · `hoot88` · `hootx1` · `pcat` · `hoot`.
 - hoot 문서: http://retropc.net/yui/hoot/PC98.TXT (https 안 됨, http로). 그 밖의 기종(PC/AT · MSX · PC-88 · X1 …) 문서는 없음 — 목록의 시작 코드(rom "patch" 등)를 역어셈블해 규약을 맞춘다.
 
-## 1. 지금까지 (v1.21.0 ~ v2.0.1)
+## 1. 지금까지 (v1.21.0 ~ v2.0.2)
 
 | 판 | 단계 | 내용 |
 |---|---|---|
@@ -26,6 +26,7 @@
 | 1.29.2 ~ .7 | — | UI: Jukebox 첫 페이지 · 열기는 왼쪽 목록 / Jukebox만, 파일 안 이전 · 다음 곡, Note · Orgel 곡 길이 막대, 칩 곡 → 노트(`VgmToSong`, 진행 막대), 목록 찾기, 오류 기록 |
 | 2.0.0 | 8-6 (MSX) | hoot msx generic: `Audio/HootMsx.cs` (MSX 기계 · hoot 포트 02h~07h, 미리 렌더) |
 | 2.0.1 | 8-6 (PC-88) | hoot pc88 opn · opna: `Audio/HootPc88.cs` (PC-8801 기계 · hoot 포트 00h · 01h · 80h, IM 2 VRTC · RTC · OPN 타이머) |
+| 2.0.2 | 8-6 (X1) | hoot x1 psg · opm: `Audio/HootX1.cs` (X1 기계 · 16비트 I/O · Z80 CTC · I/O VRAM) |
 
 ### 구조 (어디를 보면 되나)
 
@@ -49,6 +50,7 @@
 | MIDI 판 PC-98 | 360 / 641 | `--hootmidisurvey pc98 1709 20` |
 | MSX generic (PSG · OPLL · SCC · SCC+ · MSX-AUDIO) | 481 / 498 (첫 곡이 조용하면 다음 곡 5개까지) | `--hootmsxsurvey msx 1000 8` |
 | PC-88 (opn · opna) | 487 / 527 — opn 357/385 · opna 130/142 | `--hoot88survey pc88 1000 6` |
+| X1 (psg · opm) | 143 / 152 — opm 65/71 · psg 78/81 | `--hootx1survey x1 1000 8` |
 | SPC · KSS · NSF · GBS | 717항목 파일 있음 (KSS 71항목은 zip에 .kss 없음) | — |
 
 "소리 남" = 처음 몇 초 안에 키온 · 노트가 나옴. 템포 · 음높이가 hoot와 맞는지는 아직 귀로 비교하지 않았다.
@@ -63,6 +65,7 @@
 --hootmidisurvey <폴더> [zip 수] [초]        MIDI 판
 --hootmsxsurvey <msx 폴더> [zip 수] [초]    MSX generic: 원인 분류 (boot-not-waiting · no-chip-writes · writes-no-keyon · missing-file), 조용하면 많이 쓴 레지스터
 --hoot88survey  <pc88 폴더> [zip 수] [초]   PC-88: 원인 분류 (no-interrupts 추가)
+--hootx1survey  <x1 폴더> [zip 수] [초]     X1: CTC 채널마다 제어어:시간 상수 · 벡터도
 --hoottree      <xml 폴더>                   트리 자료 읽는 시간 · 장비 수
 ```
 
@@ -90,7 +93,14 @@
   - 칩: OPN 44h · 45h (44h 읽기 = 타이머 상태, FFh = ID), OPNA 46h · 47h. VGM = YM2203 / YM2608
   - 남은 무음 40: 인터럽트 없음 6 (byouin_88 · gallforc · hardrank · p1demo1 · shuten88 · tnmbox_88 — VRTC를 E6h 없이 쓰거나 OPN 타이머 인터럽트 켜는 길이 다름), 부팅이 명령 대기에 안 닿음 3 (prajator · rst88v1 · skugyoku), 칩 쓰기 없음 1 (thexder88), 파일 없음 1 (wingsp88 — 반각 가나 이름), 키온 없음 23 (100yen2 · 4 · andrgyns · blassty · castle · castleex · daikokai · europe · ginga · inindou · kami · liberty_88 · lizard88 · lmpereur · luxsor · mazekun · saziri · snatcher · spitfl88 · xzr · yakyufan · yokosuka …: 대부분 인터럽트 몇 번 뒤 PC가 0 근처 → 벡터 · BASIC ROM 루틴을 기대)
   - 아직 없음: adpcm rom (OPNA ADPCM 메모리), file · shell · conin · prog (디스크 BASIC), use_n88rom, pc88va · pc88vados, 8801-10 · 8801-11 등 형식
-- 다음: x1 (psg · opm), neogeo, megadrive
+- **X1 psg · opm — ✅ v2.0.2** (`Audio/HootX1.cs`, 143 / 152). 시작 코드 153개 + 실패 항목으로 맞춘 규약:
+  - I/O는 16비트 주소 (OUT (C) = BC). hoot 포트 (상위 바이트 0): IN 0000h = 명령, OUT 0000h = 받음, IN 0001h = 곡 코드 아래 바이트, OUT 0001h,n = bgm n (mdata_addr, 없으면 4000h) + voice n (vdata_addr), IN 000Fh = 곡 코드 맨 위 바이트
+  - Z80 CTC (본체 1FA0h~, FM 보드 0704h~) IM 2: 채널 0 벡터 바이트, 제어어, 타이머 = 4MHz ÷ 16/256 ÷ 시간 상수, 채널 3 카운터 = 채널 0 출력 (X1 배선). **시간 상수를 받으면 리셋(bit1)이 풀림**, 읽기 = 남은 수 (x1rv가 CTC 있는지 써 보고 읽음). 옵션 use_ctcN = 시작 코드가 시간 상수를 안 쓸 때의 값 (x1wibarm ch3 = 80h → 61Hz)
+  - 칩: PSG 1C00h 레지스터 · 1B00h 데이터 (2MHz), OPM 0700h · 0701h (4MHz). **FM 보드 (OPM · 0704h CTC)는 opm 판에만** (PSG 판에 보이면 드라이버가 OPM으로 냄)
+  - **I/O 2000h~FFFFh = VRAM (쓰고 읽는 메모리)**: Sorcerian 등이 그래픽 VRAM을 작업 메모리로 씀. 8255 PPI 1A01h = bit7 수직 귀선 · 서브 CPU 늘 준비됨, 서브 CPU 1900h 읽기 = 0
+  - 남은 무음 9: Super Laydock (OPM · PSG), 三国志 1 · 2, 維新の嵐, 戦国群雄伝, 水滸伝 (KOEI — 인터럽트가 없거나 ch3만 시간 상수 1), Hydlide (ch3가 시간 상수를 기다림, 옵션 없음)
+  - 아직 없음: opmx2 (OPM 둘) 2, x1 opn 1
+- 다음: neogeo, megadrive
 
 ### 8-7. X68000 — 큼 (MC68000 CPU 새로)
 - x68k generic 553 / 11,679곡 (.OPM · .ZMD · .M …를 원래 드라이버로), MIDI 판 166 (8-4의 MIDI 길 다시 씀)

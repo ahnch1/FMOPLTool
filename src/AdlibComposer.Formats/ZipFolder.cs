@@ -44,6 +44,7 @@ public static class ZipFolder
     public static bool IsCachePath(string path)
     {
         if (string.IsNullOrEmpty(path)) return false;
+        if (ZipPath.IsInZip(path)) return true;   // 풀지 않고 읽은 zip 안 파일도 그 자리에 저장할 수 없다
         try
         {
             string full = Path.GetFullPath(path);
@@ -110,6 +111,17 @@ public static class ZipFolder
         return dir;
     }
 
+    /// <summary>hoot 목록(zip 옆 xml 폴더)에 이 zip을 쓰는 흉내 항목이 있는가: 그런 zip은 풀어서 .hoot 항목을 만들어야 한다.</summary>
+    public static bool IsHootArchive(string zipPath)
+    {
+        try
+        {
+            string listDir = HootArchive.FindListDir(zipPath);
+            return listDir != null && HootArchive.Index(listDir).ContainsKey(Path.GetFileNameWithoutExtension(zipPath).Trim());
+        }
+        catch (Exception) { return false; }
+    }
+
     /// <summary>hoot 아카이브 zip이면 그 zip의 기종 흉내 항목을 .hoot 파일로 (<see cref="HootArchive"/>). 실패해도 그만.</summary>
     private static void AddHootEntries(string zipPath, string dir)
     {
@@ -124,8 +136,8 @@ public static class ZipFolder
         if (s.Any(c => c > 0xFF)) return s;                                // 이미 UTF-8로 읽힘 (깃발)
         var raw = s.Select(c => (byte)c).ToArray();
         if (raw.All(b => b < 0x80)) return s;
-        try { return new UTF8Encoding(false, true).GetString(raw); }
-        catch (DecoderFallbackException) { }
+        // 예외 없이 먼저 검사 (CP949 이름마다 DecoderFallbackException이 디버거 출력에 찍히지 않게)
+        if (System.Text.Unicode.Utf8.IsValid(raw)) return Encoding.UTF8.GetString(raw);
         string ko = KoreanText.Decode(raw, 0, raw.Length);
         if (ko.Length > 0 && !ko.Contains('�')) return ko;
         try { Encoding.RegisterProvider(CodePagesEncodingProvider.Instance); return Encoding.GetEncoding(437).GetString(raw); }

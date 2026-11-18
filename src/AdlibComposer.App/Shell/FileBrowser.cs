@@ -40,8 +40,8 @@ internal sealed class FileBrowser : UserControl
     }
 
     /// <summary>
-    /// 들어가 있는 ZIP (바깥 → 안쪽 순서): zip 파일 경로와 그것을 푼 임시 폴더. zip 안의 zip도 들어갈 수 있다.
-    /// 목록 · 재생은 푼 폴더의 실제 파일로 하고, 경로 표시 · 위로 가기만 zip 기준으로 바꾼다.
+    /// 들어가 있는 ZIP (바깥 → 안쪽 순서): zip 파일 경로와 그것을 보는 폴더. zip 안의 zip도 들어갈 수 있다.
+    /// 풀지 않고 보는 zip은 Cache = zip 경로 자체 (목록 · 재생 = "zip\안 경로"), 푼 zip은 임시 폴더 (경로 표시 · 위로 가기만 zip 기준으로 바꾼다).
     /// </summary>
     private readonly List<(string Zip, string Cache)> zips = new List<(string, string)>();
 
@@ -158,7 +158,7 @@ internal sealed class FileBrowser : UserControl
         list.Resize += delegate { UpdatePager(); };
         tips.SetToolTip(list, "폴더 두 번 클릭: 들어가기 · 곡 두 번 클릭 / Enter: 지금 페이지에서 열기 (못 여는 형식이면 그 형식을 여는 페이지로)\n"
             + "곡이 여럿 든 파일(KSS · NSF · HES, ▸): 두 번 클릭 / → 로 곡 목록 펼치기, ← 로 접기 — 곡 줄을 두 번 클릭하면 그 곡 재생\n"
-            + "ZIP: 두 번 클릭하면 폴더처럼 들어가 안의 곡(ROL · IMS · SOP · VGM …)과 가사 · 뱅크를 그대로 쓴다\n"
+            + "ZIP: 두 번 클릭하면 폴더처럼 들어가 안의 곡(ROL · IMS · SOP · VGM …)과 가사 · 뱅크를 그대로 쓴다 (ROL · IMS · SOP · MIDI만 든 zip은 풀지 않고 바로 재생)\n"
             + "제목 = 곡 안의 제목 · 가사 = 같은 이름 .ISS · 뱅크 = 같은 이름 .BNK");
 
         emptyLabel.Dock = DockStyle.Fill;
@@ -413,17 +413,21 @@ internal sealed class FileBrowser : UserControl
             list.Items.Add(new ListViewItem("..", "up") { Tag = new Entry { Path = Path.GetDirectoryName(dir.TrimEnd('\\')), IsDir = true, IsUp = true }, ToolTipText = "위 폴더로", ForeColor = ShellTheme.Muted });
         try
         {
-            foreach (var d in Directory.GetDirectories(dir).OrderBy(x => Path.GetFileName(x), StringComparer.OrdinalIgnoreCase))
+            bool inZip = ZipPath.IsZipDirectory(dir);   // 풀지 않고 보는 zip 안
+            foreach (var d in ZipPath.GetDirectories(dir).OrderBy(x => Path.GetFileName(x), StringComparer.OrdinalIgnoreCase))
             {
-                FileAttributes a;
-                try { a = File.GetAttributes(d); } catch (Exception) { continue; }
-                if ((a & (FileAttributes.Hidden | FileAttributes.System)) != 0) continue;
+                if (!inZip)
+                {
+                    FileAttributes a;
+                    try { a = File.GetAttributes(d); } catch (Exception) { continue; }
+                    if ((a & (FileAttributes.Hidden | FileAttributes.System)) != 0) continue;
+                }
                 var it = new ListViewItem(Path.GetFileName(d), "dir") { Tag = new Entry { Path = d, IsDir = true }, ToolTipText = d };
                 it.SubItems.Add("");
                 it.SubItems.Add("폴더");
                 list.Items.Add(it);
             }
-            var files = Directory.GetFiles(dir);
+            var files = ZipPath.GetFiles(dir);
             foreach (var z in files.Where(AdlibComposer.Formats.ZipFolder.IsZip).OrderBy(x => Path.GetFileName(x), StringComparer.OrdinalIgnoreCase))
             {
                 var it = new ListViewItem(Path.GetFileName(z), "zip") { Tag = new Entry { Path = z, IsDir = true, IsZip = true }, ToolTipText = z + "\n두 번 클릭: zip 안으로 (폴더처럼)" };
@@ -462,7 +466,7 @@ internal sealed class FileBrowser : UserControl
         string rel = AtRoot ? "" : Path.GetRelativePath(root, shown);
         string rootName = Path.GetFileName(root.TrimEnd('\\'));
         pathLabel.Text = (rootName.Length > 0 ? rootName : root) + (rel.Length > 0 && rel != "." ? " › " + rel.Replace("\\", " › ") : "");
-        tips.SetToolTip(pathLabel, shown + (zips.Count > 0 ? "\n(zip을 푼 임시 폴더: " + dir + ")" : ""));
+        tips.SetToolTip(pathLabel, shown + (zips.Count > 0 ? (ZipPath.IsZipDirectory(dir) ? "\n(zip 안 — 풀지 않고 바로 읽음)" : "\n(zip을 푼 임시 폴더: " + dir + ")") : ""));
         if (list.Items.Count > 0) list.Items[0].Focused = true;
         lastTop = -1;
         UpdatePager();
@@ -501,7 +505,7 @@ internal sealed class FileBrowser : UserControl
     private void LeaveHoot()
     {
         if (!hootMode) return;
-        if (current != null && Directory.Exists(current)) ShowFolder(current);
+        if (current != null && ZipPath.DirectoryExists(current)) ShowFolder(current);
         else ShowEmpty();
     }
 
@@ -525,19 +529,27 @@ internal sealed class FileBrowser : UserControl
 
     // ---------------------------------------------------------------- ZIP
 
-    /// <summary>zip 안으로: 한 번 풀어 둔 임시 폴더를 연다 (처음이면 푸는 동안 잠깐 기다린다).</summary>
+    /// <summary>
+    /// zip 안으로. 곡이 모두 ROL · IMS · SOP · MUS · MIDI(+ 뱅크 · 가사)인 zip은 풀지 않고 zip 안을 바로 보고 읽는다 (경로 = "zip\안 경로", <see cref="ZipPath"/>).
+    /// 다른 형식(VGM · 트래커 · hoot 항목 …)이나 zip 안 zip이 있으면 한 번 풀어 둔 임시 폴더를 연다 (처음이면 푸는 동안 잠깐 기다린다).
+    /// </summary>
     private void EnterZip(string zipPath)
     {
         string cache;
+        bool direct;
         var old = Cursor;
         Cursor = Cursors.WaitCursor;
-        try { cache = AdlibComposer.Formats.ZipFolder.Extract(zipPath); }
+        try
+        {
+            direct = !ZipPath.IsInZip(zipPath) && ZipPath.CanBrowse(zipPath, f => KindOf(f) != MusicFileKind.None) && !ZipFolder.IsHootArchive(zipPath);
+            cache = direct ? zipPath : ZipFolder.Extract(zipPath);
+        }
         catch (Exception ex) { AppLog.Warn("파일", "zip을 열 수 없습니다: " + Path.GetFileName(zipPath), ex.Message); return; }
         finally { Cursor = old; }
         // 지금 보이는 곳 밖의 zip이면 (끌어다 놓기) 쌓인 것을 정리한다
         while (zips.Count > 0 && !IsUnder(zipPath, zips[zips.Count - 1].Cache)) zips.RemoveAt(zips.Count - 1);
         zips.Add((zipPath, cache));
-        AppLog.Info("파일", "zip 열기: " + DisplayPath(zipPath), "푼 곳 (임시): " + cache);
+        AppLog.Info("파일", "zip 열기: " + DisplayPath(zipPath), direct ? "풀지 않고 zip 안을 바로 읽음 (ROL · IMS · SOP · MIDI)" : "푼 곳 (임시): " + cache);
         ShowFolder(cache);
     }
 
@@ -700,7 +712,7 @@ internal sealed class FileBrowser : UserControl
     private void ClearSearch()
     {
         searchBox.Text = "";
-        if (current != null && Directory.Exists(current)) { EndSearch(); ShowFolder(current); list.Focus(); }
+        if (current != null && ZipPath.DirectoryExists(current)) { EndSearch(); ShowFolder(current); list.Focus(); }
     }
 
     /// <summary>찾은 곡 하나: 파일 (+ 낱말이 든 파일 안 곡들).</summary>
@@ -717,7 +729,7 @@ internal sealed class FileBrowser : UserControl
     /// </summary>
     private void StartSearch(string text)
     {
-        if (current == null || !Directory.Exists(current)) return;
+        if (current == null || !ZipPath.DirectoryExists(current)) return;
         var words = (text ?? "").Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
         if (words.Length == 0) { ClearSearch(); return; }
         int gen = ++searchGeneration;
@@ -758,7 +770,7 @@ internal sealed class FileBrowser : UserControl
                 if (title == null && KindOf(f) != MusicFileKind.Audio)
                 {
                     title = ReadSongTitle(f);
-                    try { lock (titleCache) titleCache[f] = (File.GetLastWriteTimeUtc(f), title); } catch (Exception) { }
+                    try { lock (titleCache) titleCache[f] = (ZipPath.GetLastWriteTimeUtc(f), title); } catch (Exception) { }
                 }
                 title = title ?? "";
                 bool multi = AdlibComposer.Audio.ChipSongs.HasTracks(f);
@@ -802,15 +814,16 @@ internal sealed class FileBrowser : UserControl
             string[] files, subs;
             try
             {
-                files = Directory.GetFiles(d);
-                subs = Directory.GetDirectories(d);
+                files = ZipPath.GetFiles(d);
+                subs = ZipPath.GetDirectories(d);
             }
             catch (Exception) { continue; }
             foreach (var f in files.OrderBy(x => Path.GetFileName(x), StringComparer.OrdinalIgnoreCase))
                 if (KindOf(f) != MusicFileKind.None) yield return f;
             foreach (var sub in subs.OrderByDescending(x => Path.GetFileName(x), StringComparer.OrdinalIgnoreCase))
             {
-                try { if ((File.GetAttributes(sub) & (FileAttributes.Hidden | FileAttributes.System)) != 0) continue; } catch (Exception) { continue; }
+                if (!ZipPath.IsInZip(sub))
+                    try { if ((File.GetAttributes(sub) & (FileAttributes.Hidden | FileAttributes.System)) != 0) continue; } catch (Exception) { continue; }
                 stack.Push(sub);
             }
         }
@@ -867,7 +880,7 @@ internal sealed class FileBrowser : UserControl
         try
         {
             lock (titleCache)
-                if (titleCache.TryGetValue(path, out var c) && c.Time == File.GetLastWriteTimeUtc(path)) return c.Title;
+                if (titleCache.TryGetValue(path, out var c) && c.Time == ZipPath.GetLastWriteTimeUtc(path)) return c.Title;
         }
         catch (Exception) { }
         return null;
@@ -890,7 +903,7 @@ internal sealed class FileBrowser : UserControl
             for (int i = 0; i < todo.Count && gen == titleGeneration; i++)
             {
                 string t = ReadSongTitle(todo[i]);
-                try { lock (titleCache) titleCache[todo[i]] = (File.GetLastWriteTimeUtc(todo[i]), t); } catch (Exception) { }
+                try { lock (titleCache) titleCache[todo[i]] = (ZipPath.GetLastWriteTimeUtc(todo[i]), t); } catch (Exception) { }
                 batch[todo[i]] = t;
                 if (batch.Count >= 25 || i == todo.Count - 1)
                 {
@@ -928,7 +941,7 @@ internal sealed class FileBrowser : UserControl
             else if (ext == ".ims")
             {
                 var fmt = ws.Formats.FindSong(path);
-                if (fmt != null && fmt.CanRead) using (var fs = File.OpenRead(path)) t = fmt.Read(fs).Title;
+                if (fmt != null && fmt.CanRead) using (var fs = ZipPath.OpenRead(path)) t = fmt.Read(fs).Title;
             }
         }
         catch (Exception) { return ""; }

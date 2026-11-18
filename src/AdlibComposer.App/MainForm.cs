@@ -288,6 +288,7 @@ internal sealed class MainForm : Form
 
     private static void OpenInExplorer(string path, bool select)
     {
+        if (ZipPath.TrySplit(path, out string zipFile, out _)) { path = zipFile; select = true; }   // zip 안 파일 = 그 zip을 고른다
         try
         {
             if (select && File.Exists(path)) System.Diagnostics.Process.Start("explorer.exe", "/select,\"" + path + "\"");
@@ -773,7 +774,7 @@ internal sealed class MainForm : Form
     private void RevertSong()
     {
         string path = ws.Song.FilePath;
-        if (string.IsNullOrEmpty(path) || !File.Exists(path)) return;
+        if (string.IsNullOrEmpty(path) || !ZipPath.FileExists(path)) return;
         if (ws.SongDirty && MessageBox.Show(this, "저장하지 않은 변경 내용을 버리고 파일에서 다시 읽을까요?", "Revert",
                 MessageBoxButtons.OKCancel, MessageBoxIcon.Question) != DialogResult.OK) return;
         if (SopFormat.IsSop(path) && !ConfirmDiscardBank()) return;   // SOP는 곡 안 악기로 작업 뱅크도 다시 읽는다
@@ -1101,7 +1102,7 @@ internal sealed class MainForm : Form
     /// <param name="single">끌어다 놓은 파일: Jukebox 다음 곡 목록 = 그 곡만 (왼쪽 목록의 폴더가 아니라).</param>
     private void OpenFromBrowser(string path, bool single)
     {
-        if (string.IsNullOrEmpty(path) || !File.Exists(ChipSongs.FilePart(path))) return;   // "파일::n" = 파일 안 n번 곡
+        if (string.IsNullOrEmpty(path) || !ZipPath.FileExists(ChipSongs.FilePart(path))) return;   // "파일::n" = 파일 안 n번 곡
         var kind = FileBrowser.KindOf(path);
         if (kind == MusicFileKind.Audio)
         {
@@ -1245,12 +1246,12 @@ internal sealed class MainForm : Form
         if (needed.Count == 0) return;
         string dir = Path.GetDirectoryName(songPath);
         string bestPath = null; int best = 0;
-        foreach (string file in Directory.GetFiles(dir, "*.bnk"))
+        foreach (string file in ZipPath.GetFiles(dir, ".bnk"))
         {
             try
             {
                 InstrumentBank b;
-                using (var fs = File.OpenRead(file)) b = ws.Formats.FindBank(file).Read(fs);
+                using (var fs = ZipPath.OpenRead(file)) b = ws.Formats.FindBank(file).Read(fs);
                 int hit = 0;
                 foreach (string n in needed) if (b.Find(n) != null) hit++;
                 if (hit > best) { best = hit; bestPath = file; }

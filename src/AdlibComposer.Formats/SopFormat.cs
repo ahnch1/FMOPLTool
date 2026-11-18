@@ -191,7 +191,7 @@ public static class SopFormat
     public static SopSong Load(string path)
     {
         SopSong s;
-        using (var fs = File.OpenRead(path)) s = Read(fs);
+        using (var fs = ZipPath.OpenRead(path)) s = Read(fs);
         s.FilePath = path;
         return s;
     }

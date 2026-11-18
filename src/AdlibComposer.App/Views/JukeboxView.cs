@@ -505,7 +505,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
         {
             var fmt = ws.Formats.FindSong(path);
             if (fmt == null || !fmt.CanRead) throw new InvalidDataException("읽을 수 없는 곡 형식입니다.");
-            using (var fs = File.OpenRead(path)) s = fmt.Read(fs);
+            using (var fs = ZipPath.OpenRead(path)) s = fmt.Read(fs);
             s.FilePath = path;
             s.Title = System.Text.RegularExpressions.Regex.Replace(s.Title ?? "", @"\s{2,}", " ").Trim();   // IMS 제목은 칸을 맞추느라 공백이 많다
             if (s.Title.Length == 0 || s.Title == "Untitled") s.Title = Path.GetFileNameWithoutExtension(path);
@@ -945,7 +945,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
             if (snd != null) { var sb = ReadBank(snd); if (sb != null) { sameName = true; return sb; } }
             try
             {
-                foreach (var f in Directory.GetFiles(Path.GetDirectoryName(songPath), "*.snd").OrderBy(x => x, StringComparer.OrdinalIgnoreCase))
+                foreach (var f in ZipPath.GetFiles(Path.GetDirectoryName(songPath), ".snd").OrderBy(x => x, StringComparer.OrdinalIgnoreCase))
                 {
                     var sb = ReadBank(f);
                     if (sb != null) return sb;
@@ -979,7 +979,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
             var fmt = ws.Formats.FindBank(path);
             if (fmt == null) return null;
             InstrumentBank b;
-            using (var fs = File.OpenRead(path)) b = fmt.Read(fs);
+            using (var fs = ZipPath.OpenRead(path)) b = fmt.Read(fs);
             b.FilePath = path;
             return b;
         }
@@ -1008,7 +1008,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
         try
         {
             string dir = Path.GetDirectoryName(songPath), stem = Path.GetFileNameWithoutExtension(songPath);
-            foreach (var f in Directory.GetFiles(dir))
+            foreach (var f in ZipPath.GetFiles(dir))
                 if (string.Equals(Path.GetFileNameWithoutExtension(f), stem, StringComparison.OrdinalIgnoreCase)
                     && string.Equals(Path.GetExtension(f), ext, StringComparison.OrdinalIgnoreCase))
                     return f;

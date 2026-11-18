@@ -168,14 +168,14 @@ public static class MidiFiles
     /// <summary>XMI 파일 안 곡 수 (XMI가 아니면 1).</summary>
     public static int SequenceCount(string path)
     {
-        try { var d = File.ReadAllBytes(FilePart(path, out _)); return XmiFormat.IsXmi(d) ? Math.Max(1, XmiFormat.SequenceCount(d)) : 1; }
+        try { var d = ZipPath.ReadAllBytes(FilePart(path, out _)); return XmiFormat.IsXmi(d) ? Math.Max(1, XmiFormat.SequenceCount(d)) : 1; }
         catch (Exception) { return 1; }
     }
 
     public static MidiSong Load(string path)
     {
         string file = FilePart(path, out int seq);
-        byte[] d = File.ReadAllBytes(file);
+        byte[] d = ZipPath.ReadAllBytes(file);
         MidiSong s;
         if (WrkFormat.IsWrk(d)) s = WrkFormat.Read(d);
         else if (XmiFormat.IsXmi(d))
@@ -196,12 +196,12 @@ public static class MidiFiles
         try
         {
             string dir = Path.GetDirectoryName(Path.GetFullPath(xmiPath));
-            var files = Directory.GetFiles(dir);
+            var files = ZipPath.GetFiles(dir);
             string stem = Path.GetFileNameWithoutExtension(xmiPath);
             var pick = files.FirstOrDefault(f => string.Equals(Path.GetFileNameWithoutExtension(f), stem, StringComparison.OrdinalIgnoreCase) && string.Equals(Path.GetExtension(f), ".ad", StringComparison.OrdinalIgnoreCase))
                 ?? files.Where(f => string.Equals(Path.GetExtension(f), ".ad", StringComparison.OrdinalIgnoreCase)).OrderBy(f => f, StringComparer.OrdinalIgnoreCase).FirstOrDefault()
                 ?? files.Where(f => string.Equals(Path.GetExtension(f), ".opl", StringComparison.OrdinalIgnoreCase)).OrderBy(f => f, StringComparer.OrdinalIgnoreCase).FirstOrDefault();
-            return pick == null ? null : AilTimbres.Read(File.ReadAllBytes(pick), Path.GetFileName(pick));
+            return pick == null ? null : AilTimbres.Read(ZipPath.ReadAllBytes(pick), Path.GetFileName(pick));
         }
         catch (Exception) { return null; }
     }

@@ -49,7 +49,7 @@ public sealed class IssLyrics
 
     public static IssLyrics Load(string path)
     {
-        return Read(File.ReadAllBytes(path));
+        return Read(ZipPath.ReadAllBytes(path));
     }
 
     public static IssLyrics Read(byte[] b)

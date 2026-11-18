@@ -146,7 +146,7 @@ internal sealed class Workspace : IDisposable
         var fmt = Formats.FindSong(path);
         if (fmt == null || !fmt.CanRead) throw new InvalidDataException("읽을 수 없는 곡 형식입니다: " + Path.GetExtension(path));
         Song song;
-        using (var fs = File.OpenRead(path)) song = fmt.Read(fs);
+        using (var fs = ZipPath.OpenRead(path)) song = fmt.Read(fs);
         song.FilePath = path;
         song.Title = Path.GetFileNameWithoutExtension(path);
         Song = song;
@@ -224,7 +224,7 @@ internal sealed class Workspace : IDisposable
         var fmt = Formats.FindBank(path);
         if (fmt == null) throw new InvalidDataException("읽을 수 없는 뱅크 형식입니다.");
         InstrumentBank bank;
-        using (var fs = File.OpenRead(path)) bank = fmt.Read(fs);
+        using (var fs = ZipPath.OpenRead(path)) bank = fmt.Read(fs);
         bank.FilePath = path;
         Bank = bank;
         BankDirty = false;
@@ -278,7 +278,7 @@ internal sealed class Workspace : IDisposable
         var fmt = Formats.FindInstrument(path);
         if (fmt == null) throw new InvalidDataException("읽을 수 없는 악기 형식입니다.");
         AdlibInstrument ins;
-        using (var fs = File.OpenRead(path)) ins = fmt.Read(fs, Path.GetFileNameWithoutExtension(path));
+        using (var fs = ZipPath.OpenRead(path)) ins = fmt.Read(fs, Path.GetFileNameWithoutExtension(path));
         Bank.Add(ins);
         BankDirty = true;
         SelectInstrument(ins);

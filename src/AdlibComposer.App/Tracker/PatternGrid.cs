@@ -7,7 +7,7 @@ using AdlibComposer.Formats;
 namespace AdlibComposer.App.Tracker;
 
 /// <summary>
-/// Scream Tracker 3 패턴 편집 화면 (F2). 한 칸 = "C-5 04 12 H81" (음 · 옥타브, 악기, 볼륨, 명령, 인포).
+/// Scream Tracker 3 패턴 편집 화면 (F2). 한 칸 = "C-5 04 v12 H81" (음 · 옥타브, 악기, 볼륨, 명령, 인포). 색 · 배치는 OpenMPT 패턴 화면처럼.
 /// 키 (ST3 그대로): 아랫줄 Z S X D C V G B H N J M = 기준 옥타브, 윗줄 Q 2 W 3 E R 5 T 6 Y 7 U I 9 O 0 P = 한 옥타브 위부터,
 /// . = 지우기, 1 = ^^ (노트 오프), / * = 기준 옥타브, &lt; &gt; = 악기, Enter = 칸의 음 · 악기 가져오기, Ins / Del = 줄 넣기 / 빼기,
 /// 4 = 칸의 음 듣기, 8 = 줄 듣기, Alt+Q / Alt+A = 고른 영역 반음 올림/내림, Shift+화살표 = 영역, Ctrl+C / X / V = 복사 / 잘라내기 / 붙이기, Ctrl+Z = 되돌리기.
@@ -15,24 +15,32 @@ namespace AdlibComposer.App.Tracker;
 [System.ComponentModel.DesignerCategory("Code")]
 internal sealed class PatternGrid : Control
 {
-    // ST3 색 (파란 바탕)
-    public static readonly Color Back = Color.FromArgb(0, 0, 112);
-    public static readonly Color BackBar = Color.FromArgb(18, 18, 140);
-    public static readonly Color BackBeat = Color.FromArgb(10, 10, 126);
-    public static readonly Color HeadBack = Color.FromArgb(0, 0, 80);
-    public static readonly Color Dim = Color.FromArgb(70, 80, 160);
-    public static readonly Color NoteFg = Color.FromArgb(240, 240, 240);
-    public static readonly Color InsFg = Color.FromArgb(90, 230, 230);
-    public static readonly Color VolFg = Color.FromArgb(110, 230, 110);
-    public static readonly Color CmdFg = Color.FromArgb(240, 220, 90);
-    public static readonly Color RowNoFg = Color.FromArgb(170, 170, 200);
-    public static readonly Color CursorBack = Color.FromArgb(200, 200, 200);
-    public static readonly Color PlayBack = Color.FromArgb(120, 30, 60);
-    public static readonly Color SelBack = Color.FromArgb(60, 90, 180);
+    // OpenMPT 패턴 화면 색 (흰 바탕, 박 · 마디 줄은 옅은 회녹색, 재생 줄은 노랑)
+    public static readonly Color Back = Color.White;
+    public static readonly Color BackBeat = Color.FromArgb(242, 246, 242);
+    public static readonly Color BackBar = Color.FromArgb(226, 236, 228);
+    public static readonly Color HeadBack = Color.FromArgb(240, 240, 240);
+    public static readonly Color HeadLine = Color.FromArgb(200, 200, 200);
+    public static readonly Color RowNoBack = Color.FromArgb(236, 236, 236);
+    public static readonly Color ColumnLine = Color.FromArgb(210, 210, 210);
+    public static readonly Color Dim = Color.FromArgb(170, 170, 170);          // 빈 칸 점 · 꺼진 채널
+    public static readonly Color NoteFg = Color.FromArgb(20, 20, 20);         // 음: 검정
+    public static readonly Color InsFg = Color.FromArgb(0, 128, 128);         // 악기: 청록
+    public static readonly Color VolFg = Color.FromArgb(0, 128, 0);           // 볼륨: 초록
+    public static readonly Color CmdFg = Color.FromArgb(0, 64, 192);          // 효과: 파랑
+    public static readonly Color RowNoFg = Color.FromArgb(60, 60, 60);
+    public static readonly Color CursorBack = Color.FromArgb(40, 40, 40);     // 커서 칸: 검은 칸에 흰 글자
+    public static readonly Color CursorRowBack = Color.FromArgb(232, 240, 255);
+    public static readonly Color PlayBack = Color.FromArgb(255, 255, 140);   // 재생 줄
+    public static readonly Color SelBack = Color.FromArgb(180, 210, 240);
+    public static readonly Color MeterOn = Color.FromArgb(0, 168, 0), MeterOff = Color.FromArgb(214, 214, 214);
+
+    /// <summary>채널 음량 0~1 (머리줄 막대). 재생기가 채운다 (없으면 막대 없음).</summary>
+    public float[] Levels = new float[TrackerModule.MaxChannels];
 
     private static readonly string[] NoteNames = { "C-", "C#", "D-", "D#", "E-", "F-", "F#", "G-", "G#", "A-", "A#", "B-" };
-    /// <summary>칸 안의 글자 위치: 음(3) 공백 악기(2) 공백 볼륨(2) 공백 명령(1) 인포(2) = 13글자.</summary>
-    private static readonly int[] FieldCol = { 0, 4, 5, 7, 8, 10, 11, 12 };
+    /// <summary>칸 안의 글자 위치: 음(3) 공백 악기(2) 공백 v볼륨(3) 공백 명령(1) 인포(2) = 14글자 (OpenMPT처럼 볼륨 앞에 v).</summary>
+    private static readonly int[] FieldCol = { 0, 4, 5, 8, 9, 11, 12, 13 };
     private static readonly int[] FieldWidth = { 3, 1, 1, 1, 1, 1, 1, 1 };
     public const int Fields = 8;   // 0 음, 1 악기 10, 2 악기 1, 3 볼륨 10, 4 볼륨 1, 5 명령, 6 인포 16, 7 인포 1
 
@@ -108,8 +116,9 @@ internal sealed class PatternGrid : Control
     public TrackerPattern Pattern { get { return pattern; } }
     private int ChannelCount { get { return module == null ? 0 : module.UsedChannelCount; } }
     private int RowNoW { get { return charW * 3 + 6; } }
-    private int ChannelW { get { return charW * 13 + 10; } }
-    private int HeaderH { get { return lineH + 6; } }
+    private int ChannelW { get { return charW * 14 + 10; } }
+    /// <summary>머리줄: 색 띠 4 + 이름 + 음량 막대 6.</summary>
+    private int HeaderH { get { return lineH + 18; } }
     private int VisibleRows { get { return Math.Max(1, (Height - hbar.Height - HeaderH) / lineH); } }
     private int VisibleChannels { get { return Math.Max(1, (Width - vbar.Width - RowNoW) / ChannelW); } }
 
@@ -144,7 +153,7 @@ internal sealed class PatternGrid : Control
 
     public static string NoteText(TrackerCell c)
     {
-        if (c.Note == TrackerCell.NoNote) return "···";
+        if (c.Note == TrackerCell.NoNote) return "...";
         if (c.Note == TrackerCell.NoteOff) return "^^ ";
         return NoteNames[Math.Min(11, c.Note & 15)] + (c.Note >> 4);
     }
@@ -155,43 +164,86 @@ internal sealed class PatternGrid : Control
         g.Clear(Back);
         if (module == null || pattern == null) return;
         int vr = VisibleRows, vc = VisibleChannels;
+        int gridW = Width - vbar.Width;
         var flags = TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix;
-        // 머리글: 01: L1 …
-        using (var hb = new SolidBrush(HeadBack)) g.FillRectangle(hb, 0, 0, Width, HeaderH);
-        for (int k = 0; k < vc && firstChannel + k < ChannelCount; k++)
-        {
-            int c = firstChannel + k;
-            int x = RowNoW + k * ChannelW;
-            bool used = module.IsChannelUsed(c);
-            string h = (c + 1).ToString("00") + ": " + module.ChannelLabel(c);
-            TextRenderer.DrawText(g, h, font, new Point(x + 4, 3), used ? (c == CursorChannel ? Color.White : RowNoFg) : Dim, flags);
-        }
         int minR = Math.Min(SelStart.Y, SelEnd.Y), maxR = Math.Max(SelStart.Y, SelEnd.Y);
         int minC = Math.Min(SelStart.X, SelEnd.X), maxC = Math.Max(SelStart.X, SelEnd.X);
+
+        // 줄
         for (int i = 0; i < vr && firstRow + i < TrackerPattern.Rows; i++)
         {
             int r = firstRow + i;
             int y = HeaderH + i * lineH;
-            Color rowBack = r == PlayRow ? PlayBack : r % BarRows == 0 ? BackBar : r % BeatRows == 0 ? BackBeat : Back;
-            using (var b = new SolidBrush(rowBack)) g.FillRectangle(b, 0, y, Width - vbar.Width, lineH);
-            TextRenderer.DrawText(g, r.ToString("00"), font, new Point(4, y + 1), r == CursorRow ? Color.White : RowNoFg, flags);
+            Color rowBack = r == PlayRow ? PlayBack : r == CursorRow ? CursorRowBack : r % BarRows == 0 ? BackBar : r % BeatRows == 0 ? BackBeat : Back;
+            int shown = Math.Min(vc, ChannelCount - firstChannel);
+            using (var b = new SolidBrush(rowBack)) g.FillRectangle(b, RowNoW, y, Math.Min(gridW - RowNoW, shown * ChannelW), lineH);   // 채널 칸까지만
+            // 줄 번호 칸 (회색, 박 · 마디는 굵게)
+            using (var b = new SolidBrush(r == PlayRow ? PlayBack : RowNoBack)) g.FillRectangle(b, 0, y, RowNoW - 1, lineH);
+            TextRenderer.DrawText(g, r.ToString("00"), font, new Point(4, y + 1), r % BeatRows == 0 ? Color.Black : RowNoFg, flags);
             for (int k = 0; k < vc && firstChannel + k < ChannelCount; k++)
             {
                 int c = firstChannel + k;
                 int x = RowNoW + k * ChannelW;
                 if (SelStart.X >= 0 && c >= minC && c <= maxC && r >= minR && r <= maxR)
-                    using (var sb = new SolidBrush(SelBack)) g.FillRectangle(sb, x, y, ChannelW - 6, lineH);
+                    using (var sb = new SolidBrush(SelBack)) g.FillRectangle(sb, x, y, ChannelW - 1, lineH);
                 var cell = pattern[r, c];
-                if (r == CursorRow && c == CursorChannel)
+                bool cur = r == CursorRow && c == CursorChannel;
+                if (cur)
                 {
                     int fx = x + 4 + FieldCol[CursorField] * charW;
                     using (var cb = new SolidBrush(CursorBack)) g.FillRectangle(cb, fx - 1, y, FieldWidth[CursorField] * charW + 2, lineH);
                 }
-                bool used = module.IsChannelUsed(c);
-                Draw(g, x + 4, y + 1, cell, used, r == CursorRow && c == CursorChannel ? CursorField : -1);
-                using (var p = new Pen(HeadBack)) g.DrawLine(p, x + ChannelW - 4, y, x + ChannelW - 4, y + lineH);
+                Draw(g, x + 4, y + 1, cell, module.IsChannelUsed(c), cur ? CursorField : -1);
             }
         }
+        // 세로 선: 줄 번호 | 채널 사이
+        using (var p = new Pen(ColumnLine))
+        {
+            int bottom = HeaderH + Math.Min(vr, TrackerPattern.Rows - firstRow) * lineH;
+            g.DrawLine(p, RowNoW - 1, HeaderH, RowNoW - 1, bottom);
+            for (int k = 0; k < vc && firstChannel + k < ChannelCount; k++)
+            {
+                int x = RowNoW + (k + 1) * ChannelW - 1;
+                g.DrawLine(p, x, HeaderH, x, bottom);
+            }
+        }
+        DrawHeader(g, vc, gridW);
+    }
+
+    /// <summary>머리줄 (OpenMPT): 회색 바탕, 채널 색 파스텔 띠, "1: L1" 이름, 그 아래 초록 음량 막대.</summary>
+    private void DrawHeader(Graphics g, int vc, int gridW)
+    {
+        var flags = TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix;
+        using (var hb = new SolidBrush(HeadBack)) g.FillRectangle(hb, 0, 0, gridW, HeaderH);
+        TextRenderer.DrawText(g, "#" + (Math.Max(0, PatternNumber)), font, new Rectangle(0, 4, RowNoW - 1, HeaderH - 4), RowNoFg, flags | TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+        for (int k = 0; k < vc && firstChannel + k < ChannelCount; k++)
+        {
+            int c = firstChannel + k;
+            int x = RowNoW + k * ChannelW;
+            bool used = module.IsChannelUsed(c);
+            Color strip = used ? Shell.VoiceColors.Get(c) : Dim;
+            using (var b = new SolidBrush(Blend(strip, Color.White, 0.45f))) g.FillRectangle(b, x, 0, ChannelW - 1, 4);
+            string h = (c + 1) + ": " + module.ChannelLabel(c);
+            TextRenderer.DrawText(g, h, font, new Rectangle(x, 5, ChannelW - 1, lineH), !used ? Dim : c == CursorChannel ? Color.Black : RowNoFg,
+                flags | TextFormatFlags.HorizontalCenter | TextFormatFlags.EndEllipsis);
+            // 음량 막대: 가운데 칸 나눈 초록 막대
+            int mw = Math.Min(ChannelW - 20, 64), mx = x + (ChannelW - mw) / 2, my = 6 + lineH;
+            const int seg = 3, gap = 1;
+            int n = mw / (seg + gap);
+            int on = used ? (int)Math.Round(Math.Max(0, Math.Min(1, c < Levels.Length ? Levels[c] : 0)) * n) : 0;
+            for (int s = 0; s < n; s++)
+                using (var b = new SolidBrush(s < on ? MeterOn : MeterOff)) g.FillRectangle(b, mx + s * (seg + gap), my, seg, 6);
+            using (var p = new Pen(HeadLine)) g.DrawLine(p, x + ChannelW - 1, 0, x + ChannelW - 1, HeaderH);
+        }
+        using (var p = new Pen(HeadLine)) g.DrawLine(p, 0, HeaderH - 1, gridW, HeaderH - 1);
+    }
+
+    /// <summary>머리줄 왼쪽 "#n" (지금 패턴 번호).</summary>
+    public int PatternNumber = -1;
+
+    private static Color Blend(Color a, Color b, float t)
+    {
+        return Color.FromArgb((int)(a.R + (b.R - a.R) * t), (int)(a.G + (b.G - a.G) * t), (int)(a.B + (b.B - a.B) * t));
     }
 
     private void Draw(Graphics g, int x, int y, TrackerCell c, bool used, int cursorField)
@@ -199,10 +251,10 @@ internal sealed class PatternGrid : Control
         var flags = TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix;
         Color dim = Dim;
         string note = NoteText(c);
-        string ins = c.Instrument == 0 ? "··" : c.Instrument.ToString("00");
-        string vol = c.Volume == TrackerCell.NoVolume ? "··" : c.Volume.ToString("00");
-        string cmd = c.Command == 0 ? "·" : ((char)('A' + c.Command - 1)).ToString();
-        string inf = c.Command == 0 && c.Info == 0 ? "00" : c.Info.ToString("X2");
+        string ins = c.Instrument == 0 ? ".." : c.Instrument.ToString("00");
+        string vol = c.Volume == TrackerCell.NoVolume ? ".." : c.Volume.ToString("00");
+        string cmd = c.Command == 0 ? "." : ((char)('A' + c.Command - 1)).ToString();
+        string inf = c.Command == 0 && c.Info == 0 ? ".." : c.Info.ToString("X2");
         Color fn = !used ? dim : c.Note == TrackerCell.NoNote ? dim : NoteFg;
         Color fi = !used || c.Instrument == 0 ? dim : InsFg;
         Color fv = !used || c.Volume == TrackerCell.NoVolume ? dim : VolFg;
@@ -210,17 +262,18 @@ internal sealed class PatternGrid : Control
         DrawField(g, note, x, y, fn, cursorField == 0, flags);
         DrawField(g, ins.Substring(0, 1), x + 4 * charW, y, fi, cursorField == 1, flags);
         DrawField(g, ins.Substring(1, 1), x + 5 * charW, y, fi, cursorField == 2, flags);
-        DrawField(g, vol.Substring(0, 1), x + 7 * charW, y, fv, cursorField == 3, flags);
-        DrawField(g, vol.Substring(1, 1), x + 8 * charW, y, fv, cursorField == 4, flags);
-        DrawField(g, cmd, x + 10 * charW, y, fc, cursorField == 5, flags);
-        DrawField(g, inf.Substring(0, 1), x + 11 * charW, y, fc, cursorField == 6, flags);
-        DrawField(g, inf.Substring(1, 1), x + 12 * charW, y, fc, cursorField == 7, flags);
+        DrawField(g, c.Volume == TrackerCell.NoVolume ? "." : "v", x + 7 * charW, y, fv, false, flags);
+        DrawField(g, vol.Substring(0, 1), x + 8 * charW, y, fv, cursorField == 3, flags);
+        DrawField(g, vol.Substring(1, 1), x + 9 * charW, y, fv, cursorField == 4, flags);
+        DrawField(g, cmd, x + 11 * charW, y, fc, cursorField == 5, flags);
+        DrawField(g, inf.Substring(0, 1), x + 12 * charW, y, fc, cursorField == 6, flags);
+        DrawField(g, inf.Substring(1, 1), x + 13 * charW, y, fc, cursorField == 7, flags);
     }
 
     private void DrawField(Graphics g, string s, int x, int y, Color fg, bool cursor, TextFormatFlags flags)
     {
         for (int i = 0; i < s.Length; i++)
-            TextRenderer.DrawText(g, s.Substring(i, 1), font, new Point(x + i * charW, y), cursor ? Color.Black : fg, flags);
+            TextRenderer.DrawText(g, s.Substring(i, 1), font, new Point(x + i * charW, y), cursor ? Color.White : fg, flags);
     }
 
     // ---------------------------------------------------------------- 마우스

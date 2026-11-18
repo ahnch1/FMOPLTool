@@ -22,10 +22,12 @@ internal sealed class TrackerView : UserControl, IShellPage
     private readonly Func<AppSettings> settings;
     private readonly Func<bool> openAudio;
     private readonly ToolStrip bar = new ToolStrip();
-    private readonly ToolStripButton tabOrders, tabPattern, tabInstruments, followButton;
+    private readonly ToolStripButton tabOrders, tabPattern, tabInstruments, tabStmod, followButton;
     private readonly Label header = new Label();
     private readonly Panel host = new Panel();
     private readonly PatternGrid grid = new PatternGrid();
+    /// <summary>F4 STMOD: Scream Tracker 2 플레이어 화면 (레트로).</summary>
+    private readonly StmodView stmod = new StmodView { Dock = DockStyle.Fill, Visible = false };
     private readonly Panel ordersPanel = new Panel(), instrumentsPanel = new Panel();
     private readonly Timer timer = new Timer { Interval = 30 };
     private readonly ToolTip tips = new ToolTip();
@@ -76,6 +78,8 @@ internal sealed class TrackerView : UserControl, IShellPage
         tabOrders = Tab("F1 주문·변수", delegate { ShowTab(0); });
         tabPattern = Tab("F2 패턴", delegate { ShowTab(1); });
         tabInstruments = Tab("F3 악기", delegate { ShowTab(2); });
+        tabStmod = Tab("F4 STMOD", delegate { ShowTab(3); });
+        tabStmod.ToolTipText = "Scream Tracker 2 플레이어 화면 (채널마다 음량 막대 · 악기 이름, 휠 · 스크롤바로 채널 넘기기)";
         followButton = new ToolStripButton("따라가기") { CheckOnClick = true, Checked = true, ToolTipText = "재생 중 패턴 화면이 재생 위치를 따라간다 (ST3 Scroll Lock)" };
         bar.Items.AddRange(new ToolStripItem[]
         {
@@ -83,7 +87,7 @@ internal sealed class TrackerView : UserControl, IShellPage
             Button("저장", Glyphs.Save, "저장 (Ctrl+S)", delegate { Save(false); }),
             Button("다른 이름", Glyphs.Save, "다른 이름 / 다른 형식(S3M ↔ STM)으로 저장", delegate { Save(true); }),
             new ToolStripSeparator(),
-            tabOrders, tabPattern, tabInstruments,
+            tabOrders, tabPattern, tabInstruments, tabStmod,
             new ToolStripSeparator(),
             Button("곡", Glyphs.Play, "곡 재생 (F5)", delegate { PlaySong(0, 0); }),
             Button("패턴", Glyphs.Play, "지금 패턴만 되풀이 (F6)", delegate { PlayPattern(); }),
@@ -96,7 +100,7 @@ internal sealed class TrackerView : UserControl, IShellPage
         header.Height = 28;
         header.Font = new Font("Consolas", 10f);
         header.BackColor = PatternGrid.HeadBack;
-        header.ForeColor = Color.FromArgb(220, 220, 240);
+        header.ForeColor = PatternGrid.RowNoFg;
         header.Padding = new Padding(10, 0, 0, 0);
         header.TextAlign = ContentAlignment.MiddleLeft;
 
@@ -108,6 +112,7 @@ internal sealed class TrackerView : UserControl, IShellPage
         host.Controls.Add(grid);
         host.Controls.Add(ordersPanel);
         host.Controls.Add(instrumentsPanel);
+        host.Controls.Add(stmod);
         Controls.Add(host);
         Controls.Add(header);
         Controls.Add(bar);
@@ -163,8 +168,9 @@ internal sealed class TrackerView : UserControl, IShellPage
 
     private void ShowTab(int t)
     {
-        tabOrders.Checked = t == 0; tabPattern.Checked = t == 1; tabInstruments.Checked = t == 2;
-        ordersPanel.Visible = t == 0; grid.Visible = t == 1; instrumentsPanel.Visible = t == 2;
+        tabOrders.Checked = t == 0; tabPattern.Checked = t == 1; tabInstruments.Checked = t == 2; tabStmod.Checked = t == 3;
+        ordersPanel.Visible = t == 0; grid.Visible = t == 1; instrumentsPanel.Visible = t == 2; stmod.Visible = t == 3;
+        if (t == 3) { stmod.Focus(); return; }
         if (t == 0) BindOrders();
         if (t == 2) BindInstruments();
         if (t == 1) { BindPattern(); grid.Focus(); }
@@ -265,12 +271,14 @@ internal sealed class TrackerView : UserControl, IShellPage
         BindPattern();
         BindOrders();
         BindInstruments();
+        stmod.Bind(module);
         UpdateHeader();
     }
 
     private void BindPattern()
     {
         patternIndex = Math.Max(0, Math.Min(module.Patterns.Count - 1, patternIndex));
+        grid.PatternNumber = patternIndex;
         grid.Bind(module, module.Patterns[patternIndex]);
         UpdateHeader();
     }
@@ -357,6 +365,8 @@ internal sealed class TrackerView : UserControl, IShellPage
         jamChannel = -1;
         timer.Stop();
         grid.PlayRow = -1;
+        Array.Clear(grid.Levels, 0, grid.Levels.Length);
+        stmod.Silence();
         grid.Invalidate();
     }
 
@@ -379,8 +389,21 @@ internal sealed class TrackerView : UserControl, IShellPage
             grid.EnsureVisible(r, true);
         }
         else grid.PlayRow = p == patternIndex ? r : -1;
+        // 머리줄 음량 막대: 노트가 울릴 때 그 볼륨으로 올라가고 천천히 내려온다
+        ws.Audio.GetVoiceStates(voiceStates);
+        for (int c = 0; c < grid.Levels.Length && c < voiceStates.Length; c++)
+        {
+            var vs = voiceStates[c];
+            float target = vs.Note >= 0 ? Math.Max(0.1f, vs.Volume) : 0f;
+            if (vs.NoteOnCount != lastNoteOn[c]) { lastNoteOn[c] = vs.NoteOnCount; grid.Levels[c] = Math.Max(grid.Levels[c], target); }
+            else grid.Levels[c] = Math.Max(target * 0.8f, grid.Levels[c] * 0.88f);
+        }
         grid.Invalidate();
+        if (stmod.Visible) stmod.Update(voiceStates, true);
     }
+
+    private readonly AdlibComposer.Audio.VoiceState[] voiceStates = new AdlibComposer.Audio.VoiceState[AdlibComposer.Audio.PlaybackOptions.Voices];
+    private readonly int[] lastNoteOn = new int[AdlibComposer.Audio.PlaybackOptions.Voices];
 
     // ================================================================ 키 (ST3)
 
@@ -391,6 +414,7 @@ internal sealed class TrackerView : UserControl, IShellPage
             case Keys.F1: ShowTab(0); return true;
             case Keys.F2: ShowTab(1); return true;
             case Keys.F3: ShowTab(2); return true;
+            case Keys.F4: ShowTab(3); return true;
             case Keys.F5: case Keys.Shift | Keys.F5: PlaySong(0, 0); return true;
             case Keys.F6: PlayPattern(); return true;
             case Keys.Shift | Keys.F6: PlaySong(order, 0); return true;
@@ -596,6 +620,7 @@ internal sealed class TrackerView : UserControl, IShellPage
         int pan;
         if (int.TryParse(Convert.ToString(channelGrid.Rows[c].Cells[2].Value), out pan)) module.Pan[c] = (byte)Math.Max(0, Math.Min(15, pan));
         MarkDirty();
+        grid.PatternNumber = patternIndex;
         grid.Bind(module, module.Patterns[patternIndex]);
     }
 
@@ -950,7 +975,7 @@ internal sealed class WaveView : Control
         if (s.Loop && s.LoopEnd > s.LoopStart)
         {
             float x0 = (float)s.LoopStart / s.Length * Width, x1 = (float)s.LoopEnd / s.Length * Width;
-            using (var b = new SolidBrush(Color.FromArgb(40, 40, 160))) g.FillRectangle(b, x0, 0, x1 - x0, Height);
+            using (var b = new SolidBrush(PatternGrid.SelBack)) g.FillRectangle(b, x0, 0, x1 - x0, Height);
         }
         using (var p = new Pen(PatternGrid.VolFg))
         {

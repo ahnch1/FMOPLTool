@@ -38,7 +38,13 @@ internal sealed class MainForm : Form
     private readonly NavBar navBar = new NavBar();
     private readonly FileBrowser browser;
     private readonly Splitter browserSplitter = new Splitter();
+    /// <summary>
+    /// 페이지 안 도구 막대 (머리글 아래): Composer = 새 곡 · 저장 · 뱅크 브라우저 · 재생 · 현재 위치부터 재생 · 정지,
+    /// Note · Orgel Note · Transcribe = 재생 버튼만. 다른 페이지에서는 숨김. 메뉴 아래(예전 툴바 자리)는 Jukebox 막대.
+    /// </summary>
     private readonly ToolStrip toolbar = new ToolStrip();
+    /// <summary>Composer에서만 보이는 막대 항목 (새 곡 · 저장 · 뱅크 브라우저와 구분선).</summary>
+    private readonly List<ToolStripItem> composerTools = new List<ToolStripItem>();
     private readonly Panel header = new Panel();
     private readonly Label headerTitle = new Label();
     private readonly Panel pageHost = new Panel();
@@ -94,6 +100,7 @@ internal sealed class MainForm : Form
         browser = new FileBrowser(ws, delegate { return settings; }) { Dock = DockStyle.Left, Width = 300 };
         browser.FileActivated += OpenFromBrowser;
         jukebox = new JukeboxView(ws, delegate { return settings; }, TryOpenAudio, browser) { Dock = DockStyle.Fill };
+        jukebox.PreferencesRequested += ShowPreferences;
         note = new NoteView(ws, TryOpenAudio, delegate { return SongFolder(); }) { Dock = DockStyle.Fill, Visible = false };
         trackerView = new TrackerView(ws, delegate { return settings; }, TryOpenAudio) { Dock = DockStyle.Fill, Visible = false };
         organizer = new OrganizerView(delegate { return settings; }) { Dock = DockStyle.Fill, Visible = false };
@@ -131,6 +138,7 @@ internal sealed class MainForm : Form
         if (settings.LoadWarning != null) AppLog.Warn("설정", settings.LoadWarning);
         SyncMenus();
         LoadStartupBank();
+        UpdatePageBars();
         UpdateHeader();
         UpdateStatus();
         if (settings.LoadWarning != null) statusMain.Text = settings.LoadWarning;
@@ -180,13 +188,14 @@ internal sealed class MainForm : Form
         content.Controls.Add(pageHost);
         content.Controls.Add(logSplitter);
         content.Controls.Add(logPanel);
+        content.Controls.Add(toolbar);   // 머리글 아래
         content.Controls.Add(header);
 
         Controls.Add(content);
         Controls.Add(browserSplitter);
         Controls.Add(browser);
         Controls.Add(status);
-        Controls.Add(toolbar);
+        Controls.Add(jukebox.ControlBar);   // 메뉴 아래 (예전 툴바 자리): Jukebox 재생 · 속도 · 키 · 볼륨 · 음색 · MIDI
         Controls.Add(navBar);
         Controls.Add(menu);
     }
@@ -211,7 +220,7 @@ internal sealed class MainForm : Form
         toolbar.GripStyle = ToolStripGripStyle.Hidden;
         toolbar.RenderMode = ToolStripRenderMode.System;
         toolbar.BackColor = Color.FromArgb(248, 249, 250);
-        toolbar.Padding = new Padding(16, 6, 16, 6);
+        toolbar.Padding = new Padding(12, 4, 12, 4);
         toolbar.Font = ToolFont;
         toolbar.ImageScalingSize = new Size(ToolIcon, ToolIcon);
         // 공통 재생 버튼: Composer · Note · Orgel Note · Transcribe가 같이 쓴다 (지금 페이지에 보낸다)
@@ -220,18 +229,27 @@ internal sealed class MainForm : Form
         tbStop = ToolButton("정지", Glyphs.Stop, "정지 (Esc)", delegate { PageStop(); });
         var settingsButton = ToolButton("설정", Glyphs.Settings, "Preferences (Ctrl+,)", delegate { ShowPreferences(); });
         settingsButton.Alignment = ToolStripItemAlignment.Right;
-        toolbar.Items.AddRange(new ToolStripItem[]
+        composerTools.AddRange(new ToolStripItem[]
         {
             ToolButton("새 곡", Glyphs.NewFile, "새 곡 (Ctrl+N)", delegate { NewSong(); ShowPage(AppPage.Composer); }),
             ToolButton("저장", Glyphs.Save, "곡 저장 (Ctrl+S)", delegate { SaveSong(false); }),
             new ToolStripSeparator(),
             ToolButton("뱅크 브라우저", Glyphs.Library, "BNK 목록 · 악기 목록 · 불러오기 (Ctrl+B)", delegate { OpenBankBrowser(); }),
             new ToolStripSeparator(),
-            tbPlay,
-            tbPlayCursor,
-            tbStop,
-            settingsButton,
         });
+        toolbar.Items.AddRange(composerTools.ToArray());
+        toolbar.Items.AddRange(new ToolStripItem[] { tbPlay, tbPlayCursor, tbStop, settingsButton });
+    }
+
+    /// <summary>
+    /// 페이지에 맞춰 막대를 보이고 숨긴다: 메뉴 아래 Jukebox 막대 = Jukebox에서만,
+    /// 페이지 안 막대 = Composer(전부) · Note · Orgel Note · Transcribe(재생 버튼만).
+    /// </summary>
+    private void UpdatePageBars()
+    {
+        jukebox.ControlBar.Visible = page == AppPage.Jukebox;
+        toolbar.Visible = composerMode || page == AppPage.Note || page == AppPage.Orgel || page == AppPage.Transcribe;
+        foreach (var it in composerTools) it.Available = composerMode;
     }
 
     /// <summary>페이지 메뉴 / Ctrl+1~8: 페이지 바꾸기 (Ctrl+1 Jukebox, 2 Composer, 3 Instrument Maker, 4 Note …).</summary>
@@ -259,6 +277,7 @@ internal sealed class MainForm : Form
         var shown = PageControl(target) as IShellPage;
         if (shown != null) shown.OnShown();
 
+        UpdatePageBars();
         UpdateHeader();
         SyncMenus();
         UpdateStatus();
@@ -475,7 +494,7 @@ internal sealed class MainForm : Form
     {
         Activate();
         var firstKind = FileBrowser.KindOf(files[0]);
-        if (page != AppPage.Jukebox && (firstKind == MusicFileKind.Audio || PullsFromJukebox(page, firstKind))) { OpenFromBrowser(files[0], true); return; }
+        if (page != AppPage.Jukebox && (firstKind == MusicFileKind.Audio || PullsFromJukebox(page, firstKind, files[0]))) { OpenFromBrowser(files[0], true); return; }
         if (files.Any(JukeboxView.CanPlay)) { ShowPage(AppPage.Jukebox); jukebox.PlayFiles(files); return; }
         OpenFromBrowser(files[0], true);
     }
@@ -1112,7 +1131,7 @@ internal sealed class MainForm : Form
             return;
         }
         if (!JukeboxView.CanPlay(path)) return;
-        if (page != AppPage.Jukebox && PullsFromJukebox(page, kind))
+        if (page != AppPage.Jukebox && PullsFromJukebox(page, kind, path))
         {
             jukebox.Cue(path);
             PullFromJukebox(page);
@@ -1125,10 +1144,10 @@ internal sealed class MainForm : Form
     }
 
     /// <summary>이 페이지가 Jukebox의 이 종류 곡을 불러오는가: ROL · IMS · SOP → Composer · Note · Orgel Note, 트래커 곡 → Tracker.</summary>
-    private static bool PullsFromJukebox(AppPage target, MusicFileKind kind)
+    private static bool PullsFromJukebox(AppPage target, MusicFileKind kind, string path)
     {
         if (kind == MusicFileKind.Adlib || kind == MusicFileKind.Vgm) return target == AppPage.Composer || target == AppPage.Note || target == AppPage.Orgel;
-        return kind == MusicFileKind.Tracker && target == AppPage.Tracker;
+        return kind == MusicFileKind.Tracker && target == AppPage.Tracker && !ExtModule.IsExtModule(path);   // XM · IT는 재생만 (Tracker 편집기는 S3M 모델)
     }
 
     /// <summary>마지막으로 불러온 Jukebox 곡 (작업 곡 / 트래커 곡): 같은 곡을 페이지를 오갈 때마다 다시 읽지 않도록.</summary>
@@ -1143,7 +1162,7 @@ internal sealed class MainForm : Form
         string path = jukebox.CurrentPath;
         if (path == null) return;
         var kind = FileBrowser.KindOf(path);
-        if (!PullsFromJukebox(target, kind)) return;
+        if (!PullsFromJukebox(target, kind, path)) return;
         if (kind == MusicFileKind.Tracker)
         {
             if (SamePath(path, pulledTracker)) return;

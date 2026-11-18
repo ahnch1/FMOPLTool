@@ -24,12 +24,12 @@
     <None Include="..\AdlibComposer.Mt32\mt32emu.dll" Link="mt32emu.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" Condition="Exists('..\AdlibComposer.Mt32\mt32emu.dll')" />
     <None Include="..\AdlibComposer.Mt32\LICENSE.mt32emu.txt" Link="LICENSE.mt32emu.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" Condition="Exists('..\AdlibComposer.Mt32\LICENSE.mt32emu.txt')" />
   </ItemGroup>
-  <!-- 실행 폴더에 곡(rol, ims) / 리소스(resource) 폴더 만들기 (빈 폴더는 복사되지 않으므로 직접 만든다. 실행 시에도 없으면 만든다) -->
+  <!-- 실행 폴더에 리소스(resource) 폴더 만들기 (빈 폴더는 복사되지 않으므로 직접 만든다. 실행 시에도 없으면 만든다) -->
   <Target Name="CreateDataFolders" AfterTargets="Build">
-    <MakeDir Directories="$(OutDir)rol;$(OutDir)ims;$(OutDir)resource" />
+    <MakeDir Directories="$(OutDir)resource" />
   </Target>
   <Target Name="CreatePublishDataFolders" AfterTargets="Publish">
-    <MakeDir Directories="$(PublishDir)rol;$(PublishDir)ims;$(PublishDir)resource" />
+    <MakeDir Directories="$(PublishDir)resource" />
   </Target>
   <ItemGroup>
     <ProjectReference Include="..\AdlibComposer.Core\AdlibComposer.Core.csproj" />

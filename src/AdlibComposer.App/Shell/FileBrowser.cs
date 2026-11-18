@@ -21,7 +21,7 @@ internal enum MusicFileKind { None, Adlib, Tracker, Midi, Vgm, Audio }
 internal sealed class FileBrowser : UserControl
 {
     private static readonly string[] AdlibExt = { ".rol", ".ims", ".sop", ".mus" };
-    private static readonly string[] TrackerExt = { ".s3m", ".stm", ".mod", ".nst" };
+    private static readonly string[] TrackerExt = { ".s3m", ".stm", ".mod", ".nst", ".xm", ".it" };
     private static readonly string[] MidiExt = MidiFiles.Extensions;   // .mid · .midi · .wrk · .xmi · .mdi
     private static readonly string[] VgmExt = AdlibComposer.Audio.ChipSongs.Extensions.ToArray();
     private static readonly string[] AudioExt = { ".mp3", ".wav", ".wma", ".m4a", ".aac", ".flac" };
@@ -937,6 +937,7 @@ internal sealed class FileBrowser : UserControl
             if (MidiFiles.IsMidi(path)) t = MidiFiles.Load(path).Title;
             else if (AdlibComposer.Audio.ChipSongs.IsChipSong(path)) t = AdlibComposer.Audio.ChipSongs.Title(path);
             else if (SopFormat.IsSop(path)) t = SopFormat.Load(path).Title;
+            else if (ExtModule.IsExtModule(path)) t = ExtModule.ReadTitle(path);
             else if (TrackerFiles.IsTracker(path)) t = TrackerFiles.Load(path).Title;
             else if (ext == ".ims")
             {

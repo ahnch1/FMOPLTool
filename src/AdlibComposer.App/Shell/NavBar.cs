@@ -47,7 +47,7 @@ internal sealed class NavBar : Control
         Cursor = Cursors.Default;
 
         // 순서 = 흐름: 곡을 듣고(Jukebox) → 고치고(Composer) → 악보로(Note)
-        Add("PLAY", AppPage.Jukebox, "Jukebox", "첫 페이지 · 왼쪽 목록에서 고르거나 끌어다 놓은 곡 재생 (ROL · IMS · SOP · S3M · STM · MOD · MID · WRK · VGM · KSS · NSF · HES …) · 가사 · 채널 믹서", Glyphs.Jukebox);
+        Add("PLAY", AppPage.Jukebox, "Jukebox", "첫 페이지 · 왼쪽 목록에서 고르거나 끌어다 놓은 곡 재생 (ROL · IMS · SOP · S3M · STM · MOD · XM · IT · MID · WRK · VGM · KSS · NSF · HES …) · 가사 · 채널 믹서", Glyphs.Jukebox);
         Add("CREATE", AppPage.Composer, "Composer", "건반 악보 작곡 · 재생 (ROL / IMS / SOP) — Jukebox의 곡을 불러옴", Glyphs.Composer);
         Add("CREATE", AppPage.Instrument, "Instrument Maker", "FM 악기 편집 · 시음 (BNK / INS)", Glyphs.Instrument);
         Add("CREATE", AppPage.Tracker, "Tracker", "트래커 곡 만들기 (S3M / STM / MOD / NST) — Jukebox의 곡을 불러옴", Glyphs.Tracker);

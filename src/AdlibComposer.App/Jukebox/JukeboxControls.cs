@@ -146,9 +146,10 @@ internal sealed class PlayerDisplay : DeckControl
     /// <summary>아래 표시 방식 (맨 아래 단추 줄: Implay · Ocplay · 노래방). 단추를 누르면 ViewModeRequested.</summary>
     public JukeboxViewMode ViewMode = JukeboxViewMode.Implay;
     public event Action<JukeboxViewMode> ViewModeRequested;
-    private static readonly string[] ModeNames = { "Implay", "Ocplay", "노래방" };
-    private static readonly string[] ModeTips = { "Implay: 가사 + 채널 믹서", "Ocplay: 가사 + 작은 악보 · 세로 음량 막대", "노래방: 곡 폴더의 그림 + 가사" };
-    private readonly Rectangle[] modeRects = new Rectangle[3];
+    private static readonly string[] ModeNames = { "Implay", "Ocplay", "노래방", "노래방(Cyberfunk)" };
+    private static readonly string[] ModeTips = { "Implay: 가사 + 채널 믹서", "Ocplay: 가사 + 작은 악보 · 세로 음량 막대", "노래방: 곡 폴더의 그림 + 가사",
+        "노래방(Cyberfunk): 흐르는 별 · 우주 유영 · 튕기는 도형 + 가사 (오른쪽 위 체크박스로 켜고 끄기)" };
+    private readonly Rectangle[] modeRects = new Rectangle[4];
     private int hoverMode = -1;
     private readonly ToolTip modeTip = new ToolTip();
 
@@ -173,14 +174,17 @@ internal sealed class PlayerDisplay : DeckControl
     /// <summary>표시 방식 단추 줄 (고른 것 = 청록 바탕).</summary>
     private void ModeRow(Graphics g, Rectangle r)
     {
-        int w = (r.Width - 8) / 3;
-        for (int i = 0; i < 3; i++)
+        int n = ModeNames.Length;
+        int w = (r.Width - 4 * (n - 1)) / n;
+        for (int i = 0; i < n; i++)
         {
-            var b = new Rectangle(r.X + i * (w + 4), r.Y, w, r.Height);
+            var b = new Rectangle(r.X + i * (w + 4), r.Y, i == n - 1 ? r.Right - (r.X + i * (w + 4)) : w, r.Height);
             modeRects[i] = b;
             bool on = (int)ViewMode == i;
             DeckTheme.Bevel(g, b, !on, on ? DeckTheme.Lit : hoverMode == i ? DeckTheme.Hover : DeckTheme.Panel, 1);
-            TextRenderer.DrawText(g, ModeNames[i], DeckTheme.Info, b, on ? Color.White : DeckTheme.TextDark, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
+            // 넓이가 모자라면 작은 글자로
+            var font = TextRenderer.MeasureText(g, ModeNames[i], DeckTheme.Info).Width + 6 > b.Width ? DeckTheme.Button : DeckTheme.Info;
+            TextRenderer.DrawText(g, ModeNames[i], font, b, on ? Color.White : DeckTheme.TextDark, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis);
         }
     }
 

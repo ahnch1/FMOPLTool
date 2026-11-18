@@ -11,9 +11,10 @@ namespace AdlibComposer.App.Jukebox;
 
 /// <summary>
 /// Jukebox 표시 방식 (곡 정보 상자의 단추로 고른다):
-/// Implay = 가사 + 채널 믹서, Ocplay = 가사 + 작은 악보(피아노롤) · 세로 음량 막대, Karaoke = 곡 폴더의 그림 + 그 위에 가사.
+/// Implay = 가사 + 채널 믹서, Ocplay = 가사 + 작은 악보(피아노롤) · 세로 음량 막대, Karaoke = 곡 폴더의 그림 + 그 위에 가사,
+/// Cyber = 노래방(Cyberfunk): 사이버펑크 화면 보호기 (별 · 워프 · 튕기는 도형) + 가사.
 /// </summary>
-internal enum JukeboxViewMode { Implay, Ocplay, Karaoke }
+internal enum JukeboxViewMode { Implay, Ocplay, Karaoke, Cyber }
 
 /// <summary>
 /// OCPlay 풍 표시: 검은 상자 위쪽 = Composer 악보처럼 채널 색 막대가 흐르는 작은 피아노롤 (오른쪽 끝 = 지금, 최근 몇 초),
@@ -334,6 +335,275 @@ internal sealed class KaraokeView : DeckControl
     protected override void Dispose(bool disposing)
     {
         if (disposing) { slide.Dispose(); image?.Dispose(); scaled?.Dispose(); bigFont?.Dispose(); nextFont?.Dispose(); }
+        base.Dispose(disposing);
+    }
+}
+
+/// <summary>
+/// 노래방(Cyberfunk): _incoming/cyberpunk_pixel_screensaver.html 화면 + 가사.
+/// 반투명 검정으로 덮어 잔상을 남기는 화면에 [좌우로 흐르는 픽셀 별] [가운데서 퍼지는 워프 별 (Starfield Simulation)]
+/// [잔상을 끌며 튕기는 삼각형 · 사각형 (Mystify Your Mind)]을 그리고, 오른쪽 위 구석 체크박스로 하나씩 켜고 끈다.
+/// 아래쪽에 네온 가사 띠 (부른 글자 = 분홍), 왼쪽 위 HUD 글자.
+/// </summary>
+[System.ComponentModel.DesignerCategory("Code")]
+internal sealed class CyberView : DeckControl
+{
+    private static readonly Color Pink = Color.FromArgb(255, 0, 127), Cyan = Color.FromArgb(0, 255, 255), Yellow = Color.FromArgb(255, 234, 0), Bg = Color.FromArgb(5, 5, 10);
+    /// <summary>켜고 끄는 층: 0 좌우 별, 1 우주 유영, 2 삼각형, 3 사각형.</summary>
+    public static readonly string[] LayerNames = { "좌우로 흐르는 별", "우주 유영 (Starfield)", "튕기는 삼각형 (Mystify)", "튕기는 사각형 (Mystify)" };
+    private readonly bool[] layers = { true, true, true, true };
+    /// <summary>체크박스를 바꾸면 (설정에 남기도록).</summary>
+    public event Action LayersChanged;
+
+    private sealed class SideStar { public double X, Y, Speed; public int Size; public Color Color; }
+    private sealed class WarpStar { public double X, Y, Z, Speed, Size; }
+    private sealed class Shape
+    {
+        public bool Triangle; public Color Color; public double Size, X, Y, Vx, Vy, Rot, VRot;
+        public readonly List<(double x, double y, double rot)> History = new List<(double, double, double)>();
+    }
+
+    private readonly Random rnd = new Random();
+    private readonly List<SideStar> side = new List<SideStar>();
+    private readonly List<WarpStar> warp = new List<WarpStar>();
+    private readonly List<Shape> shapes = new List<Shape>();
+    private readonly Timer anim = new Timer { Interval = 33 };
+    private Bitmap canvas;       // 잔상이 남는 그림판 (안쪽 칸 크기)
+    private readonly Rectangle[] checkRects = new Rectangle[4];
+    private int hoverCheck = -1;
+    private readonly Font hudBig = new Font("Courier New", 13f, FontStyle.Bold), hud = new Font("Courier New", 9f, FontStyle.Bold);
+    private Font bigFont, nextFont;
+    private int fontFor = -1;
+    private IssLyrics lyrics;
+    private LyricState state;
+    public string Title = "";
+
+    public CyberView()
+    {
+        anim.Tick += delegate { Step(); Invalidate(); };
+        VisibleChanged += delegate { if (Visible) anim.Start(); else anim.Stop(); };
+    }
+
+    public IssLyrics Lyrics { get { return lyrics; } set { lyrics = value; Invalidate(); } }
+    public LyricState State { get { return state; } set { state = value; } }
+
+    /// <summary>켜진 층 "1111" (좌우 별 · 우주 · 삼각형 · 사각형).</summary>
+    public string LayerText
+    {
+        get { var c = new char[4]; for (int i = 0; i < 4; i++) c[i] = layers[i] ? '1' : '0'; return new string(c); }
+        set { for (int i = 0; i < 4; i++) layers[i] = value == null || i >= value.Length || value[i] != '0'; Invalidate(); }
+    }
+
+    private Rectangle Inner { get { return new Rectangle(8, 8, Math.Max(1, Width - 16), Math.Max(1, Height - 16)); } }
+
+    // ---------------------------------------------------------------- 움직임 (HTML 그대로, 칸 크기 기준)
+
+    private void Reset(SideStar s, int w, int h)
+    {
+        s.Y = rnd.NextDouble() * h;
+        s.Size = rnd.NextDouble() < 0.8 ? 2 : 4;
+        s.Speed = (rnd.NextDouble() * 2 + 0.5) * (rnd.NextDouble() < 0.5 ? 1 : -1);
+        s.X = s.Speed > 0 ? -10 : w + 10;
+        s.Color = rnd.NextDouble() < 0.1 ? Pink : Color.FromArgb(128, 255, 255, 255);
+    }
+
+    private void Reset(WarpStar s, int w, int h)
+    {
+        s.X = (rnd.NextDouble() - 0.5) * w * 2;
+        s.Y = (rnd.NextDouble() - 0.5) * h * 2;
+        s.Z = w;
+        s.Speed = rnd.NextDouble() * 5 + 2;
+        s.Size = rnd.NextDouble() * 2 + 1;
+    }
+
+    private Shape NewShape(bool triangle, Color color, int w, int h)
+    {
+        var s = new Shape { Triangle = triangle, Color = color, Size = rnd.NextDouble() * 30 + 30 };
+        s.X = rnd.NextDouble() * Math.Max(1, w - s.Size * 2) + s.Size;
+        s.Y = rnd.NextDouble() * Math.Max(1, h - s.Size * 2) + s.Size;
+        s.Vx = (rnd.NextDouble() * 6 + 3) * (rnd.NextDouble() < 0.5 ? 1 : -1);
+        s.Vy = (rnd.NextDouble() * 6 + 3) * (rnd.NextDouble() < 0.5 ? 1 : -1);
+        s.VRot = rnd.NextDouble() * 0.1 - 0.05;
+        return s;
+    }
+
+    private void Step()
+    {
+        var r = Inner;
+        int w = r.Width, h = r.Height;
+        if (w < 8 || h < 8) return;
+        if (canvas == null || canvas.Width != w || canvas.Height != h)
+        {
+            canvas?.Dispose();
+            canvas = new Bitmap(w, h);
+            using (var g0 = Graphics.FromImage(canvas)) g0.Clear(Bg);
+            side.Clear(); warp.Clear(); shapes.Clear();
+            for (int i = 0; i < 80; i++) { var s = new SideStar(); Reset(s, w, h); s.X = rnd.NextDouble() * w; side.Add(s); }
+            for (int i = 0; i < 300; i++) { var s = new WarpStar(); Reset(s, w, h); s.Z = rnd.NextDouble() * w + 1; warp.Add(s); }
+            shapes.Add(NewShape(false, Pink, w, h));
+            shapes.Add(NewShape(true, Yellow, w, h));
+            shapes.Add(NewShape(false, Cyan, w, h));
+        }
+        using (var g = Graphics.FromImage(canvas))
+        {
+            // 잔상: 완전히 지우지 않고 반투명 검정으로 덮는다
+            using (var fade = new SolidBrush(Color.FromArgb(77, Bg))) g.FillRectangle(fade, 0, 0, w, h);
+            g.SmoothingMode = SmoothingMode.None;
+            if (layers[0])
+                foreach (var s in side)
+                {
+                    s.X += s.Speed;
+                    if ((s.Speed > 0 && s.X > w) || (s.Speed < 0 && s.X < 0)) Reset(s, w, h);
+                    using (var b = new SolidBrush(s.Color)) g.FillRectangle(b, (int)s.X, (int)s.Y, s.Size, s.Size);
+                }
+            if (layers[1])
+                using (var b = new SolidBrush(Cyan))
+                    foreach (var s in warp)
+                    {
+                        s.Z -= s.Speed;
+                        if (s.Z <= 1) { Reset(s, w, h); continue; }
+                        double px = w / 2.0 + s.X / s.Z * 300, py = h / 2.0 + s.Y / s.Z * 300;
+                        if (px < 0 || px > w || py < 0 || py > h) { Reset(s, w, h); continue; }
+                        double size = (1 - s.Z / w) * s.Size * 4;
+                        if (size >= 0.5) g.FillRectangle(b, (float)px, (float)py, (float)Math.Max(1, size), (float)Math.Max(1, size));
+                    }
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            foreach (var s in shapes)
+            {
+                if (!(s.Triangle ? layers[2] : layers[3])) { s.History.Clear(); continue; }
+                s.History.Insert(0, (s.X, s.Y, s.Rot));
+                if (s.History.Count > 15) s.History.RemoveAt(s.History.Count - 1);
+                s.X += s.Vx; s.Y += s.Vy; s.Rot += s.VRot;
+                if (s.X - s.Size < 0 || s.X + s.Size > w) { s.Vx = -s.Vx; s.X = Math.Max(s.Size, Math.Min(s.X, w - s.Size)); }
+                if (s.Y - s.Size < 0 || s.Y + s.Size > h) { s.Vy = -s.Vy; s.Y = Math.Max(s.Size, Math.Min(s.Y, h - s.Size)); }
+                for (int i = 0; i < s.History.Count; i++)
+                {
+                    int a = (int)(255 * (1 - i / (double)s.History.Count));
+                    using (var p = new Pen(Color.FromArgb(a, s.Color), 2)) DrawShape(g, s, s.History[i].x, s.History[i].y, s.History[i].rot, p, null);
+                }
+                // 네온 빛: 크게 흐린 것 위에 본체
+                using (var glow = new SolidBrush(Color.FromArgb(60, s.Color))) DrawShape(g, s, s.X, s.Y, s.Rot, null, glow, 1.35);
+                using (var b = new SolidBrush(s.Color)) DrawShape(g, s, s.X, s.Y, s.Rot, null, b);
+            }
+        }
+    }
+
+    private static void DrawShape(Graphics g, Shape s, double x, double y, double rot, Pen pen, Brush brush, double scale = 1)
+    {
+        var st = g.Save();
+        g.TranslateTransform((float)x, (float)y);
+        g.RotateTransform((float)(rot * 180 / Math.PI));
+        float h = (float)(s.Size * scale / 2);
+        if (s.Triangle)
+        {
+            var pts = new[] { new PointF(0, -h), new PointF(h, h), new PointF(-h, h) };
+            if (pen != null) g.DrawPolygon(pen, pts); else g.FillPolygon(brush, pts);
+        }
+        else if (pen != null) g.DrawRectangle(pen, -h, -h, 2 * h, 2 * h);
+        else g.FillRectangle(brush, -h, -h, 2 * h, 2 * h);
+        g.Restore(st);
+    }
+
+    // ---------------------------------------------------------------- 그리기
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        var g = e.Graphics;
+        Prepare(g);
+        g.Clear(DeckTheme.Back);
+        DeckTheme.Bevel(g, new Rectangle(0, 0, Width, Height), true, DeckTheme.Panel, 2);
+        var r = Inner;
+        if (canvas != null) g.DrawImageUnscaled(canvas, r.Location);
+        else using (var b = new SolidBrush(Bg)) g.FillRectangle(b, r);
+        g.SetClip(r);
+
+        // 왼쪽 위 HUD
+        var hudColor = Color.FromArgb(180, Cyan);
+        TextRenderer.DrawText(g, "CYBER-SPACE // SECTOR 7G", hudBig, new Point(r.X + 14, r.Y + 10), hudColor, TextFormatFlags.NoPrefix);
+        TextRenderer.DrawText(g, "SYSTEM: ONLINE", hud, new Point(r.X + 14, r.Y + 12 + hudBig.Height), hudColor, TextFormatFlags.NoPrefix);
+        TextRenderer.DrawText(g, "WARP ENGINE: " + (layers[1] ? "ACTIVE" : "IDLE"), hud, new Point(r.X + 14, r.Y + 14 + hudBig.Height + hud.Height), hudColor, TextFormatFlags.NoPrefix);
+
+        DrawChecks(g, r);
+        DrawLyrics(g, r);
+        g.ResetClip();
+    }
+
+    /// <summary>오른쪽 위 구석: 네온 체크박스 4개 (반투명 검은 판).</summary>
+    private void DrawChecks(Graphics g, Rectangle r)
+    {
+        int rowH = Math.Max(18, hud.Height + 6), boxW = 0;
+        foreach (var n in LayerNames) boxW = Math.Max(boxW, TextRenderer.MeasureText(g, n, hud).Width);
+        boxW += rowH + 18;
+        var panel = new Rectangle(r.Right - boxW - 12, r.Y + 10, boxW, rowH * 4 + 10);
+        using (var b = new SolidBrush(Color.FromArgb(150, 0, 0, 0))) g.FillRectangle(b, panel);
+        using (var p = new Pen(Color.FromArgb(160, Cyan))) g.DrawRectangle(p, panel);
+        for (int i = 0; i < 4; i++)
+        {
+            var row = new Rectangle(panel.X + 6, panel.Y + 5 + i * rowH, panel.Width - 12, rowH);
+            checkRects[i] = row;
+            var box = new Rectangle(row.X, row.Y + (rowH - 12) / 2, 12, 12);
+            Color c = hoverCheck == i ? Pink : Cyan;
+            using (var p = new Pen(c, 1.5f)) g.DrawRectangle(p, box);
+            if (layers[i]) using (var b = new SolidBrush(Pink)) g.FillRectangle(b, box.X + 3, box.Y + 3, box.Width - 5, box.Height - 5);
+            TextRenderer.DrawText(g, LayerNames[i], hud, new Point(box.Right + 6, row.Y + (rowH - hud.Height) / 2), layers[i] ? Color.White : Color.FromArgb(130, 140, 150), TextFormatFlags.NoPrefix);
+        }
+    }
+
+    private void DrawLyrics(Graphics g, Rectangle r)
+    {
+        int bandH = Math.Max(56, Math.Min(r.Height * 2 / 5, 170));
+        var band = new Rectangle(r.X, r.Bottom - bandH, r.Width, bandH);
+        using (var b = new LinearGradientBrush(band, Color.FromArgb(0, 0, 0, 0), Color.FromArgb(190, 0, 0, 0), LinearGradientMode.Vertical)) g.FillRectangle(b, band);
+        using (var p = new Pen(Color.FromArgb(120, Pink))) g.DrawLine(p, band.X, band.Y + bandH / 6, band.Right, band.Y + bandH / 6);
+        int size = Math.Max(14, Math.Min(40, bandH * 30 / 100));
+        if (size != fontFor)
+        {
+            bigFont?.Dispose(); nextFont?.Dispose();
+            bigFont = new Font("Malgun Gothic", size, FontStyle.Bold, GraphicsUnit.Pixel);
+            nextFont = new Font("Malgun Gothic", Math.Max(11, size * 62 / 100), FontStyle.Bold, GraphicsUnit.Pixel);
+            fontFor = size;
+        }
+        var glow = Color.FromArgb(0, 90, 110);
+        if (lyrics != null && lyrics.Lines.Count > 0 && state != null && state.Line >= 0)
+        {
+            LyricsPainter.DrawLine(g, lyrics.Lines[state.Line], state.Lit, bigFont, band.Y + bandH * 0.45f, band.X + 16, band.Width - 32, Cyan, Pink, glow);
+            if (state.NextLine >= 0 && state.NextLine < lyrics.Lines.Count)
+                LyricsPainter.DrawLine(g, lyrics.Lines[state.NextLine], null, nextFont, band.Y + bandH * 0.80f, band.X + 16, band.Width - 32, Color.FromArgb(150, 200, 210), Pink, glow);
+        }
+        else
+        {
+            string t = lyrics == null ? (Title.Length > 0 ? Title : "♪") : "♪";
+            var tr = new Rectangle(band.X + 16, band.Y + bandH / 5, band.Width - 32, bandH * 4 / 5);
+            var flags = TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix;
+            TextRenderer.DrawText(g, t, nextFont, new Rectangle(tr.X + 2, tr.Y + 2, tr.Width, tr.Height), glow, flags);
+            TextRenderer.DrawText(g, t, nextFont, tr, Cyan, flags);
+        }
+    }
+
+    // ---------------------------------------------------------------- 체크박스
+
+    protected override void OnMouseMove(MouseEventArgs e)
+    {
+        base.OnMouseMove(e);
+        int h = Array.FindIndex(checkRects, c => c.Contains(e.Location));
+        if (h != hoverCheck) { hoverCheck = h; Cursor = h >= 0 ? Cursors.Hand : Cursors.Default; Invalidate(); }
+    }
+
+    protected override void OnMouseLeave(EventArgs e) { base.OnMouseLeave(e); hoverCheck = -1; }
+
+    protected override void OnMouseDown(MouseEventArgs e)
+    {
+        base.OnMouseDown(e);
+        int i = Array.FindIndex(checkRects, c => c.Contains(e.Location));
+        if (i < 0 || e.Button != MouseButtons.Left) return;
+        layers[i] = !layers[i];
+        LayersChanged?.Invoke();
+        Invalidate();
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing) { anim.Dispose(); canvas?.Dispose(); hudBig.Dispose(); hud.Dispose(); bigFont?.Dispose(); nextFont?.Dispose(); }
         base.Dispose(disposing);
     }
 }

@@ -152,6 +152,9 @@ internal sealed class JukeboxView : UserControl, IShellPage
         karaoke.Lyrics = lyrics.Lyrics;
         karaoke.State = null;
         karaoke.Title = display.Title ?? "";
+        cyber.Lyrics = lyrics.Lyrics;
+        cyber.State = null;
+        cyber.Title = display.Title ?? "";
         if (karaoke.Visible && currentPath != null) karaoke.SetSong(ChipSongs.FilePart(currentPath));
         ocView.Clear();
         browser.MarkCurrent(currentPath);   // "파일::n"이면 파일 목록이 그 파일을 펼쳐 곡 줄을 고른다
@@ -192,6 +195,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
     private readonly Panel lyricGap = new Panel { Dock = DockStyle.Top, Height = 8, BackColor = DeckTheme.Back };
     private readonly OcplayView ocView = new OcplayView { Dock = DockStyle.Fill, Visible = false };
     private readonly KaraokeView karaoke = new KaraokeView { Dock = DockStyle.Fill, Visible = false };
+    private readonly CyberView cyber = new CyberView { Dock = DockStyle.Fill, Visible = false };
     private JukeboxViewMode viewMode = JukeboxViewMode.Implay;
     private readonly FlowLayoutPanel trackRow = new FlowLayoutPanel();
     private readonly Label trackLabel = new Label();
@@ -514,6 +518,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
         stage.Controls.Add(mixer);
         stage.Controls.Add(ocView);
         stage.Controls.Add(karaoke);
+        stage.Controls.Add(cyber);
         stage.Controls.Add(lyricGap);
         stage.Controls.Add(lyrics);
         root.Controls.Add(stage, 0, 1);
@@ -523,8 +528,10 @@ internal sealed class JukeboxView : UserControl, IShellPage
         karaoke.Click += delegate { if (karaoke.HasImages) karaoke.NextImage(); };
         karaoke.FallbackFolder = () => settings().KaraokeFolderPath;
         karaoke.ChooseFolderRequested += ChooseKaraokeFolder;
+        cyber.LayerText = settings().CyberLayers;
+        cyber.LayersChanged += delegate { settings().CyberLayers = cyber.LayerText; SaveSettings(); };
         string saved = settings().JukeboxView ?? "";
-        ApplyViewMode(saved == "ocplay" ? JukeboxViewMode.Ocplay : saved == "karaoke" ? JukeboxViewMode.Karaoke : JukeboxViewMode.Implay);
+        ApplyViewMode(saved == "ocplay" ? JukeboxViewMode.Ocplay : saved == "karaoke" ? JukeboxViewMode.Karaoke : saved == "cyber" ? JukeboxViewMode.Cyber : JukeboxViewMode.Implay);
         // 가사는 176px까지, 자리가 모자라면 믹서(4줄 이상)를 먼저 두고 줄인다
         stage.SizeChanged += delegate
         {
@@ -589,7 +596,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
     {
         if (m == viewMode) return;
         ApplyViewMode(m);
-        settings().JukeboxView = m == JukeboxViewMode.Ocplay ? "ocplay" : m == JukeboxViewMode.Karaoke ? "karaoke" : "implay";
+        settings().JukeboxView = m == JukeboxViewMode.Ocplay ? "ocplay" : m == JukeboxViewMode.Karaoke ? "karaoke" : m == JukeboxViewMode.Cyber ? "cyber" : "implay";
         SaveSettings();
     }
 
@@ -600,7 +607,8 @@ internal sealed class JukeboxView : UserControl, IShellPage
         mixer.Visible = m == JukeboxViewMode.Implay;
         ocView.Visible = m == JukeboxViewMode.Ocplay;
         karaoke.Visible = m == JukeboxViewMode.Karaoke;
-        lyrics.Visible = lyricGap.Visible = m != JukeboxViewMode.Karaoke;
+        cyber.Visible = m == JukeboxViewMode.Cyber;
+        lyrics.Visible = lyricGap.Visible = m != JukeboxViewMode.Karaoke && m != JukeboxViewMode.Cyber;
         stage.ResumeLayout();
         display.ViewMode = m;
         display.Invalidate();
@@ -1517,6 +1525,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
                 lyrics.State = st;
                 lyrics.Invalidate();
                 karaoke.State = st;
+                cyber.State = st;
             }
         }
         RefreshMixer();

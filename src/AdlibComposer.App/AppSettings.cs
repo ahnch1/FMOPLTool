@@ -61,10 +61,12 @@ internal sealed class AppSettings
     public bool JukeboxRawTone { get; set; }
     /// <summary>Jukebox 스피커: true = 그 시절 (작은 PC 스피커 흉내).</summary>
     public bool JukeboxVintageSpeaker { get; set; }
-    /// <summary>Jukebox 표시 방식: implay (가사 + 믹서) | ocplay (가사 + 작은 악보 · 세로 막대) | karaoke (곡 폴더 그림 + 가사).</summary>
+    /// <summary>Jukebox 표시 방식: implay (가사 + 믹서) | ocplay (가사 + 작은 악보 · 세로 막대) | karaoke (곡 폴더 그림 + 가사) | cyber (노래방 Cyberfunk).</summary>
     public string JukeboxView { get; set; } = "implay";
     /// <summary>노래방 그림 폴더: 곡 폴더에 그림이 없을 때 쓴다. 저장 값(상대/절대), 비면 없음 (기본 그림은 없다).</summary>
     public string KaraokeFolder { get; set; } = "";
+    /// <summary>노래방(Cyberfunk) 켜진 층 "1111": 좌우 별 · 우주 유영 · 삼각형 · 사각형.</summary>
+    public string CyberLayers { get; set; } = "1111";
     public string KaraokeFolderPath { get { return string.IsNullOrWhiteSpace(KaraokeFolder) ? null : Resolve(KaraokeFolder); } }
     /// <summary>보이스별 색 (Composer 노트 막대 · Note 음표 · Jukebox 채널). Shell.VoiceColors.Count개.</summary>
     public System.Drawing.Color[] VoiceColors { get; set; } = (System.Drawing.Color[])Shell.VoiceColors.Defaults.Clone();
@@ -138,6 +140,7 @@ internal sealed class AppSettings
                         case "jukeboxspeaker": s.JukeboxVintageSpeaker = value.Equals("vintage", StringComparison.OrdinalIgnoreCase); break;
                         case "jukeboxview": s.JukeboxView = value.Trim().ToLowerInvariant(); break;
                         case "karaokefolder": s.KaraokeFolder = value; break;
+                        case "cyberlayers": s.CyberLayers = value.Trim(); break;
                         case "voicecolors": s.VoiceColors = Shell.VoiceColors.Parse(value); break;
                     }
                 }
@@ -187,10 +190,12 @@ internal sealed class AppSettings
         sb.AppendLine("; Jukebox: JukeboxTone = standard | raw, JukeboxSpeaker = default | vintage");
         sb.AppendLine("JukeboxTone=" + (JukeboxRawTone ? "raw" : "standard"));
         sb.AppendLine("JukeboxSpeaker=" + (JukeboxVintageSpeaker ? "vintage" : "default"));
-        sb.AppendLine("; JukeboxView = implay (lyrics + mixer) | ocplay (lyrics + mini piano roll + meters) | karaoke (folder images + lyrics)");
+        sb.AppendLine("; JukeboxView = implay (lyrics + mixer) | ocplay (lyrics + mini piano roll + meters) | karaoke (folder images + lyrics) | cyber (cyberfunk karaoke)");
         sb.AppendLine("JukeboxView=" + JukeboxView);
         sb.AppendLine("; KaraokeFolder = images for karaoke view when the song folder has none (empty = none)");
         sb.AppendLine("KaraokeFolder=" + KaraokeFolder);
+        sb.AppendLine("; CyberLayers = karaoke (Cyberfunk) layers on/off: side stars, starfield, triangle, square (1 = on)");
+        sb.AppendLine("CyberLayers=" + CyberLayers);
         sb.AppendLine("; OrganizerPreferredFolder = Organizer keeps duplicates in this folder (and subfolders) first (empty = none)");
         sb.AppendLine("OrganizerPreferredFolder=" + OrganizerPreferredFolder);
         sb.AppendLine("; VoiceColors = voice 1..11 colors (rhythm mode 7..11 = BD SD TO CY HH): Composer note bars, Note heads, Jukebox channels");

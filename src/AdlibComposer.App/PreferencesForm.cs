@@ -23,6 +23,7 @@ internal sealed class PreferencesForm : Form
     };
     private readonly ComboBox midiModuleBox = new ComboBox();
     private readonly TextBox mt32RomBox = new TextBox();
+    private readonly TextBox karaokeBox = new TextBox();
     private readonly TextBox bankFolderBox = new TextBox();
     private readonly TextBox bankBox = new TextBox();
     private readonly CheckBox loadBankCheck = new CheckBox();
@@ -124,6 +125,14 @@ internal sealed class PreferencesForm : Form
         root.Controls.Add(new Label
         {
             Text = "Empty = GENMIDI.OP2 in the bank folder if present, otherwise the default bank matched by instrument name.",
+            ForeColor = Subtle, AutoSize = true, MaximumSize = new Size(700, 0), Margin = new Padding(0, 0, 0, 12)
+        });
+
+        root.Controls.Add(Section("Jukebox karaoke"));
+        root.Controls.Add(PathRow("Karaoke image folder", karaokeBox, settings.KaraokeFolderPath ?? "", delegate { BrowseFolder(karaokeBox, "Karaoke image folder (JPG / PNG / BMP / GIF)"); }));
+        root.Controls.Add(new Label
+        {
+            Text = "Karaoke view shows images from the song folder; if it has none, images from this folder. Empty = none (no built-in images).\nDouble-click the karaoke picture area when it has no images to choose this folder.",
             ForeColor = Subtle, AutoSize = true, MaximumSize = new Size(700, 0), Margin = new Padding(0, 0, 0, 12)
         });
 
@@ -306,6 +315,7 @@ internal sealed class PreferencesForm : Form
         midiSynthBox.SelectedIndex = 0;
         midiModuleBox.SelectedIndex = 0;
         mt32RomBox.Text = d.Mt32RomFolderPath;
+        karaokeBox.Text = "";
         bankFolderBox.Text = d.BankFolderPath;
         bankBox.Text = d.DefaultBankPath;
         loadBankCheck.Checked = true;
@@ -323,6 +333,7 @@ internal sealed class PreferencesForm : Form
             if (settings.MidiChipSynth) settings.MidiChipSound = ChipStyles[midiSynthBox.SelectedIndex - 2];
             settings.MidiMt32 = midiModuleBox.SelectedIndex == 1;
             settings.Mt32RomFolder = AppSettings.ToStored(SafeResolve(mt32RomBox.Text));
+            settings.KaraokeFolder = karaokeBox.Text.Trim().Length == 0 ? "" : AppSettings.ToStored(SafeResolve(karaokeBox.Text));
             settings.BankFolder = AppSettings.ToStored(SafeResolve(bankFolderBox.Text));
             settings.DefaultBank = bankBox.Text.Trim().Length == 0 ? "" : AppSettings.ToStored(SafeResolve(bankBox.Text));
             settings.LoadDefaultBank = loadBankCheck.Checked;

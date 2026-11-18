@@ -148,6 +148,12 @@ internal sealed class JukeboxView : UserControl, IShellPage
 
     private void MarkPlaying()
     {
+        // 표시 방식: 노래방은 새 곡 폴더의 그림 · 가사, Ocplay는 흐름을 비운다
+        karaoke.Lyrics = lyrics.Lyrics;
+        karaoke.State = null;
+        karaoke.Title = display.Title ?? "";
+        if (karaoke.Visible && currentPath != null) karaoke.SetSong(ChipSongs.FilePart(currentPath));
+        ocView.Clear();
         browser.MarkCurrent(currentPath);   // "파일::n"이면 파일 목록이 그 파일을 펼쳐 곡 줄을 고른다
     }
 
@@ -181,8 +187,12 @@ internal sealed class JukeboxView : UserControl, IShellPage
     /// <summary>조작 상자 (재생 버튼 · 속도/키/볼륨 · 파일 안 곡 · 진행 막대)와 그 안 흰 상자들.</summary>
     private readonly Panel controlBox = new Panel();
     private FlowLayoutPanel[] controlBoxes;
-    /// <summary>표시 묶음: 가사 + 채널 믹서 (표시 방식을 바꿔 넣을 자리).</summary>
+    /// <summary>표시 묶음: 표시 방식(Implay · Ocplay · 노래방)에 따라 가사 + 믹서 / 가사 + 작은 악보 / 그림 + 가사.</summary>
     private readonly Panel stage = new Panel();
+    private readonly Panel lyricGap = new Panel { Dock = DockStyle.Top, Height = 8, BackColor = DeckTheme.Back };
+    private readonly OcplayView ocView = new OcplayView { Dock = DockStyle.Fill, Visible = false };
+    private readonly KaraokeView karaoke = new KaraokeView { Dock = DockStyle.Fill, Visible = false };
+    private JukeboxViewMode viewMode = JukeboxViewMode.Implay;
     private readonly FlowLayoutPanel trackRow = new FlowLayoutPanel();
     private readonly Label trackLabel = new Label();
     /// <summary>지금 곡이 든 파일의 곡 목록 (곡이 하나뿐인 파일이면 null).</summary>
@@ -496,20 +506,29 @@ internal sealed class JukeboxView : UserControl, IShellPage
         stage.Margin = new Padding(0, 0, 0, 8);
         stage.BackColor = DeckTheme.Back;
         lyrics.Dock = DockStyle.Top;
-        lyrics.Height = 176;
+        lyrics.Height = 88;
         mixer.Dock = DockStyle.Fill;
         mixer.MuteToggled += v => SetMute(v, !options.VoiceMute[v]);
         mixer.SoloRequested += Solo;
         mixer.PitchStep += (v, d) => SetVoicePitch(v, options.VoiceTranspose[v] + d);
-        var lyricGap = new Panel { Dock = DockStyle.Top, Height = 8, BackColor = DeckTheme.Back };
         stage.Controls.Add(mixer);
+        stage.Controls.Add(ocView);
+        stage.Controls.Add(karaoke);
         stage.Controls.Add(lyricGap);
         stage.Controls.Add(lyrics);
         root.Controls.Add(stage, 0, 1);
+        display.ViewModeRequested += m => { SetViewMode(m); };
+        tips.SetToolTip(ocView, "Ocplay: 채널 색 막대가 흐르는 작은 악보 (오른쪽 끝 = 지금) · 아래 = 채널마다 음량");
+        tips.SetToolTip(karaoke, "노래방: 곡 폴더(없으면 설정의 그림 폴더)의 그림을 10초마다 바꿔 보이고 가사를 겹쳐 그린다\n클릭 = 다음 그림 · 그림이 없을 때 두 번 클릭 = 그림 폴더 고르기");
+        karaoke.Click += delegate { if (karaoke.HasImages) karaoke.NextImage(); };
+        karaoke.FallbackFolder = () => settings().KaraokeFolderPath;
+        karaoke.ChooseFolderRequested += ChooseKaraokeFolder;
+        string saved = settings().JukeboxView ?? "";
+        ApplyViewMode(saved == "ocplay" ? JukeboxViewMode.Ocplay : saved == "karaoke" ? JukeboxViewMode.Karaoke : JukeboxViewMode.Implay);
         // 가사는 176px까지, 자리가 모자라면 믹서(4줄 이상)를 먼저 두고 줄인다
         stage.SizeChanged += delegate
         {
-            int h = Math.Max(72, Math.Min(176, stage.Height - lyricGap.Height - 4 * 35 - 16));
+            int h = Math.Max(56, Math.Min(88, stage.Height - lyricGap.Height - 4 * 35 - 16));   // 가사는 88px까지 (아래 믹서 · 악보를 크게)
             if (lyrics.Height != h) lyrics.Height = h;
         };
 
@@ -550,6 +569,46 @@ internal sealed class JukeboxView : UserControl, IShellPage
     private const int SeekRowHeight = 36;
 
     /// <summary>흰 상자 높이를 넓이에 맞춰 (줄 바꿈) 다시 잡고, 위 줄 높이 = 조작 상자 높이 (곡 정보 상자가 같이 맞춘다).</summary>
+    /// <summary>노래방 그림 폴더를 고르고 설정(KaraokeFolder)에 남긴 뒤 그림을 다시 읽는다.</summary>
+    private void ChooseKaraokeFolder()
+    {
+        using (var dlg = new FolderBrowserDialog { Description = "노래방 그림 폴더 (JPG · PNG · BMP · GIF): 곡 폴더에 그림이 없을 때 쓴다", UseDescriptionForTitle = true, ShowNewFolderButton = false })
+        {
+            string start = settings().KaraokeFolderPath;
+            if (start != null && Directory.Exists(start)) dlg.SelectedPath = start;
+            if (dlg.ShowDialog(FindForm()) != DialogResult.OK) return;
+            settings().KaraokeFolder = AppSettings.ToStored(dlg.SelectedPath);
+            SaveSettings();
+        }
+        karaoke.Reload(currentPath != null ? ChipSongs.FilePart(currentPath) : null);
+        AppLog.Info("Jukebox", "노래방 그림 폴더: " + settings().KaraokeFolderPath + (karaoke.HasImages ? "" : " (그림 없음)"));
+    }
+
+    /// <summary>곡 정보 상자의 단추로 표시 방식을 바꾸고 설정에 남긴다.</summary>
+    private void SetViewMode(JukeboxViewMode m)
+    {
+        if (m == viewMode) return;
+        ApplyViewMode(m);
+        settings().JukeboxView = m == JukeboxViewMode.Ocplay ? "ocplay" : m == JukeboxViewMode.Karaoke ? "karaoke" : "implay";
+        SaveSettings();
+    }
+
+    private void ApplyViewMode(JukeboxViewMode m)
+    {
+        viewMode = m;
+        stage.SuspendLayout();
+        mixer.Visible = m == JukeboxViewMode.Implay;
+        ocView.Visible = m == JukeboxViewMode.Ocplay;
+        karaoke.Visible = m == JukeboxViewMode.Karaoke;
+        lyrics.Visible = lyricGap.Visible = m != JukeboxViewMode.Karaoke;
+        stage.ResumeLayout();
+        display.ViewMode = m;
+        display.Invalidate();
+        if (m == JukeboxViewMode.Karaoke) karaoke.SetSong(currentPath != null ? ChipSongs.FilePart(currentPath) : null);
+        if (m == JukeboxViewMode.Ocplay) ocView.Clear();
+        RefreshMixer();
+    }
+
     private void FitTopRow()
     {
         if (controlBoxes == null || topRowStyle == null) return;
@@ -1457,6 +1516,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
             {
                 lyrics.State = st;
                 lyrics.Invalidate();
+                karaoke.State = st;
             }
         }
         RefreshMixer();
@@ -1564,6 +1624,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
             row.Level = levels[v];
         }
         mixer.Invalidate();
+        if (ocView.Visible) ocView.Sample(mixer.Rows, playing);
         RefreshKeys(playing);
     }
 
@@ -1683,6 +1744,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
     public void SettingsChanged()
     {
         defaultBank = null;
+        if (karaoke.Visible) karaoke.Reload(currentPath != null ? ChipSongs.FilePart(currentPath) : null);   // 그림 폴더가 바뀌었을 수 있다
         SyncMidiSynthCheck();
     }
 

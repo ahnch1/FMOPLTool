@@ -143,6 +143,47 @@ internal sealed class PlayerDisplay : DeckControl
     /// <summary>가사 줄 대신 보일 글 (null = 가사 파일).</summary>
     public string InfoLine;
 
+    /// <summary>아래 표시 방식 (맨 아래 단추 줄: Implay · Ocplay · 노래방). 단추를 누르면 ViewModeRequested.</summary>
+    public JukeboxViewMode ViewMode = JukeboxViewMode.Implay;
+    public event Action<JukeboxViewMode> ViewModeRequested;
+    private static readonly string[] ModeNames = { "Implay", "Ocplay", "노래방" };
+    private static readonly string[] ModeTips = { "Implay: 가사 + 채널 믹서", "Ocplay: 가사 + 작은 악보 · 세로 음량 막대", "노래방: 곡 폴더의 그림 + 가사" };
+    private readonly Rectangle[] modeRects = new Rectangle[3];
+    private int hoverMode = -1;
+    private readonly ToolTip modeTip = new ToolTip();
+
+    protected override void OnMouseMove(MouseEventArgs e)
+    {
+        int h = Array.FindIndex(modeRects, r => r.Contains(e.Location));
+        if (h == hoverMode) return;
+        hoverMode = h;
+        Cursor = h >= 0 ? Cursors.Hand : Cursors.Default;
+        modeTip.SetToolTip(this, h >= 0 ? ModeTips[h] : null);
+        Invalidate();
+    }
+
+    protected override void OnMouseLeave(EventArgs e) { if (hoverMode >= 0) { hoverMode = -1; Invalidate(); } }
+
+    protected override void OnMouseDown(MouseEventArgs e)
+    {
+        int i = Array.FindIndex(modeRects, r => r.Contains(e.Location));
+        if (i >= 0 && e.Button == MouseButtons.Left) ViewModeRequested?.Invoke((JukeboxViewMode)i);
+    }
+
+    /// <summary>표시 방식 단추 줄 (고른 것 = 청록 바탕).</summary>
+    private void ModeRow(Graphics g, Rectangle r)
+    {
+        int w = (r.Width - 8) / 3;
+        for (int i = 0; i < 3; i++)
+        {
+            var b = new Rectangle(r.X + i * (w + 4), r.Y, w, r.Height);
+            modeRects[i] = b;
+            bool on = (int)ViewMode == i;
+            DeckTheme.Bevel(g, b, !on, on ? DeckTheme.Lit : hoverMode == i ? DeckTheme.Hover : DeckTheme.Panel, 1);
+            TextRenderer.DrawText(g, ModeNames[i], DeckTheme.Info, b, on ? Color.White : DeckTheme.TextDark, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
+        }
+    }
+
     protected override void OnPaint(PaintEventArgs e)
     {
         var g = e.Graphics;
@@ -151,7 +192,7 @@ internal sealed class PlayerDisplay : DeckControl
         DeckTheme.Bevel(g, new Rectangle(0, 0, Width, Height), true, DeckTheme.Panel, 2);
 
         const int pad = 9, gap = 5;
-        int rowH = Math.Max(18, Math.Min(28, (Height - pad * 2 - gap * 4) * 10 / 54));   // 제목 줄은 1.4배
+        int rowH = Math.Max(18, Math.Min(28, (Height - pad * 2 - gap * 5) * 10 / 64));   // 제목 줄은 1.4배, 맨 아래 표시 방식 단추 줄
         int lw = Math.Max(60, Width - pad * 2);
         var left = TextFormatFlags.Left;
         var center = TextFormatFlags.HorizontalCenter;
@@ -176,6 +217,7 @@ internal sealed class PlayerDisplay : DeckControl
         }
         else
             DeckTheme.InsetText(g, new Rectangle(pad, y, lw, rowH), "왼쪽 목록에서 곡을 두 번 클릭하면 재생합니다", DeckTheme.Mono, DeckTheme.Muted, left);
+        ModeRow(g, new Rectangle(pad, Height - pad - rowH, lw, rowH));
     }
 
     /// <summary>상태 줄: 한 칸 안에 왼쪽 시간 (초록 LCD), 가운데 템포 · 속도 · 키 · 볼륨, 오른쪽 상태 · 모드.</summary>
@@ -231,6 +273,23 @@ internal sealed class LyricsPanel : DeckControl
     }
     public string Empty = "가사 파일(.ISS)이 없습니다";
 
+    // 글자 크기는 칸 높이에 맞춘다 (지금 줄 ≈ 안쪽 높이의 38%, 다음 줄 ≈ 25%, 원래 크기 20pt · 13pt까지)
+    private Font bigFont = DeckTheme.LyricBig, nextFont = DeckTheme.LyricNext;
+    private int fontsFor = -1;
+
+    private void FitFonts()
+    {
+        int inner = Math.Max(20, Height - 16);
+        if (inner == fontsFor) return;
+        fontsFor = inner;
+        if (!ReferenceEquals(bigFont, DeckTheme.LyricBig)) bigFont.Dispose();
+        if (!ReferenceEquals(nextFont, DeckTheme.LyricNext)) nextFont.Dispose();
+        float big = Math.Min(DeckTheme.LyricBig.SizeInPoints, inner * 0.38f * 0.75f);
+        float next = Math.Min(DeckTheme.LyricNext.SizeInPoints, inner * 0.25f * 0.75f);
+        bigFont = big >= DeckTheme.LyricBig.SizeInPoints ? DeckTheme.LyricBig : new Font("Malgun Gothic", Math.Max(7f, big), FontStyle.Bold);
+        nextFont = next >= DeckTheme.LyricNext.SizeInPoints ? DeckTheme.LyricNext : new Font("Malgun Gothic", Math.Max(6f, next), FontStyle.Bold);
+    }
+
     protected override void OnPaint(PaintEventArgs e)
     {
         var g = e.Graphics;
@@ -243,27 +302,38 @@ internal sealed class LyricsPanel : DeckControl
         {
             if (Lyrics == null)
             {
-                int h1 = DeckTheme.LyricNext.Height, h2 = DeckTheme.Small.Height;
+                FitFonts();
+                int h1 = nextFont.Height, h2 = DeckTheme.Small.Height;
                 int y0 = (Height - h1 - h2 - 4) / 2;
-                TextRenderer.DrawText(g, Empty, DeckTheme.LyricNext, new Rectangle(0, y0, Width, h1), DeckTheme.Muted, TextFormatFlags.HorizontalCenter);
+                TextRenderer.DrawText(g, Empty, nextFont, new Rectangle(0, y0, Width, h1), DeckTheme.Muted, TextFormatFlags.HorizontalCenter);
                 TextRenderer.DrawText(g, "NO LYRICS DATA LOADED", DeckTheme.Small, new Rectangle(0, y0 + h1 + 4, Width, h2), Color.FromArgb(150, 150, 150), TextFormatFlags.HorizontalCenter);
             }
             else TextRenderer.DrawText(g, "♪", DeckTheme.LyricNext, new Rectangle(0, 0, Width, Height), DeckTheme.Muted, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
             return;
         }
-        DrawLine(g, Lyrics.Lines[State.Line], State.Lit, DeckTheme.LyricBig, Height * 0.40f);
+        FitFonts();
+        DrawLine(g, Lyrics.Lines[State.Line], State.Lit, bigFont, 8 + (Height - 16) * 0.36f);
         if (State.NextLine >= 0 && State.NextLine < Lyrics.Lines.Count)
-            DrawLine(g, Lyrics.Lines[State.NextLine], null, DeckTheme.LyricNext, Height * 0.78f);
+            DrawLine(g, Lyrics.Lines[State.NextLine], null, nextFont, 8 + (Height - 16) * 0.79f);
     }
 
-    /// <summary>글자마다 너비를 재서 가운데에 놓고, 부른 칸이면 초록으로 그린다.</summary>
     private void DrawLine(Graphics g, IssLine line, bool[] lit, Font font, float centerY)
+    {
+        LyricsPainter.DrawLine(g, line, lit, font, centerY, 12, Width - 24, lit == null ? DeckTheme.Muted : DeckTheme.TextDark, DeckTheme.LitOnLight, Color.Empty);
+    }
+}
+
+/// <summary>가사 한 줄 그리기 (가사 상자 · 노래방 겹침 공용): 글자마다 너비를 재서 가운데에 놓고, 부른 칸은 on 색.</summary>
+internal static class LyricsPainter
+{
+    /// <param name="shadow">글자 그림자 색 (Color.Empty = 없음: 그림 위에 겹칠 때 읽히도록).</param>
+    public static void DrawLine(Graphics g, IssLine line, bool[] lit, Font font, float centerY, int left, int width, Color dim, Color on, Color shadow)
     {
         // 앞뒤 공백은 빼고 가운데 맞춤 (원본 두 번째 화면 방식)
         int first = 0, last = line.Cells.Count - 1;
         while (first <= last && line.Cells[first].Text.Trim().Length == 0) first++;
         while (last >= first && line.Cells[last].Text.Trim().Length == 0) last--;
-        if (first > last) return;
+        if (first > last || width <= 0) return;
         var widths = new float[line.Cells.Count];
         float total = 0;
         var flags = TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix;
@@ -274,16 +344,19 @@ internal sealed class LyricsPanel : DeckControl
             widths[i] = c.Text == " " ? spaceW : TextRenderer.MeasureText(g, c.Text, font, Size.Empty, flags).Width;
             total += widths[i];
         }
-        float scale = total > Width - 24 ? (Width - 24) / total : 1f;
-        float x = (Width - total * scale) / 2;
+        float scale = total > width ? width / total : 1f;
+        float x = left + (width - total * scale) / 2;
         int h = font.Height;
-        Color dim = lit == null ? DeckTheme.Muted : DeckTheme.TextDark;
         for (int i = first; i <= last; i++)
         {
             var c = line.Cells[i];
-            bool on = lit != null && c.Column < lit.Length && lit[c.Column];
+            bool lighted = lit != null && c.Column < lit.Length && lit[c.Column];
             if (c.Text != " ")
-                TextRenderer.DrawText(g, c.Text, font, new Point((int)x, (int)(centerY - h / 2)), on ? DeckTheme.LitOnLight : dim, flags);
+            {
+                var pt = new Point((int)x, (int)(centerY - h / 2));
+                if (shadow != Color.Empty) TextRenderer.DrawText(g, c.Text, font, new Point(pt.X + 2, pt.Y + 2), shadow, flags);
+                TextRenderer.DrawText(g, c.Text, font, pt, lighted ? on : dim, flags);
+            }
             x += widths[i] * scale;
         }
     }

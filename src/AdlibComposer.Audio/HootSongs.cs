@@ -74,6 +74,12 @@ public static class HootSongs
             v = HootNeoGeo.Render(e, dir, code);
             what = "네오지오 사운드 보드 · 명령 0x" + code.ToString("X2");
         }
+        else if (HootOpmBoard.Handles(driver, e.Type))
+        {
+            // hoot 아케이드 Z80 + YM2151 + OKIM6295 보드 (CPS-1 · Double Dragon 2 · 3): 사운드 보드에서 사운드 ROM을 돌려 미리 렌더
+            v = HootOpmBoard.Render(e, dir, code);
+            what = HootOpmBoard.LayoutOf(driver, e.Type).Name + " 사운드 보드 · 명령 0x" + code.ToString("X2");
+        }
         else if (driver == "taito")
         {
             // hoot 타이토 YM2610 보드: 사운드 보드 (Z80 + YM2610 + TC0140SYT)에서 사운드 ROM을 돌려 미리 렌더

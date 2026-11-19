@@ -186,7 +186,6 @@
   - 처음엔 YM2151을 060000h로 잘못 둬서 드라이버가 080002h 바쁨 비트 (OKI 상태 F0h)를 기다리며 멈춤 → 배치를 바로잡음
   - 명령 · YM2151 = IRQ 4 (자동 벡터)지만 실제 드라이버는 SR 마스크 7로 막고 YM2151 타이머 A 플래그와 명령을 폴링한다
 - 다음 (8-8f): Z80 + YM2151 + OKIM6295 작은 보드 (tecmo16 · raizing mahou · bgaregga · banpresto dbz · dooyong …) — MAME 배치를 하나씩 확인해 `HootOpmBoard.Layout`에, atari system1 (6502), 그 뒤 새 칩
-- (예전 8-8e 후보) 같은 YM2151 + OKIM6295 보드 더 (dataeast supbtime · tecmo16 · toaplan · raizing · banpresto …, `HootOpmBoard.Layout` 추가), atari system1 (6502 + YM2151), 그 뒤 새 칩 (QSound · ES5505 · C140 · uPD7759 · K053260 …)
   - 남은 것 (8-8a): "소리 남" 기준이 처음 6초에 키온 하나라 몇 항목은 ADPCM 하나뿐 (driftout · liquidk · megablst 등 첫 곡이 짧은 효과음일 수 있음) — 귀로 확인, bshark (code0 · code1 둘), taito z 계열 다른 보드
 
 ### 남은 문제 (단계와 따로)

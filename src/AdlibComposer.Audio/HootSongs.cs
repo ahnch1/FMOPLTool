@@ -74,6 +74,12 @@ public static class HootSongs
             v = HootNeoGeo.Render(e, dir, code);
             what = "네오지오 사운드 보드 · 명령 0x" + code.ToString("X2");
         }
+        else if (HootCps2.Handles(driver, e.Type))
+        {
+            // hoot 캡콤 CPS-2: 사운드 보드 (Z80 + QSound)에서 사운드 ROM을 돌려 미리 렌더 (QSound는 DSP 없는 HLE)
+            v = HootCps2.Render(e, dir, code);
+            what = "CPS-2 사운드 보드 (QSound) · 명령 0x" + code.ToString("X2");
+        }
         else if (HootSegaSystem16.Handles(driver, e.Type))
         {
             // hoot 세가 System 16A · 16B: 사운드 보드 (Z80 + YM2151 + uPD7759)에서 사운드 ROM을 돌려 미리 렌더

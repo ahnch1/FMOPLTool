@@ -45,7 +45,7 @@ public sealed class VgmPlayer
     }
 
     private readonly List<ExtraChip> extras = new List<ExtraChip>();
-    private ExtraChip xSn2;
+    private ExtraChip xSn2, xOki2;
     private ExtraChip xSn, xOpll, xOpn2, xOpm, xOpn, xOpna, xOpnb, xOki, xNes, xPce, xNsfx, xMsm, xSaa, xGb;
     /// <summary>YM2612 PCM 데이터 뱅크 (블록 0x00) · 읽는 위치.</summary>
     private byte[] pcmBank = new byte[0];
@@ -96,6 +96,7 @@ public sealed class VgmPlayer
         if (s.Ym2608Clock > 0) l.Add(new OpnChip(OpnChip.Variant.Ym2608, s.Ym2608Clock));
         if (s.Ym2610Clock > 0) l.Add(new OpnChip(s.Ym2610B ? OpnChip.Variant.Ym2610B : OpnChip.Variant.Ym2610, s.Ym2610Clock));
         if (s.Okim6295Clock > 0) l.Add(new Okim6295(s.Okim6295Clock, s.OkiPin7, Rate));
+        if (s.Okim6295Clock > 0 && s.Okim6295Clock2 > 0) l.Add(new Okim6295(s.Okim6295Clock2, s.OkiPin7, Rate));
         if (s.NesApuClock > 0) l.Add(new NesApu(s.NesApuClock, Rate, s.NesFds));
         if ((s.NsfChips & (NsfExpansion.Vrc6 | NsfExpansion.N163 | NsfExpansion.Mmc5)) != 0) l.Add(new NsfExpansion(s.NsfChips, s.NesApuClock > 0 ? s.NesApuClock : NesApu.NtscClock, Rate));
         if (s.Huc6280Clock > 0) l.Add(new Huc6280Psg(s.Huc6280Clock, Rate));
@@ -244,7 +245,7 @@ public sealed class VgmPlayer
         }
 
         extras.Clear();
-        xSn2 = null;
+        xSn2 = null; xOki2 = null;
         xSn = xOpll = xOpn2 = xOpm = xOpn = xOpna = xOpnb = xOki = xNes = xPce = xNsfx = xMsm = xSaa = xGb = null;
         foreach (var chip in CreateOtherChips(s))
         {
@@ -254,7 +255,7 @@ public sealed class VgmPlayer
             if (chip is Sn76489) { if (xSn == null) xSn = x; else xSn2 = x; }
             else if (chip is Ym2413) xOpll = x;
             else if (chip is Ym2151) xOpm = x;
-            else if (chip is Okim6295) xOki = x;
+            else if (chip is Okim6295) { if (xOki == null) xOki = x; else xOki2 = x; }
             else if (chip is NesApu) xNes = x;
             else if (chip is Huc6280Psg) xPce = x;
             else if (chip is NsfExpansion) xNsfx = x;
@@ -417,7 +418,7 @@ public sealed class VgmPlayer
             case 0x57: Other(xOpna, 1, d[pos + 1], d[pos + 2]); break;
             case 0x58: Other(xOpnb, 0, d[pos + 1], d[pos + 2]); break;
             case 0x59: Other(xOpnb, 1, d[pos + 1], d[pos + 2]); break;
-            case 0xB8: if ((d[pos + 1] & 0x80) == 0) Other(xOki, 0, d[pos + 1], d[pos + 2]); break;
+            case 0xB8: if ((d[pos + 1] & 0x80) == 0) Other(xOki, 0, d[pos + 1], d[pos + 2]); else Other(xOki2, 0, d[pos + 1] & 0x7F, d[pos + 2]); break;
             case 0xB4: if ((d[pos + 1] & 0x80) == 0) Other(xNes, 0, d[pos + 1], d[pos + 2]); break;
             case 0xB9: if ((d[pos + 1] & 0x80) == 0) Other(xPce, 0, d[pos + 1], d[pos + 2]); break;
             case 0xB7: if ((d[pos + 1] & 0x80) == 0) Other(xMsm, 0, d[pos + 1], d[pos + 2]); break;
@@ -455,6 +456,7 @@ public sealed class VgmPlayer
     {
         int type = d[p + 2];
         int size = (int)(VgmFormat.U32(d, p + 3) & 0x7FFFFFFF);
+        bool second = (VgmFormat.U32(d, p + 3) & 0x80000000) != 0;   // 둘째 칩의 ROM
         int at = p + 7;
         if (at + size > d.Length) return;
         if (type < 0x40)
@@ -484,7 +486,8 @@ public sealed class VgmPlayer
             if (type == 0x81 && xOpna != null) ((OpnChip)xOpna.Chip).LoadAdpcm(data, start);
             if (type == 0x82 && xOpnb != null) ((OpnChip)xOpnb.Chip).LoadAdpcmA(data, start);   // YM2610 ADPCM-A ROM
             if (type == 0x83 && xOpnb != null) ((OpnChip)xOpnb.Chip).LoadAdpcm(data, start);    // YM2610 ADPCM-B (DELTA-T) ROM
-            if (type == 0x8B && xOki != null) ((Okim6295)xOki.Chip).LoadRom(data, start);
+            if (type == 0x8B && !second && xOki != null) ((Okim6295)xOki.Chip).LoadRom(data, start);
+            if (type == 0x8B && second && xOki2 != null) ((Okim6295)xOki2.Chip).LoadRom(data, start);
         }
     }
 

@@ -52,6 +52,8 @@ public sealed class VgmSong
     public double Ym3812Clock, Ym3526Clock, Y8950Clock, Ymf262Clock;
     /// <summary>둘째 SN76489 클럭 (VGM 클럭 bit30 = 같은 칩 둘, 명령 30h · 3Fh). 메모리 속 곡은 첫째와 다른 클럭일 수 있다 (hoot 세가 System 1: 2MHz + 4MHz).</summary>
     public double Sn76489Clock2;
+    /// <summary>둘째 OKIM6295 클럭 (VGM 클럭 bit30, 레지스터 bit7, ROM 블록 크기 bit31). 메모리 속 곡은 첫째와 다른 클럭일 수 있다 (hoot Data East: 1MHz + 2MHz).</summary>
+    public double Okim6295Clock2;
     public double Sn76489Clock, Ym2413Clock, Ym2612Clock, Ym2151Clock, Ym2203Clock, Ym2608Clock, Okim6295Clock, NesApuClock, Huc6280Clock, Ym2610Clock, Okim6258Clock, Saa1099Clock, GbDmgClock;
     /// <summary>OKIM6258 깃발 (머리말 0x94: bit0~1 분주, bit3 12비트 출력).</summary>
     public int Okim6258Flags;
@@ -125,7 +127,7 @@ public sealed class VgmSong
             if (Ym2203Clock > 0) l.Add("YM2203");
             if (Ym2608Clock > 0) l.Add("YM2608");
             if (Ym2610Clock > 0) l.Add(Ym2610B ? "YM2610B" : "YM2610");
-            if (Okim6295Clock > 0) l.Add("OKIM6295");
+            if (Okim6295Clock > 0) l.Add(Okim6295Clock2 > 0 ? "OKIM6295 ×2" : "OKIM6295");
             if (Okim6258Clock > 0) l.Add("OKIM6258");
             if (Saa1099Clock > 0) l.Add("SAA1099");
             if (GbDmgClock > 0) l.Add("GB DMG");
@@ -242,6 +244,7 @@ public static class VgmFormat
         s.NesFds = s.NesApuClock > 0 && (clock(0x84) & 0x80000000) != 0;
         s.Huc6280Clock = hz(0xA4);
         s.OkiPin7 = (clock(0x98) & 0x80000000) != 0;
+        if (s.Okim6295Clock > 0 && (clock(0x98) & 0x40000000) != 0) s.Okim6295Clock2 = s.Okim6295Clock;
         if (s.Version < 0x110 && s.Ym2413Clock > 0)
         {
             // 1.10 전에는 0x10 칸 하나가 YM2413 · YM2612 · YM2151 모두의 클럭: 명령으로 어느 칩인지 본다

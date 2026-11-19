@@ -43,9 +43,9 @@ public static class HootArchive
             case "sega": return t == "system1" || t == "system16a" || t == "system16b"                   // Z80 + SN76489 × 2 / Z80 + YM2151 + uPD7759
                 || t == "outrun" || t == "shangon" || t == "toutrun" || t == "aburner" || t == "spmonaco" || t == "gforce" || t == "pdrift"   // Z80 + YM2151 + 세가 PCM
                 || t == "hangon" || t == "sharrier" || t == "eropnx2";                                       // Z80 + YM2203 + 세가 PCM
-            case "bootleg": return t == "outrun";                                                          // Z80 + SN76489 × 2
+            case "bootleg": return t == "outrun";                                                        // Z80 + YM2151 + 세가 PCM (해적판)
             case "irem": return t == "m72";                                                              // Z80 + YM2151
-            case "capcom": return t == "cps1" || t == "cps2";                                           // Z80 + YM2151 + OKIM6295 / Z80 + QSound                                                          // Z80 + YM2151 + OKIM6295
+            case "capcom": return t == "cps1" || t == "cps2";                                           // Z80 + YM2151 + OKIM6295 / Z80 + QSound
             case "technos": return t == "ddragon2" || t == "ddragon3" || t == "ctribe";
             case "taito": return t == "f2system" || t == "bsystem" || t == "dual68" || t == "xsystem" || t == "fx1a" || t == "sonicb";   // Z80 + YM2610 + TC0140SYT
             case "megadrive": return t == "generic_z80" || t == "iyinc";

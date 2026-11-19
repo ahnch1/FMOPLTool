@@ -1,4 +1,4 @@
-# hoot 재생 작업 현황 (2026-11-20, v2.1.9)
+# hoot 재생 작업 현황 (2026-11-20, v2.1.10)
 
 다른 PC(회사)에서 이어 하기 위한 기록. 자세한 할 일 목록은 원래 `_incoming/Todo.md`(git에 안 들어감)에 있었고, 그중 이어 하는 데 필요한 것을 여기에 옮겼다.
 
@@ -6,10 +6,10 @@
 
 - **시험 자료는 저장소에 없다**: `_incoming/Hootarchive/` (hoot 배포본: `xml_new/` 목록 · `pc98/` 1,709 zip · `pc/` 480 zip · `snes/` · `msx/` · `nes/` · `gb/` …)는 `.gitignore`. 회사 PC에도 같은 자리(`_incoming/Hootarchive`)에 두면 실제 파일 시험 · 진단이 돈다. 없으면 실제 파일 시험은 `SKIP`으로 넘어간다 (합성 시험은 그대로 통과).
 - 작업 방식: 단계마다 커밋 하나 (`vX.Y.Z: …` 한국어 메시지), `Directory.Build.props` 버전 마지막 번호 올림, README 갱신, SelfTest 전부 통과 후 커밋.
-- 시험: `dotnet run -c Release --project tests/AdlibComposer.SelfTest` (전체, 지금 890개 통과), 묶음만: `-- --test pc98` · `hoot98` · `hootgen` · `hootmsx` · `hoot88` · `hootx1` · `hootneo` · `hoottaito` · `hootopm` · `hootarcade` · `hootdeco` · `hootmd` · `hootx68` · `pcat` · `hoot`.
+- 시험: `dotnet run -c Release --project tests/AdlibComposer.SelfTest` (전체, 지금 890개 통과), 묶음만: `-- --test pc98` · `hoot98` · `hootgen` · `hootmsx` · `hoot88` · `hootx1` · `hootneo` · `hoottaito` · `hootopm` · `hootarcade` · `hootdeco` · `hootms1` · `hootmd` · `hootx68` · `pcat` · `hoot`.
 - hoot 문서: http://retropc.net/yui/hoot/PC98.TXT (https 안 됨, http로). 그 밖의 기종(PC/AT · MSX · PC-88 · X1 …) 문서는 없음 — 목록의 시작 코드(rom "patch" 등)를 역어셈블해 규약을 맞춘다.
 
-## 1. 지금까지 (v1.21.0 ~ v2.1.9)
+## 1. 지금까지 (v1.21.0 ~ v2.1.10)
 
 | 판 | 단계 | 내용 |
 |---|---|---|
@@ -31,6 +31,7 @@
 | 2.0.4 | 8-6 (메가드라이브) | hoot megadrive generic_z80 · iyinc: `Audio/HootMegaDrive.cs` (Z80 사운드 쪽 · 카트리지의 Z80 드라이버를 RAM에, 요청 주소) |
 | 2.0.5 | 8-7 (X68000) | MC68000 `Audio/Cpu/M68000.cs` + hoot x68k generic: `Audio/HootX68k.cs` (OPM · ADPCM · DMA · MFP, E00010h = hoot가 대신 하는 IOCS · DOS) |
 | 2.0.6 | 8-7 (X68000 MIDI) | x68k MIDI 판: YM3802 MIDI 보드 (EAFA00h) → 살아 있는 MIDI 곡 (`HootX68k.LoadMidi`) |
+| 2.1.10 | 8-8e (Mega System 1) | hoot jaleco megasys1: `Audio/HootMegaSys1.cs` (MC68000 다시 씀, YM2151 + OKI 둘) |
 | 2.1.9 | 8-8d (데이터 이스트) | hoot dataeast HuC6280 보드: `Audio/HootDeco.cs` (HES의 HuC6280 다시 씀, YM2151 + YM2203 + OKI 둘), `HootOkiVoices` (OKI 음성 상태), VGM 듀얼 OKIM6295 |
 | 2.1.8 | 8-8c (System 1 · M72) | hoot sega system1 (`HootSegaSystem1.cs`, SN76489 2MHz + 4MHz → VGM 듀얼 SN76489) · irem m72 계열 (`HootM72.cs`, RST_NEG 인터럽트, transfer, 핸드셰이크 00h) |
 | 2.1.7 | 8-8b (YM2151 + OKIM6295) | hoot capcom cps1 · technos ddragon2 · ddragon3 · ctribe: `Audio/HootOpmBoard.cs` (보드 배치 표, YM2151 타이머 IRQ, OKI 음성 상태) |
@@ -64,6 +65,7 @@
 | CPS-1 · Double Dragon 2 · 3 (YM2151 + OKIM6295) | 39 / 39 (FM 키온 16개 또는 OKI 2번 이상, 처음 6곡까지) | `--hootopmsurvey roms 200 6` |
 | 세가 System 1 · 아이렘 M72 계열 | 52 / 52 — system1 29/29 · m72 23/23 | `--hootarcadesurvey roms 200 6` (HOOT_ONLY=zip이름,…) |
 | 데이터 이스트 HuC6280 보드 | 41 / 43 — 빠진 2: wizdfire (zip에 사운드 ROM 없음), hangzo (시제품, 곡 목록이 틀뿐) | `--hootdecosurvey roms 300 6` |
+| 잘레코 Mega System 1 | 16 / 16 | `--hootms1survey roms 100 6` |
 | 메가드라이브 (generic_z80 · iyinc) | 93 / 131 (smd zip에 있는 것) — generic_z80 70/108 · iyinc 23/23 | `--hootmdsurvey smd 400 6` |
 | X68000 generic (OPM · ADPCM) | 499 / 553 — generic 328/370 · mfp 171/183 | `--hootx68survey X68k 1000 6` |
 | MIDI 판 X68000 | 141 / 166 (노트) | `--hootx68midisurvey X68k 1000 10` |
@@ -87,6 +89,7 @@
 --hootopmsurvey <roms 폴더> [zip 수] [초]   CPS-1 · Double Dragon 2 · 3 · Combatribes (HOOT_PC · HOOT_REGS)
 --hootarcadesurvey <roms 폴더> [zip 수] [초] 세가 System 1 · 아이렘 M72 계열 (HOOT_ONLY · HOOT_PC · HOOT_PCQ, 타이머 레지스터 표시)
 --hootdecosurvey <roms 폴더> [zip 수] [초]  데이터 이스트 HuC6280 보드 (HOOT_ONLY · HOOT_PC)
+--hootms1survey <roms 폴더> [zip 수] [초]   잘레코 Mega System 1 (YM2151 타이머 레지스터 표시)
 --hootmdsurvey  <smd 폴더> [zip 수] [초]    메가드라이브 Z80 드라이버
 --hootx68survey <X68k 폴더> [zip 수] [초]  X68000: 원인 분류 (boot-not-waiting · exception-N …), 처리 못 한 IOCS · DOS 부름 횟수
 --hootx68midisurvey <X68k 폴더> [zip 수] [초]  X68000 MIDI 판: 보낸 바이트 · 노트, YM3802 레지스터별 마지막 값 (환경 변수 HOOT_ONLY=zip이름,… 로 고르기)
@@ -178,7 +181,12 @@
   - 클럭 (32.22MHz 결정): CPU ÷ 8, YM2151 ÷ 9, YM2203 ÷ 8, OKI #1 ÷ 32 · #2 ÷ 16 (핀7 높음). YM2151 레지스터 1Bh의 CT 출력 = OKI 뱅크 (deco32: bit0 → #1 · bit1 → #2, 그 밖: bit0 → #2)
   - VGM 듀얼 OKIM6295를 더함 (VgmFormat Okim6295Clock2 · VgmPlayer 둘째 칩 · 레지스터 bit7 · ROM 블록 크기 bit31). 메모리 속 곡은 둘째 칩 클럭 2MHz (파일로 내보내면 같은 클럭)
   - 처음부터 핸드셰이크 없이 소리 남 — 데이터 이스트 드라이버는 명령 IRQ1만으로 곡을 받는다
-- 다음 (8-8e): 같은 YM2151 + OKIM6295 보드 더 (dataeast supbtime · tecmo16 · toaplan · raizing · banpresto …, `HootOpmBoard.Layout` 추가), atari system1 (6502 + YM2151), 그 뒤 새 칩 (QSound · ES5505 · C140 · uPD7759 · K053260 …)
+- **8-8e. 잘레코 Mega System 1 — ✅ v2.1.10 (16 / 16, `Audio/HootMegaSys1.cs`)**
+  - MAME megasys1A_sound_map: 68000 7MHz, ROM 000000h~01FFFFh (hoot 목록의 code 두 줄 = ROM_LOAD16_BYTE 짝수 · 홀수), 명령 040000h 읽기 (System C = 060000h — 64th Street · Big Striker · Chimera Beast는 이것이 빠져 처음 무음), YM2151 080001h · 080003h, OKIM6295 #1 0A0001h · #2 0C0001h (4MHz, 핀7 높음), RAM 0E0000h~0FFFFFh
+  - 처음엔 YM2151을 060000h로 잘못 둬서 드라이버가 080002h 바쁨 비트 (OKI 상태 F0h)를 기다리며 멈춤 → 배치를 바로잡음
+  - 명령 · YM2151 = IRQ 4 (자동 벡터)지만 실제 드라이버는 SR 마스크 7로 막고 YM2151 타이머 A 플래그와 명령을 폴링한다
+- 다음 (8-8f): Z80 + YM2151 + OKIM6295 작은 보드 (tecmo16 · raizing mahou · bgaregga · banpresto dbz · dooyong …) — MAME 배치를 하나씩 확인해 `HootOpmBoard.Layout`에, atari system1 (6502), 그 뒤 새 칩
+- (예전 8-8e 후보) 같은 YM2151 + OKIM6295 보드 더 (dataeast supbtime · tecmo16 · toaplan · raizing · banpresto …, `HootOpmBoard.Layout` 추가), atari system1 (6502 + YM2151), 그 뒤 새 칩 (QSound · ES5505 · C140 · uPD7759 · K053260 …)
   - 남은 것 (8-8a): "소리 남" 기준이 처음 6초에 키온 하나라 몇 항목은 ADPCM 하나뿐 (driftout · liquidk · megablst 등 첫 곡이 짧은 효과음일 수 있음) — 귀로 확인, bshark (code0 · code1 둘), taito z 계열 다른 보드
 
 ### 남은 문제 (단계와 따로)

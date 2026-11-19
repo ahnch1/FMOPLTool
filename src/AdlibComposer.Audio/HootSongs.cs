@@ -74,6 +74,12 @@ public static class HootSongs
             v = HootNeoGeo.Render(e, dir, code);
             what = "네오지오 사운드 보드 · 명령 0x" + code.ToString("X2");
         }
+        else if (HootSegaSystem16.Handles(driver, e.Type))
+        {
+            // hoot 세가 System 16A · 16B: 사운드 보드 (Z80 + YM2151 + uPD7759)에서 사운드 ROM을 돌려 미리 렌더
+            v = HootSegaSystem16.Render(e, dir, code);
+            what = "세가 System 16 사운드 보드 · 명령 0x" + code.ToString("X2");
+        }
         else if (HootMegaSys1.Handles(driver, e.Type))
         {
             // hoot 잘레코 Mega System 1: 사운드 보드 (68000 + YM2151 + OKIM6295 둘)에서 사운드 프로그램을 돌려 미리 렌더

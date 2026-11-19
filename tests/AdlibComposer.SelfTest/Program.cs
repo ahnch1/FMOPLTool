@@ -89,6 +89,11 @@ public static class Program
             // 진단: --hootmdsurvey smd폴더 [zip 수] [초]
             return HootMegaDriveTests.Survey(args[1], args.Length > 2 ? int.Parse(args[2]) : 50, args.Length > 3 ? double.Parse(args[3], System.Globalization.CultureInfo.InvariantCulture) : 6);
         }
+        if (args.Length > 1 && args[0] == "--hoots16survey")
+        {
+            // 진단: --hoots16survey roms폴더 [zip 수] [초] (세가 System 16A · 16B)
+            return HootSegaSystem16Tests.Survey(args[1], args.Length > 2 ? int.Parse(args[2]) : 100, args.Length > 3 ? double.Parse(args[3], System.Globalization.CultureInfo.InvariantCulture) : 6);
+        }
         if (args.Length > 1 && args[0] == "--hootms1survey")
         {
             // 진단: --hootms1survey roms폴더 [zip 수] [초] (잘레코 Mega System 1)
@@ -146,7 +151,7 @@ public static class Program
             {
                 ("vgm", () => VgmTests.Run(Check)), ("vgmexport", () => VgmExportTests.Run(Check)), ("vgmtosong", () => VgmToSongTests.Run(Check)), ("newchip", () => NewChipTests.Run(Check)),
                 ("chip", () => ChipTests.Run(Check)), ("chipmidi", () => ChipMidiTests.Run(Check)), ("midi", () => MidiTests.Run(Check)), ("jukebox", () => JukeboxTests.Run(Check)),
-                ("extra", () => ExtraTests.Run(Check)), ("queue", () => EngineQueueTests.Run(Check)), ("nespce", () => NesPceTests.Run(Check)), ("zip", () => ZipTests.Run(Check)), ("ext", () => ExtModuleTests.Run(Check)), ("droraw", () => DroRawTests.Run(Check)), ("hoot", () => HootTests.Run(Check)), ("spc", () => SpcTests.Run(Check)), ("pcfmt", () => PcFormatTests.Run(Check)), ("ym2610", () => Ym2610Tests.Run(Check)), ("small", () => SmallChipTests.Run(Check)), ("gbs", () => GbsTests.Run(Check)), ("mdx", () => MdxTests.Run(Check)), ("x86", () => X86Tests.Run(Check)), ("dos", () => DosTests.Run(Check)), ("pc98", () => Pc98Tests.Run(Check)), ("hoot98", () => HootPc98Tests.Run(Check)), ("hootgen", () => HootGenericTests.Run(Check)), ("hootmsx", () => HootMsxTests.Run(Check)), ("hoot88", () => HootPc88Tests.Run(Check)), ("hootx1", () => HootX1Tests.Run(Check)), ("hootneo", () => HootNeoGeoTests.Run(Check)), ("hoottaito", () => HootTaitoTests.Run(Check)), ("hootopm", () => HootOpmBoardTests.Run(Check)), ("hootarcade", () => HootArcadeZ80Tests.Run(Check)), ("hootdeco", () => HootDecoTests.Run(Check)), ("hootms1", () => HootMegaSys1Tests.Run(Check)), ("hootmd", () => HootMegaDriveTests.Run(Check)), ("hootx68", () => HootX68kTests.Run(Check)), ("pcat", () => PcAtTests.Run(Check)),
+                ("extra", () => ExtraTests.Run(Check)), ("queue", () => EngineQueueTests.Run(Check)), ("nespce", () => NesPceTests.Run(Check)), ("zip", () => ZipTests.Run(Check)), ("ext", () => ExtModuleTests.Run(Check)), ("droraw", () => DroRawTests.Run(Check)), ("hoot", () => HootTests.Run(Check)), ("spc", () => SpcTests.Run(Check)), ("pcfmt", () => PcFormatTests.Run(Check)), ("ym2610", () => Ym2610Tests.Run(Check)), ("small", () => SmallChipTests.Run(Check)), ("gbs", () => GbsTests.Run(Check)), ("mdx", () => MdxTests.Run(Check)), ("x86", () => X86Tests.Run(Check)), ("dos", () => DosTests.Run(Check)), ("pc98", () => Pc98Tests.Run(Check)), ("hoot98", () => HootPc98Tests.Run(Check)), ("hootgen", () => HootGenericTests.Run(Check)), ("hootmsx", () => HootMsxTests.Run(Check)), ("hoot88", () => HootPc88Tests.Run(Check)), ("hootx1", () => HootX1Tests.Run(Check)), ("hootneo", () => HootNeoGeoTests.Run(Check)), ("hoottaito", () => HootTaitoTests.Run(Check)), ("hootopm", () => HootOpmBoardTests.Run(Check)), ("hootarcade", () => HootArcadeZ80Tests.Run(Check)), ("hootdeco", () => HootDecoTests.Run(Check)), ("hootms1", () => HootMegaSys1Tests.Run(Check)), ("hoots16", () => HootSegaSystem16Tests.Run(Check)), ("hootmd", () => HootMegaDriveTests.Run(Check)), ("hootx68", () => HootX68kTests.Run(Check)), ("pcat", () => PcAtTests.Run(Check)),
             };
             foreach (var (name, run) in suites) if (name.Contains(args[1], StringComparison.OrdinalIgnoreCase)) run();
             Console.WriteLine();
@@ -210,6 +215,7 @@ public static class Program
         HootArcadeZ80Tests.Run(Check);
         HootDecoTests.Run(Check);
         HootMegaSys1Tests.Run(Check);
+        HootSegaSystem16Tests.Run(Check);
         HootMegaDriveTests.Run(Check);
         HootX68kTests.Run(Check);
         PcAtTests.Run(Check);

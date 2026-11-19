@@ -71,7 +71,7 @@ public static class HootArcadeZ80Tests
         m.Play(0x33);
         m.RunSeconds(0.01);
         check("hoot m72: command → RST 18h (port 02h, ack 06h)", m.Mem[0x8001] == 0x33 && m.LatchIrqs == 1, m.Mem[0x8001].ToString("X2"));
-        check("hoot m72 / system1: playable types", HootArchive.Playable("irem", "m72") && HootArchive.Playable("sega", "system1") && !HootArchive.Playable("sega", "system16b"), "");
+        check("hoot m72 / system1: playable types", HootArchive.Playable("irem", "m72") && HootArchive.Playable("sega", "system1") && !HootArchive.Playable("sega", "system18"), "");
     }
 
     private static void Real(Action<string, bool, string> check)

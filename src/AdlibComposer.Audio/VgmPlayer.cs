@@ -45,7 +45,7 @@ public sealed class VgmPlayer
     }
 
     private readonly List<ExtraChip> extras = new List<ExtraChip>();
-    private ExtraChip xSn2, xOki2, xUpd, xQs;
+    private ExtraChip xSn2, xOki2, xUpd, xQs, xSpcm;
     private ExtraChip xSn, xOpll, xOpn2, xOpm, xOpn, xOpna, xOpnb, xOki, xNes, xPce, xNsfx, xMsm, xSaa, xGb;
     /// <summary>YM2612 PCM 데이터 뱅크 (블록 0x00) · 읽는 위치.</summary>
     private byte[] pcmBank = new byte[0];
@@ -99,6 +99,7 @@ public sealed class VgmPlayer
         if (s.Okim6295Clock > 0 && s.Okim6295Clock2 > 0) l.Add(new Okim6295(s.Okim6295Clock2, s.OkiPin7, Rate));
         if (s.Upd7759Clock > 0) l.Add(new Upd7759(s.Upd7759Clock, Rate));
         if (s.QsoundClock > 0) l.Add(new QSound(s.QsoundClock, Rate));
+        if (s.SegaPcmClock > 0) l.Add(new SegaPcm(s.SegaPcmClock, s.SegaPcmInterface, Rate));
         if (s.NesApuClock > 0) l.Add(new NesApu(s.NesApuClock, Rate, s.NesFds));
         if ((s.NsfChips & (NsfExpansion.Vrc6 | NsfExpansion.N163 | NsfExpansion.Mmc5)) != 0) l.Add(new NsfExpansion(s.NsfChips, s.NesApuClock > 0 ? s.NesApuClock : NesApu.NtscClock, Rate));
         if (s.Huc6280Clock > 0) l.Add(new Huc6280Psg(s.Huc6280Clock, Rate));
@@ -247,7 +248,7 @@ public sealed class VgmPlayer
         }
 
         extras.Clear();
-        xSn2 = null; xOki2 = null; xUpd = null; xQs = null;
+        xSn2 = null; xOki2 = null; xUpd = null; xQs = null; xSpcm = null;
         xSn = xOpll = xOpn2 = xOpm = xOpn = xOpna = xOpnb = xOki = xNes = xPce = xNsfx = xMsm = xSaa = xGb = null;
         foreach (var chip in CreateOtherChips(s))
         {
@@ -260,6 +261,7 @@ public sealed class VgmPlayer
             else if (chip is Okim6295) { if (xOki == null) xOki = x; else xOki2 = x; }
             else if (chip is Upd7759) xUpd = x;
             else if (chip is QSound) xQs = x;
+            else if (chip is SegaPcm) xSpcm = x;
             else if (chip is NesApu) xNes = x;
             else if (chip is Huc6280Psg) xPce = x;
             else if (chip is NsfExpansion) xNsfx = x;
@@ -423,6 +425,7 @@ public sealed class VgmPlayer
             case 0x58: Other(xOpnb, 0, d[pos + 1], d[pos + 2]); break;
             case 0x59: Other(xOpnb, 1, d[pos + 1], d[pos + 2]); break;
             case 0xB6: Other(xUpd, 0, d[pos + 1] & 0x7F, d[pos + 2]); break;   // uPD7759
+            case 0xC0: Other(xSpcm, 0, d[pos + 1] | (d[pos + 2] << 8), d[pos + 3]); break;   // SegaPCM aaaa dd
             case 0xC4: Other(xQs, 0, d[pos + 3], (d[pos + 1] << 8) | d[pos + 2]); break;   // QSound mm ll rr
             case 0xB8: if ((d[pos + 1] & 0x80) == 0) Other(xOki, 0, d[pos + 1], d[pos + 2]); else Other(xOki2, 0, d[pos + 1] & 0x7F, d[pos + 2]); break;
             case 0xB4: if ((d[pos + 1] & 0x80) == 0) Other(xNes, 0, d[pos + 1], d[pos + 2]); break;
@@ -484,7 +487,7 @@ public sealed class VgmPlayer
             ((NesApu)xNes.Chip).LoadRam(d[at] | (d[at + 1] << 8), d, at + 2, size - 2);
             return;
         }
-        if ((type == 0x81 || type == 0x82 || type == 0x83 || type == 0x8B || type == 0x8F) && size > 8)
+        if ((type == 0x81 || type == 0x82 || type == 0x83 || type == 0x8B || type == 0x8F || type == 0x80) && size > 8)
         {
             int start = (int)VgmFormat.U32(d, at + 4);
             var data = new byte[size - 8];
@@ -495,6 +498,7 @@ public sealed class VgmPlayer
             if (type == 0x8B && !second && xOki != null) ((Okim6295)xOki.Chip).LoadRom(data, start);
             if (type == 0x8B && second && xOki2 != null) ((Okim6295)xOki2.Chip).LoadRom(data, start);
             if (type == 0x8F && xQs != null) ((QSound)xQs.Chip).LoadRom(data, start);
+            if (type == 0x80 && xSpcm != null) ((SegaPcm)xSpcm.Chip).LoadRom(data, start);
         }
     }
 

@@ -58,6 +58,9 @@ public sealed class VgmSong
     public double Upd7759Clock;
     /// <summary>QSound 클럭 (VGM B4h, 명령 C4h, ROM 블록 8Fh) — DSP 없는 HLE로 낸다.</summary>
     public double QsoundClock;
+    /// <summary>세가 PCM 클럭 (VGM 38h) · 인터페이스 (3Ch: 마스크 &lt;&lt; 16 | 뱅크 자리), 명령 C0h, ROM 블록 80h.</summary>
+    public double SegaPcmClock;
+    public int SegaPcmInterface;
     public double Sn76489Clock, Ym2413Clock, Ym2612Clock, Ym2151Clock, Ym2203Clock, Ym2608Clock, Okim6295Clock, NesApuClock, Huc6280Clock, Ym2610Clock, Okim6258Clock, Saa1099Clock, GbDmgClock;
     /// <summary>OKIM6258 깃발 (머리말 0x94: bit0~1 분주, bit3 12비트 출력).</summary>
     public int Okim6258Flags;
@@ -92,7 +95,7 @@ public sealed class VgmSong
     public bool HasOpl { get { return Ym3812Clock > 0 || Ym3526Clock > 0 || Y8950Clock > 0 || Ymf262Clock > 0; } }
     public bool IsOpl3 { get { return Ymf262Clock > 0; } }
     /// <summary>PSG · SCC · OPL 말고 다른 칩 (공통 칩 경로로 내는 것).</summary>
-    public bool HasOther { get { return Sn76489Clock > 0 || Ym2413Clock > 0 || Ym2612Clock > 0 || Ym2151Clock > 0 || Ym2203Clock > 0 || Ym2608Clock > 0 || Okim6295Clock > 0 || NesApuClock > 0 || Huc6280Clock > 0 || Ym2610Clock > 0 || Okim6258Clock > 0 || Saa1099Clock > 0 || GbDmgClock > 0 || Upd7759Clock > 0 || QsoundClock > 0 || SpcImage != null || SelfRunning != null; } }
+    public bool HasOther { get { return Sn76489Clock > 0 || Ym2413Clock > 0 || Ym2612Clock > 0 || Ym2151Clock > 0 || Ym2203Clock > 0 || Ym2608Clock > 0 || Okim6295Clock > 0 || NesApuClock > 0 || Huc6280Clock > 0 || Ym2610Clock > 0 || Okim6258Clock > 0 || Saa1099Clock > 0 || GbDmgClock > 0 || Upd7759Clock > 0 || QsoundClock > 0 || SegaPcmClock > 0 || SpcImage != null || SelfRunning != null; } }
     /// <summary>소리 낼 수 있는 칩이 하나라도 있는가.</summary>
     public bool IsPlayable { get { return HasPsg || HasScc || HasOpl || HasOther; } }
     public bool AyIsYm { get { return AyType >= 0x10; } }
@@ -134,6 +137,7 @@ public sealed class VgmSong
             if (Okim6295Clock > 0) l.Add(Okim6295Clock2 > 0 ? "OKIM6295 ×2" : "OKIM6295");
             if (Upd7759Clock > 0) l.Add("uPD7759");
             if (QsoundClock > 0) l.Add("QSound");
+            if (SegaPcmClock > 0) l.Add("SegaPCM");
             if (Okim6258Clock > 0) l.Add("OKIM6258");
             if (Saa1099Clock > 0) l.Add("SAA1099");
             if (GbDmgClock > 0) l.Add("GB DMG");
@@ -254,6 +258,8 @@ public static class VgmFormat
         s.Upd7759Clock = (clock(0x8C) & 0x80000000) != 0 ? 0 : hz(0x8C);   // 마스터 모드 (bit31)는 아직
         if ((clock(0x8C) & 0x80000000) != 0) s.UnsupportedChips.Add("uPD7759 (master)");
         s.QsoundClock = hz(0xB4);
+        s.SegaPcmClock = hz(0x38);
+        if (s.SegaPcmClock > 0 && 0x3F < dataOfs) s.SegaPcmInterface = (int)clock(0x3C);
         if (s.Version < 0x110 && s.Ym2413Clock > 0)
         {
             // 1.10 전에는 0x10 칸 하나가 YM2413 · YM2612 · YM2151 모두의 클럭: 명령으로 어느 칩인지 본다
@@ -267,7 +273,7 @@ public static class VgmFormat
 
         var other = new (int ofs, string name)[]
         {
-            (0x38, "SegaPCM"), (0x40, "RF5C68"), (0x60, "YMF278B (OPL4)"), (0x64, "YMF271 (OPX)"),
+            (0x40, "RF5C68"), (0x60, "YMF278B (OPL4)"), (0x64, "YMF271 (OPX)"),
             (0x68, "YMZ280B"), (0x6C, "RF5C164"), (0x70, "PWM"), (0x88, "MultiPCM"),
             (0xA0, "K054539"), (0xA8, "C140"),
             (0xAC, "K053260"), (0xB0, "Pokey"), (0xB8, "SCSP"), (0xC0, "WonderSwan"), (0xC4, "VSU"),

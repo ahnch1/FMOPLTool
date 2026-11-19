@@ -1,4 +1,4 @@
-# hoot 재생 작업 현황 (2026-11-16, v2.0.6)
+# hoot 재생 작업 현황 (2026-11-20, v2.1.6)
 
 다른 PC(회사)에서 이어 하기 위한 기록. 자세한 할 일 목록은 원래 `_incoming/Todo.md`(git에 안 들어감)에 있었고, 그중 이어 하는 데 필요한 것을 여기에 옮겼다.
 
@@ -6,10 +6,10 @@
 
 - **시험 자료는 저장소에 없다**: `_incoming/Hootarchive/` (hoot 배포본: `xml_new/` 목록 · `pc98/` 1,709 zip · `pc/` 480 zip · `snes/` · `msx/` · `nes/` · `gb/` …)는 `.gitignore`. 회사 PC에도 같은 자리(`_incoming/Hootarchive`)에 두면 실제 파일 시험 · 진단이 돈다. 없으면 실제 파일 시험은 `SKIP`으로 넘어간다 (합성 시험은 그대로 통과).
 - 작업 방식: 단계마다 커밋 하나 (`vX.Y.Z: …` 한국어 메시지), `Directory.Build.props` 버전 마지막 번호 올림, README 갱신, SelfTest 전부 통과 후 커밋.
-- 시험: `dotnet run -c Release --project tests/AdlibComposer.SelfTest` (전체, 지금 890개 통과), 묶음만: `-- --test pc98` · `hoot98` · `hootgen` · `hootmsx` · `hoot88` · `hootx1` · `hootneo` · `hootmd` · `hootx68` · `pcat` · `hoot`.
+- 시험: `dotnet run -c Release --project tests/AdlibComposer.SelfTest` (전체, 지금 890개 통과), 묶음만: `-- --test pc98` · `hoot98` · `hootgen` · `hootmsx` · `hoot88` · `hootx1` · `hootneo` · `hoottaito` · `hootmd` · `hootx68` · `pcat` · `hoot`.
 - hoot 문서: http://retropc.net/yui/hoot/PC98.TXT (https 안 됨, http로). 그 밖의 기종(PC/AT · MSX · PC-88 · X1 …) 문서는 없음 — 목록의 시작 코드(rom "patch" 등)를 역어셈블해 규약을 맞춘다.
 
-## 1. 지금까지 (v1.21.0 ~ v2.0.6)
+## 1. 지금까지 (v1.21.0 ~ v2.1.6)
 
 | 판 | 단계 | 내용 |
 |---|---|---|
@@ -31,6 +31,7 @@
 | 2.0.4 | 8-6 (메가드라이브) | hoot megadrive generic_z80 · iyinc: `Audio/HootMegaDrive.cs` (Z80 사운드 쪽 · 카트리지의 Z80 드라이버를 RAM에, 요청 주소) |
 | 2.0.5 | 8-7 (X68000) | MC68000 `Audio/Cpu/M68000.cs` + hoot x68k generic: `Audio/HootX68k.cs` (OPM · ADPCM · DMA · MFP, E00010h = hoot가 대신 하는 IOCS · DOS) |
 | 2.0.6 | 8-7 (X68000 MIDI) | x68k MIDI 판: YM3802 MIDI 보드 (EAFA00h) → 살아 있는 MIDI 곡 (`HootX68k.LoadMidi`) |
+| 2.1.6 | 8-8a (타이토 YM2610) | hoot taito f2system · bsystem · dual68 · xsystem · fx1a · sonicb: `Audio/HootTaito.cs` (Z80 + YM2610(B) + TC0140SYT, 소리 켬 EFh) |
 
 ### 구조 (어디를 보면 되나)
 
@@ -56,6 +57,7 @@
 | PC-88 (opn · opna) | 487 / 527 — opn 357/385 · opna 130/142 | `--hoot88survey pc88 1000 6` |
 | X1 (psg · opm) | 143 / 152 — opm 65/71 · psg 78/81 | `--hootx1survey x1 1000 8` |
 | 네오지오 | 137 / 146 (음악일 만한 코드 10h 이상 3곡까지) | `--hootneosurvey roms 200 6` |
+| 타이토 YM2610 보드 (f2 · b · dual68 · x · fx1a · sonicb) | 67 / 67 (첫 곡이 조용하면 다음 곡 3개까지) | `--hoottaitosurvey roms 200 6` |
 | 메가드라이브 (generic_z80 · iyinc) | 93 / 131 (smd zip에 있는 것) — generic_z80 70/108 · iyinc 23/23 | `--hootmdsurvey smd 400 6` |
 | X68000 generic (OPM · ADPCM) | 499 / 553 — generic 328/370 · mfp 171/183 | `--hootx68survey X68k 1000 6` |
 | MIDI 판 X68000 | 141 / 166 (노트) | `--hootx68midisurvey X68k 1000 10` |
@@ -75,6 +77,7 @@
 --hoot88survey  <pc88 폴더> [zip 수] [초]   PC-88: 원인 분류 (no-interrupts 추가)
 --hootx1survey  <x1 폴더> [zip 수] [초]     X1: CTC 채널마다 제어어:시간 상수 · 벡터도
 --hootneosurvey <roms 폴더> [zip 수] [초]   네오지오 (hoot 목록에 neogeo로 있는 zip만)
+--hoottaitosurvey <roms 폴더> [zip 수] [초]  타이토 YM2610 보드 (환경 변수 HOOT_PC=1 · HOOT_PCQ=주소,… · HOOT_RAM=주소,길이 · HOOT_WATCH=주소 · HOOT_REGS=1로 PC 분포 · RAM · 읽은 곳 · 레지스터)
 --hootmdsurvey  <smd 폴더> [zip 수] [초]    메가드라이브 Z80 드라이버
 --hootx68survey <X68k 폴더> [zip 수] [초]  X68000: 원인 분류 (boot-not-waiting · exception-N …), 처리 못 한 IOCS · DOS 부름 횟수
 --hootx68midisurvey <X68k 폴더> [zip 수] [초]  X68000 MIDI 판: 보낸 바이트 · 노트, YM3802 레지스터별 마지막 값 (환경 변수 HOOT_ONLY=zip이름,… 로 고르기)
@@ -140,7 +143,16 @@
   - 남은 무음 25: missing-file 16 (ZML · ZMG 등 zip에 없음), bytes-no-note 6, boot-not-waiting 2 (geogseal: 무엇을 기다리는지 모름), no-midi-bytes 1
 - 아직 없음: PCM8 (TRAP #2, pcm8 옵션 12항목 — ADPCM 여러 채널 섞기, VGM으로는 MSM6258 하나뿐이라 새 길이 필요), mxdrv 형식 3, 래스터 · H-SYNC 인터럽트
 
-### 8-8. 아케이드 · 그 밖 — 아주 큼, 나중 (보드마다 CPU · 칩이 다름, 약 600항목)
+### 8-8. 아케이드 · 그 밖 — 보드마다 CPU · 칩이 다름 (약 600항목). 있는 CPU · 칩으로 되는 보드부터 하위 단계로
+
+- 있는 것으로 되는 보드 (zip 있는 항목): 타이토 Z80 + YM2610 ≈ 67 → **8-8a ✅**, Z80 + YM2151 + OKIM6295 (capcom cps1 29 · technos ddragon2 7 · …) ≈ 40, irem m72 (Z80 + YM2151 + DAC) 23, sega system1 (Z80 + SN76489 × 2) 29, Z80 + YM2203 계열 (taito 소품 · dataeast …)
+- 새 칩 · CPU가 필요: capcom cps2 (QSound) 38, taito f3system (68000 + ES5505) 40, namco system1 · 2 (6809 + YM2151 + C140), sega system16 (YM2151 + uPD7759), konami (K053260 · K054539), model2 · 3 · zn …
+- **8-8a. 타이토 YM2610 보드 — ✅ v2.1.6 (67 / 67, `Audio/HootTaito.cs`)**
+  - 기계 (MAME taito_f2 · taito_b · taito_h · ninjaw · taito_x · taitofx1): Z80 4MHz, 0000h~3FFFh 고정, 4000h~7FFFh 뱅크 (F200h = n → ROM n × 4000h, MAME의 (n − 1) & 7 + CONTINUE와 같은 자리), RAM C000h~DFFFh, YM2610 E000h~E003h (E000h 읽기 = 타이머 플래그), E400h · EA00h … 읽기 = 0
+  - TC0140SYT (슬레이브): E200h = 모드, E201h 읽기 = 모드 0~3 니블 (1 · 3 읽으면 포트 01 · 23 다 읽음), 모드 4 = 상태 (bit0 포트 01 참 · bit1 포트 23 참), 쓰기 모드 0~3 = 68000에 답 (버림), 5 · 6 = NMI 끔 · 켬. 쓴 드라이버들은 모두 NMI를 끄고 타이머 IRQ 안에서 상태를 읽는다
+  - 타이토 드라이버 (Kitaro 계열)는 처음 소리가 꺼져 있음 — 명령 EFh = 소리 켬 (CF2Ch = 7), EEh = 끔. 처리 코드 `FE EF C0 3E`가 있으면 부팅 뒤 EFh를 먼저 보냄. 명령 3Eh 미만 = 곡, C0h~EFh = 볼륨 · 팬 등, F0h~ = 특수
+  - 곡 코드 = 포트 0 · 1 (낮은 · 높은 니블), 256 이상 (fx1a Magical Date EX 0x1A4 …)은 위 바이트를 포트 2 · 3에 먼저
+  - 남은 것: "소리 남" 기준이 처음 6초에 키온 하나라 몇 항목은 ADPCM 하나뿐 (driftout · liquidk · megablst 등 첫 곡이 짧은 효과음일 수 있음) — 귀로 확인, bshark (code0 · code1 둘), taito z 계열 다른 보드
 
 ### 남은 문제 (단계와 따로)
 - PC-98 FM 무음 (300 zip 표본): vector-not-hooked 25 (98stdium · g3: 0으로 찬 메모리로 뛰어감), writes-no-keyon 24 (FUGA fgplay_h · MAKO · ARTDI_98이 hoot 인터럽트를 끔), unknown-op 9 (386 접두어 66h · 65h), no-chip-writes 8, koroshi 같은 이름 불일치 (xml = file01.MUS, zip = 일본어 원래 이름)

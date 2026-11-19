@@ -45,6 +45,7 @@ public sealed class VgmPlayer
     }
 
     private readonly List<ExtraChip> extras = new List<ExtraChip>();
+    private ExtraChip xSn2;
     private ExtraChip xSn, xOpll, xOpn2, xOpm, xOpn, xOpna, xOpnb, xOki, xNes, xPce, xNsfx, xMsm, xSaa, xGb;
     /// <summary>YM2612 PCM 데이터 뱅크 (블록 0x00) · 읽는 위치.</summary>
     private byte[] pcmBank = new byte[0];
@@ -87,6 +88,7 @@ public sealed class VgmPlayer
         if (s.SpcImage != null) l.Add(new SnesSpc(s.SpcImage));
         if (s.SelfRunning != null && s.SelfRunning() is ISoundChip own) l.Add(own);
         if (s.Sn76489Clock > 0) l.Add(new Sn76489(s.Sn76489Clock, Rate, s.SnFeedback, s.SnWidth));
+        if (s.Sn76489Clock > 0 && s.Sn76489Clock2 > 0) l.Add(new Sn76489(s.Sn76489Clock2, Rate, s.SnFeedback, s.SnWidth));
         if (s.Ym2413Clock > 0) l.Add(new Ym2413(s.Ym2413Clock, s.Vrc7));
         if (s.Ym2612Clock > 0) l.Add(new OpnChip(OpnChip.Variant.Ym2612, s.Ym2612Clock));
         if (s.Ym2151Clock > 0) l.Add(new Ym2151(s.Ym2151Clock));
@@ -242,13 +244,14 @@ public sealed class VgmPlayer
         }
 
         extras.Clear();
+        xSn2 = null;
         xSn = xOpll = xOpn2 = xOpm = xOpn = xOpna = xOpnb = xOki = xNes = xPce = xNsfx = xMsm = xSaa = xGb = null;
         foreach (var chip in CreateOtherChips(s))
         {
             var x = new ExtraChip { Chip = chip, Base = -1 };
             for (int i = 0; i < channels.Count; i++) if (channels[i].Chip == ChipKind.Other && channels[i].Extra == extras.Count) { x.Base = i; break; }
             extras.Add(x);
-            if (chip is Sn76489) xSn = x;
+            if (chip is Sn76489) { if (xSn == null) xSn = x; else xSn2 = x; }
             else if (chip is Ym2413) xOpll = x;
             else if (chip is Ym2151) xOpm = x;
             else if (chip is Okim6295) xOki = x;
@@ -403,6 +406,8 @@ public sealed class VgmPlayer
             case 0x5F: if (opl != null && opl3) WriteOpl(0x100 | d[pos + 1], d[pos + 2]); break;
             case 0x50: Other(xSn, 0, 0, d[pos + 1]); break;
             case 0x4F: Other(xSn, 1, 0, d[pos + 1]); break;
+            case 0x30: Other(xSn2, 0, 0, d[pos + 1]); break;   // 둘째 SN76489
+            case 0x3F: Other(xSn2, 1, 0, d[pos + 1]); break;
             case 0x51: Other(xOpll, 0, d[pos + 1], d[pos + 2]); break;
             case 0x52: Other(xOpn2, 0, d[pos + 1], d[pos + 2]); break;
             case 0x53: Other(xOpn2, 1, d[pos + 1], d[pos + 2]); break;

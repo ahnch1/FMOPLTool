@@ -74,6 +74,18 @@ public static class HootSongs
             v = HootNeoGeo.Render(e, dir, code);
             what = "네오지오 사운드 보드 · 명령 0x" + code.ToString("X2");
         }
+        else if (HootSegaSystem1.Handles(driver, e.Type))
+        {
+            // hoot 세가 System 1: 사운드 보드 (Z80 + SN76489 2MHz · 4MHz)에서 사운드 ROM을 돌려 미리 렌더
+            v = HootSegaSystem1.Render(e, dir, code);
+            what = "세가 System 1 사운드 보드 · 명령 0x" + code.ToString("X2");
+        }
+        else if (HootM72.Handles(driver, e.Type))
+        {
+            // hoot 아이렘 M72: 사운드 보드 (Z80 + YM2151)에서 사운드 프로그램을 돌려 미리 렌더 (DAC 샘플 빠짐)
+            v = HootM72.Render(e, dir, code);
+            what = "아이렘 M72 사운드 보드 · 명령 0x" + code.ToString("X2");
+        }
         else if (HootOpmBoard.Handles(driver, e.Type))
         {
             // hoot 아케이드 Z80 + YM2151 + OKIM6295 보드 (CPS-1 · Double Dragon 2 · 3): 사운드 보드에서 사운드 ROM을 돌려 미리 렌더

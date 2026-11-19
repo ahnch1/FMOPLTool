@@ -50,6 +50,8 @@ public sealed class VgmSong
     /// <summary>K052539 (SCC+): 다섯 채널 모두 자기 파형.</summary>
     public bool SccPlus;
     public double Ym3812Clock, Ym3526Clock, Y8950Clock, Ymf262Clock;
+    /// <summary>둘째 SN76489 클럭 (VGM 클럭 bit30 = 같은 칩 둘, 명령 30h · 3Fh). 메모리 속 곡은 첫째와 다른 클럭일 수 있다 (hoot 세가 System 1: 2MHz + 4MHz).</summary>
+    public double Sn76489Clock2;
     public double Sn76489Clock, Ym2413Clock, Ym2612Clock, Ym2151Clock, Ym2203Clock, Ym2608Clock, Okim6295Clock, NesApuClock, Huc6280Clock, Ym2610Clock, Okim6258Clock, Saa1099Clock, GbDmgClock;
     /// <summary>OKIM6258 깃발 (머리말 0x94: bit0~1 분주, bit3 12비트 출력).</summary>
     public int Okim6258Flags;
@@ -116,7 +118,7 @@ public sealed class VgmSong
             var l = new List<string>();
             if (SpcImage != null) l.Add("SPC700 + S-DSP");
             if (SelfRunning != null && SelfRunningName.Length > 0) l.Add(SelfRunningName);
-            if (Sn76489Clock > 0) l.Add("SN76489");
+            if (Sn76489Clock > 0) l.Add(Sn76489Clock2 > 0 ? "SN76489 ×2" : "SN76489");
             if (Ym2413Clock > 0) l.Add(Vrc7 ? "VRC7" : "YM2413");
             if (Ym2612Clock > 0) l.Add("YM2612");
             if (Ym2151Clock > 0) l.Add("YM2151");
@@ -222,6 +224,7 @@ public static class VgmFormat
         s.Y8950Clock = hz(0x58);
         s.Ymf262Clock = hz(0x5C);
         s.Sn76489Clock = hz(0x0C);
+        if (s.Sn76489Clock > 0 && (clock(0x0C) & 0x40000000) != 0) s.Sn76489Clock2 = s.Sn76489Clock;
         if (s.Sn76489Clock > 0 && s.Version >= 0x110 && 0x2B < dataOfs) { s.SnFeedback = d[0x28] | (d[0x29] << 8); s.SnWidth = d[0x2A]; }
         s.Ym2413Clock = hz(0x10);
         s.Ym2612Clock = hz(0x2C);

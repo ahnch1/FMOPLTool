@@ -45,7 +45,7 @@ public sealed class VgmPlayer
     }
 
     private readonly List<ExtraChip> extras = new List<ExtraChip>();
-    private ExtraChip xSn2, xOki2, xUpd, xQs, xSpcm, xOpn2203b, xPokey, xCus30, xAy2, xAy3;
+    private ExtraChip xSn2, xOki2, xUpd, xQs, xSpcm, xOpn2203b, xPokey, xCus30, xAy2, xAy3, xC140;
     private ExtraChip xSn, xOpll, xOpn2, xOpm, xOpn, xOpna, xOpnb, xOki, xNes, xPce, xNsfx, xMsm, xSaa, xGb;
     /// <summary>YM2612 PCM 데이터 뱅크 (블록 0x00) · 읽는 위치.</summary>
     private byte[] pcmBank = new byte[0];
@@ -109,6 +109,7 @@ public sealed class VgmPlayer
         if (s.PokeyClock > 0) l.Add(new Pokey(s.PokeyClock, Rate));
         if (s.HasPsg && s.AyClock2 > 0) l.Add(new PsgEmulator(s.AyClock2, Rate, s.AyIsYm));   // 둘째 AY (명령 A0h aa bit7)
         if (s.HasPsg && s.AyClock3 > 0) l.Add(new PsgEmulator(s.AyClock3, Rate, s.AyIsYm));   // 셋째 AY (이 프로그램 안 명령 D9h)
+        if (s.C140Clock > 0) l.Add(new NamcoC140(s.C140Clock, Rate, (NamcoC140.Kind)Math.Min(2, Math.Max(0, s.C140Type))));
         if (s.Cus30Clock > 0) l.Add(new NamcoCus30(s.Cus30Clock, Rate, s.Cus30Is15xx));
         if (s.GbDmgClock > 0) l.Add(new GbApu(s.GbDmgClock, Rate));
         return l;
@@ -253,7 +254,7 @@ public sealed class VgmPlayer
         }
 
         extras.Clear();
-        xSn2 = null; xOki2 = null; xUpd = null; xQs = null; xSpcm = null; xOpn2203b = null; xPokey = null; xCus30 = null; xAy2 = null; xAy3 = null;
+        xSn2 = null; xOki2 = null; xUpd = null; xQs = null; xSpcm = null; xOpn2203b = null; xPokey = null; xCus30 = null; xAy2 = null; xAy3 = null; xC140 = null;
         xSn = xOpll = xOpn2 = xOpm = xOpn = xOpna = xOpnb = xOki = xNes = xPce = xNsfx = xMsm = xSaa = xGb = null;
         foreach (var chip in CreateOtherChips(s))
         {
@@ -275,6 +276,7 @@ public sealed class VgmPlayer
             else if (chip is Pokey) xPokey = x;
             else if (chip is PsgEmulator) { if (xAy2 == null && s.AyClock2 > 0) xAy2 = x; else xAy3 = x; }
             else if (chip is NamcoCus30) xCus30 = x;
+            else if (chip is NamcoC140) xC140 = x;
             else if (chip is GbApu) xGb = x;
             else if (chip is OpnChip o) { if (o.Type == OpnChip.Variant.Ym2612) xOpn2 = x; else if (o.Type == OpnChip.Variant.Ym2203) { if (xOpn == null) xOpn = x; else xOpn2203b = x; } else if (o.Type == OpnChip.Variant.Ym2608) xOpna = x; else xOpnb = x; }
         }
@@ -445,6 +447,7 @@ public sealed class VgmPlayer
             case 0xBB: if ((d[pos + 1] & 0x80) == 0) Other(xPokey, 0, d[pos + 1], d[pos + 2]); break;   // POKEY
             case 0xB3: if ((d[pos + 1] & 0x80) == 0) Other(xGb, 0, d[pos + 1], d[pos + 2]); break;
             case 0x90: case 0x91: case 0x92: case 0x93: case 0x94: case 0x95: StreamCommand(d, pos); break;
+            case 0xD4: Other(xC140, 0, (d[pos + 1] << 8) | d[pos + 2], d[pos + 3]); break;   // C140 pp aa dd
             case 0xD9: if (song.AyClock3 > 0) Other(xAy3, 0, d[pos + 1] & 0x0F, d[pos + 2]); break;   // 셋째 AY (이 프로그램 안에서만)
             case 0xD8: if (song.Cus30Clock > 0) Other(xCus30, 0, (d[pos + 1] << 8) | d[pos + 2], d[pos + 3]); break;   // 남코 CUS30 (이 프로그램 안에서만)
             case 0xD7: if (song.NsfChips != 0) Other(xNsfx, d[pos + 1], d[pos + 2], d[pos + 3]); break;   // NSF 확장 음원 (이 프로그램 안에서만)
@@ -500,7 +503,7 @@ public sealed class VgmPlayer
             ((NesApu)xNes.Chip).LoadRam(d[at] | (d[at + 1] << 8), d, at + 2, size - 2);
             return;
         }
-        if ((type == 0x81 || type == 0x82 || type == 0x83 || type == 0x8B || type == 0x8F || type == 0x80) && size > 8)
+        if ((type == 0x81 || type == 0x82 || type == 0x83 || type == 0x8B || type == 0x8F || type == 0x80 || type == 0x8D) && size > 8)
         {
             int start = (int)VgmFormat.U32(d, at + 4);
             var data = new byte[size - 8];
@@ -512,6 +515,7 @@ public sealed class VgmPlayer
             if (type == 0x8B && second && xOki2 != null) ((Okim6295)xOki2.Chip).LoadRom(data, start);
             if (type == 0x8F && xQs != null) ((QSound)xQs.Chip).LoadRom(data, start);
             if (type == 0x80 && xSpcm != null) ((SegaPcm)xSpcm.Chip).LoadRom(data, start);
+            if (type == 0x8D && xC140 != null) ((NamcoC140)xC140.Chip).LoadRom(data, start);
         }
     }
 

@@ -140,6 +140,12 @@ public static class HootSongs
             v = HootGaiden.Render(e, dir, code);
             what = "Ninja Gaiden 사운드 보드 · 명령 0x" + code.ToString("X2");
         }
+        else if (HootNamcoSys2.Handles(driver, e.Type))
+        {
+            // hoot 남코 System 2: 사운드 CPU (6809 + YM2151 + C140)에서 ROM을 돌려 미리 렌더
+            v = HootNamcoSys2.Render(e, dir, code);
+            what = "Namco System 2 사운드 보드 · 곡 0x" + code.ToString("X2");
+        }
         else if (HootTaitoSj.Handles(driver, e.Type))
         {
             // hoot 타이토 SJ: 사운드 CPU (Z80 + AY × 3 + DAC)에서 ROM을 돌려 미리 렌더

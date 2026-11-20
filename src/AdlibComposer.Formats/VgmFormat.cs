@@ -70,6 +70,9 @@ public sealed class VgmSong
     public double PokeyClock;
     /// <summary>남코 CUS30 클럭 — VGM에 없는 칩: hoot 남코 렌더가 읽은 뒤 세우고, 이 프로그램 안 명령 0xD8 aa bb dd로 온다.</summary>
     public double Cus30Clock;
+    /// <summary>남코 C140 클럭 (VGM A8h) · 형식 (96h: 0 = System 2, 1 = System 21, 2 = ASIC219), 명령 D4h, ROM 블록 8Dh.</summary>
+    public double C140Clock;
+    public int C140Type;
     /// <summary>true = <see cref="Cus30Clock"/>의 칩이 15XX (매피 계열: 레지스터 00h~3Fh, 파형 PROM 200h~).</summary>
     public bool Cus30Is15xx;
     public int SegaPcmInterface;
@@ -107,7 +110,7 @@ public sealed class VgmSong
     public bool HasOpl { get { return Ym3812Clock > 0 || Ym3526Clock > 0 || Y8950Clock > 0 || Ymf262Clock > 0; } }
     public bool IsOpl3 { get { return Ymf262Clock > 0; } }
     /// <summary>PSG · SCC · OPL 말고 다른 칩 (공통 칩 경로로 내는 것).</summary>
-    public bool HasOther { get { return Sn76489Clock > 0 || Ym2413Clock > 0 || Ym2612Clock > 0 || Ym2151Clock > 0 || Ym2203Clock > 0 || Ym2608Clock > 0 || Okim6295Clock > 0 || NesApuClock > 0 || Huc6280Clock > 0 || Ym2610Clock > 0 || Okim6258Clock > 0 || Saa1099Clock > 0 || GbDmgClock > 0 || Upd7759Clock > 0 || QsoundClock > 0 || SegaPcmClock > 0 || PokeyClock > 0 || Cus30Clock > 0 || SpcImage != null || SelfRunning != null; } }
+    public bool HasOther { get { return Sn76489Clock > 0 || Ym2413Clock > 0 || Ym2612Clock > 0 || Ym2151Clock > 0 || Ym2203Clock > 0 || Ym2608Clock > 0 || Okim6295Clock > 0 || NesApuClock > 0 || Huc6280Clock > 0 || Ym2610Clock > 0 || Okim6258Clock > 0 || Saa1099Clock > 0 || GbDmgClock > 0 || Upd7759Clock > 0 || QsoundClock > 0 || SegaPcmClock > 0 || PokeyClock > 0 || Cus30Clock > 0 || C140Clock > 0 || SpcImage != null || SelfRunning != null; } }
     /// <summary>소리 낼 수 있는 칩이 하나라도 있는가.</summary>
     public bool IsPlayable { get { return HasPsg || HasScc || HasOpl || HasOther; } }
     public bool AyIsYm { get { return AyType >= 0x10; } }
@@ -151,6 +154,7 @@ public sealed class VgmSong
             if (QsoundClock > 0) l.Add("QSound");
             if (SegaPcmClock > 0) l.Add("SegaPCM");
             if (PokeyClock > 0) l.Add("POKEY");
+            if (C140Clock > 0) l.Add("C140");
             if (Cus30Clock > 0) l.Add(Cus30Is15xx ? "Namco 15XX" : "CUS30");
             if (Okim6258Clock > 0) l.Add("OKIM6258");
             if (Saa1099Clock > 0) l.Add("SAA1099");
@@ -276,6 +280,8 @@ public static class VgmFormat
         s.QsoundClock = hz(0xB4);
         s.SegaPcmClock = hz(0x38);
         s.PokeyClock = hz(0xB0);
+        s.C140Clock = hz(0xA8);
+        if (s.C140Clock > 0 && 0x96 < dataOfs) s.C140Type = d[0x96];
         if (s.SegaPcmClock > 0 && 0x3F < dataOfs) s.SegaPcmInterface = (int)clock(0x3C);
         if (s.Version < 0x110 && s.Ym2413Clock > 0)
         {
@@ -292,7 +298,7 @@ public static class VgmFormat
         {
             (0x40, "RF5C68"), (0x60, "YMF278B (OPL4)"), (0x64, "YMF271 (OPX)"),
             (0x68, "YMZ280B"), (0x6C, "RF5C164"), (0x70, "PWM"), (0x88, "MultiPCM"),
-            (0xA0, "K054539"), (0xA8, "C140"),
+            (0xA0, "K054539"),
             (0xAC, "K053260"), (0xB8, "SCSP"), (0xC0, "WonderSwan"), (0xC4, "VSU"),
             (0xCC, "ES5503"), (0xD0, "ES5506"), (0xD8, "X1-010"), (0xDC, "C352"), (0xE0, "GA20"),
         };

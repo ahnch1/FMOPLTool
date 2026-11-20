@@ -14,6 +14,7 @@ namespace AdlibComposer.Audio;
 /// <para>기계 (MAME xexex · xmen · mystwarr sound_map + Xexex · X-Men 디스어셈블): Z80 8MHz, 0000h~7FFFh ROM, 8000h~BFFFh 뱅크 (F800h에 쓴 값 아래 4비트 × 16KB), C000h~DFFFh RAM,
 /// E000h~E22Fh K054539 #1 (E230h~E3FFh RAM), E400h~E62Fh K054539 #2 (E630h~E7FFh RAM), E800h · E801h = YM2151 (EC00h 거울), F000h~F003h = K054321 (F002h 읽기 = 명령, F003h = 음량).
 /// IRQ = 명령 (K054321, hold) 또는 YM2151 타이머, NMI = K054539 #1 타이머 (227h 주기 × 2, 22Fh bit5 켬) — 드라이버마다 하나를 씀.</para>
+/// <para>type lethal (Lethal Enforcers · G.I. Joe, MAME lethal · gijoe): 0000h~EFFFh ROM (뱅크 없음), F000h~F7FFh RAM, F800h~FA2Fh K054539 하나, FC00h~FC03h K054321 (FC02h = 명령), YM2151 없음.</para>
 /// <para>곡: 부팅 1초 뒤 F002h = 곡 코드 (드라이버가 IRQ · NMI마다 봄), 180초를 YM2151 + K054539 VGM으로 (ROM = rom pcm, VGM 블록 8Ch).</para>
 /// </summary>
 public static class HootKonami54539
@@ -25,7 +26,7 @@ public static class HootKonami54539
     {
         if (!string.Equals((driver ?? "").Trim(), "konami", StringComparison.OrdinalIgnoreCase)) return false;
         string t = (type ?? "").Trim().ToLowerInvariant();
-        return t == "054539" || t == "054539x2";
+        return t == "054539" || t == "054539x2" || t == "lethal";
     }
 
     public static VgmSong Render(HootArchive.Entry e, string dir, int code, double seconds = DefaultSeconds, double fade = DefaultFade)
@@ -56,7 +57,7 @@ public static class HootKonami54539
         foreach (var (off, d) in code) Array.Copy(d, 0, rom, off, d.Length);
         var p = new byte[pcm.Count == 0 ? 0 : (int)pcm.Max(x => x.off + x.d.Length)];
         foreach (var (off, d) in pcm) Array.Copy(d, 0, p, off, d.Length);
-        var m = new Machine(rom, p);
+        var m = new Machine(rom, p) { Lethal = (e.Type ?? "").Trim().ToLowerInvariant() == "lethal" };
         m.Missing.AddRange(missing);
         foreach (var u in unsupported) m.Unsupported.Add(u);
         m.RunSeconds(1);
@@ -74,6 +75,8 @@ public static class HootKonami54539
         /// <summary>칩 쓰기: chip 0 = YM2151, 1 = K054539 #1, 2 = K054539 #2 (reg 0~22Fh).</summary>
         public readonly List<(double t, int chip, int reg, int val)> Log = new List<(double, int, int, int)>();
         public int Irqs, Nmis, LatchReads;
+        /// <summary>lethal 배치 (ROM ~EFFFh, RAM F000h, K054539 F800h, K054321 FC00h).</summary>
+        public bool Lethal;
         /// <summary>진단: YM2151 타이머 상태.</summary>
         public string TimerState { get { return "ctl " + timerCtl.ToString("X2") + " flags " + timerFlags + " B " + timerB.ToString("X2") + " nextB " + (nextTimerB == long.MaxValue ? "-" : (nextTimerB - Cpu.Cycles).ToString()) + " opmAddr " + opmAddr.ToString("X2"); } }
         public readonly Dictionary<int, int> OtherWrites = new Dictionary<int, int>(), OtherReads = new Dictionary<int, int>();
@@ -167,6 +170,16 @@ public static class HootKonami54539
         public byte Read(int a)
         {
             a &= 0xFFFF;
+            if (Lethal)
+            {
+                if (a < 0xF000) return Rom[a];
+                if (a < 0xF800) return Ram[a - 0xF000];
+                if (a < 0xFA30) return PcmRead(0, a - 0xF800);
+                if (a == 0xFC02) { LatchReads++; return (byte)command; }
+                if (a >= 0xFC00 && a < 0xFC04) return 0;
+                OtherReads.TryGetValue(a, out int c0); OtherReads[a] = c0 + 1;
+                return 0xFF;
+            }
             if (a < 0x8000) return Rom[a];
             if (a < 0xC000) return Rom[(((bank * 0x4000) % Math.Max(0x4000, Rom.Length)) + a - 0x8000) % Rom.Length];
             if (a < 0xE000) return Ram[a - 0xC000];
@@ -193,6 +206,15 @@ public static class HootKonami54539
         public void Write(int a, byte v)
         {
             a &= 0xFFFF;
+            if (Lethal)
+            {
+                if (a < 0xF000) return;
+                if (a < 0xF800) { Ram[a - 0xF000] = v; return; }
+                if (a < 0xFA30) { PcmWrite(0, a - 0xF800, v); return; }
+                if (a >= 0xFC00 && a < 0xFC04) return;   // K054321
+                OtherWrites.TryGetValue(a, out int c0); OtherWrites[a] = c0 + 1;
+                return;
+            }
             if (a < 0xC000) return;
             if (a < 0xE000) { Ram[a - 0xC000] = v; return; }
             if (a < 0xE230) { PcmWrite(0, a - 0xE000, v); return; }

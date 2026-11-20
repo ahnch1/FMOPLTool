@@ -31,6 +31,7 @@
 | 2.0.4 | 8-6 (메가드라이브) | hoot megadrive generic_z80 · iyinc: `Audio/HootMegaDrive.cs` (Z80 사운드 쪽 · 카트리지의 Z80 드라이버를 RAM에, 요청 주소) |
 | 2.0.5 | 8-7 (X68000) | MC68000 `Audio/Cpu/M68000.cs` + hoot x68k generic: `Audio/HootX68k.cs` (OPM · ADPCM · DMA · MFP, E00010h = hoot가 대신 하는 IOCS · DOS) |
 | 2.0.6 | 8-7 (X68000 MIDI) | x68k MIDI 판: YM3802 MIDI 보드 (EAFA00h) → 살아 있는 MIDI 곡 (`HootX68k.LoadMidi`) |
+| 2.1.53 | 8-9e 더함 (코나미 lethal) | hoot konami lethal (Lethal Enforcers · G.I. Joe): `HootKonami54539` lethal 배치 (ROM ~EFFFh, RAM F000h, K054539 F800h, K054321 FC00h, YM2151 없음) |
 | 2.1.52 | 8-9i 더함 (코나미 Twin16) | uPD7759 마스터 모드 (칩이 ROM 머리 표에서 직접, VGM 8Ch bit31 · ROM 블록 92h · 뱅크 레지스터 3) + hoot konami twin16 (Devil World · Vulcan Venture · Final Round · Cue Brick · M.I.A.): `HootKonamiK007232` 배치 |
 | 2.1.51 | 8-9i 더함 (코나미 K007232 보드 셋) | hoot konami salamander (Salamander · Life Force) · hcastle (Haunted Castle · City Bomber · Kitten Kaboodle — YM3812 + SCC + K007232) · crimfght (Crime Fighters · Aliens): `HootKonamiK007232` 배치 표 |
 | 2.1.50 | 8-9i (코나미 K007232) | 새 칩 K007232 (`Audio/Chips/K007232.cs`, 이 프로그램 안 명령 DBh) + hoot konami scontra · thundercross (Super Contra · Gang Busters · Crazy Cop · Thunder Cross · Block Hole): `Audio/HootKonamiK007232.cs` |
@@ -115,7 +116,7 @@
 | 코나미 K007232 (scontra · thundercross · salamander · hcastle · crimfght · twin16) | 19 / 19, 402곡 중 395 (무음 = 00h 머리 · 정지 항목 6 · Thunder Cross 8Fh) | `--test hootk7232` (HOOT_SONGS=1) |
 | 코나미 System GX (systemgx) | 17 / 17, 489곡 모두 | `--test hootgx` (HOOT_SONGS=1) |
 | 세가 System 18 · 32 (system18 · system32) | 15 / 15, 388 / 397곡 (남은 9 = 정지 명령) | `--test hoots18` (RF5C68 합성 포함, HOOT_SONGS=1) |
-| 코나미 K054539 (054539 · 054539x2) | 10 / 10, 266 / 267곡 | `--test hootk54` (K054539 합성 포함, HOOT_SONGS=1, HOOT_DEBUG=1 = YM2151 타이머) |
+| 코나미 K054539 (054539 · 054539x2 · lethal) | 12 / 12, 317 / 318곡 (lethal 51곡 모두) | `--test hootk54` (K054539 합성 포함, HOOT_SONGS=1, HOOT_DEBUG=1 = YM2151 타이머) |
 | 코나미 K053260 (053260) | 11 / 11, 606 / 616곡 (남은 10 = 정지 명령 7 · 효과음 3) | `--test hootk53` (K053260 합성 포함, HOOT_SONGS=1) |
 | 남코 System 2 (system2) | 25 / 26항목, 827 / 870곡 (C140 키온 498곡) — 무음 43 = Four Trax 27 (옵션 foutrax) · Final Lap 9 · Rolling Thunder 2 4 · 그 밖 3 | `--test hootns2` (HOOT_SONGS=1, HOOT_DEBUG=1 = C140 레지스터 분포) |
 | 타이토 SJ (taitosj) | 12 / 12, 285곡 모두 | `--test hootsj` (HOOT_SONGS=1) |
@@ -410,6 +411,7 @@
   - K053260 칩 (MAME): 4목소리, 클럭/64마다 카운터 += 64 · 1000h 넘으면 − 1000h + 피치, 8비트 부호 PCM 또는 KADPCM (아래 니블 먼저, 표 0 1 2 4 8 16 32 64 −128 −64 …), 반복, 팬 3비트 (cos/sin 근사), 2Fh bit1 = 소리 켬
 - **8-9e. 코나미 K054539 (Z80 판) — ✅ v2.1.44 (10 / 10, 266 / 267)** — `Audio/HootKonami54539.cs`, `Audio/Chips/K054539.cs`
   - MAME xexex · xmen · mystwarr: Z80 8MHz, ROM 0000h~7FFFh, 뱅크 8000h~BFFFh (F800h 아래 4비트 × 16KB), RAM C000h~DFFFh, K054539 #1 E000h~E22Fh · #2 E400h~E62Fh (사이는 RAM), YM2151 E800h (EC00h 거울), K054321 F000h~F003h (F002h = 명령, F003h = 음량)
+  - v2.1.53 lethal (MAME lethal · gijoe 사운드 맵): Z80 8MHz, 0000h~EFFFh ROM, F000h~F7FFh RAM, F800h~FA2Fh K054539 (타이머 = NMI), FC02h = 명령 (IRQ hold)
   - IRQ = 명령 (K054321 — 메인이 쓰면, hold; Xexex는 EI … DI 창에서만 받고 박자는 YM2151 타이머 B 상태를 폴링) 또는 YM2151 타이머 (Bucky · Moo Mesa · X-Men), NMI = K054539 #1 타이머 (227h: 38 × (255 − 값) / 18.432MHz마다 바뀜, 22Fh bit5 켬 — 054539x2 판)
   - K054539 칩 (MAME): 채널 8, 피치 24비트 16.16 걸음, 8비트 (끝 80h) · 16비트 (끝 8000h) · 4비트 DPCM (끝 88h, 표 0 1 4 9 16 25 36 49 −64 …), 반복 (200h+ch×2 +1 bit0), 역재생 (+0 bit5), 감쇠 −36dB/40h, 팬 √, 22Ch = 재생 비트, 22Dh = ROM 읽기 포트, 22Fh bit0 = 켬, 48kHz. 잔향 없음. 같은 값 다시 쓰기 버림
 - **8-9g. 코나미 System GX — ✅ v2.1.47 (17 / 17, 489곡)** — `Audio/HootKonamiGx.cs` (스크래치 68000 디스어셈블러로 확인)

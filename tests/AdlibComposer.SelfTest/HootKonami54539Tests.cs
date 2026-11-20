@@ -9,7 +9,7 @@ namespace AdlibComposer.SelfTest;
 /// <summary>hoot 코나미 Z80 + K054539 (HootKonami54539): 실제 zip, 진단 (HOOT_SONGS = 곡마다).</summary>
 public static class HootKonami54539Tests
 {
-    public static readonly string[] Archives = { "xexex", "bucky", "moomesa", "xmen", "polynetw", "rungun", "metamrph", "mtlchamp", "mystwarr", "viostorm" };
+    public static readonly string[] Archives = { "xexex", "bucky", "moomesa", "xmen", "polynetw", "rungun", "metamrph", "mtlchamp", "mystwarr", "viostorm", "gijoe", "lethalen" };
 
     public static void Run(Action<string, bool, string> check)
     {
@@ -28,7 +28,7 @@ public static class HootKonami54539Tests
         double kpk = 0;
         for (int i = 0; i < 22050; i++) { kp.Step(); kp.Generate(out double l, out _); kpk = Math.Max(kpk, Math.Abs(l)); }
         check("VGM K054539: A0h + block 8Ch + D3h key-on plays", kv.K054539Clock > 0 && kv.ChipSummary.Contains("K054539") && kpk > 100, "peak " + kpk.ToString("0") + ", " + kv.ChipSummary);
-        check("hoot konami 054539 · 054539x2: playable, own board", HootArchive.Playable("konami", "054539") && HootArchive.Playable("Konami", "054539X2") && HootKonami54539.Handles("konami", "054539x2") && !HootKonami54539.Handles("konami", "053260"), "");
+        check("hoot konami 054539 · 054539x2: playable, own board", HootArchive.Playable("konami", "054539") && HootArchive.Playable("Konami", "054539X2") && HootKonami54539.Handles("konami", "054539x2") && HootArchive.Playable("konami", "lethal") && !HootKonami54539.Handles("konami", "053260"), "");
 
         string root = SopTests.FindDir("_incoming");
         string folder = root == null ? null : Path.Combine(root, "Hootarchive", "roms");

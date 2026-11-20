@@ -53,7 +53,7 @@ public static class HootOpmBoardTests
         check("hoot opm board: CPS-1 command in latch F008h", m.Ram[1] == 0x21, m.Ram[1].ToString("X2"));
         var v = m.ToVgm(1, 0);
         check("hoot opm board: VGM YM2151 + OKIM6295 with ROM block", v.Ym2151Clock > 0 && v.Okim6295Clock > 0 && v.OkiPin7, v.ChipSummary);
-        check("hoot opm board: playable types", HootArchive.Playable("capcom", "cps1") && HootArchive.Playable("technos", "ddragon2") && HootArchive.Playable("technos", "ddragon3") && !HootArchive.Playable("capcom", "opn2"), "");
+        check("hoot opm board: playable types", HootArchive.Playable("capcom", "cps1") && HootArchive.Playable("technos", "ddragon2") && HootArchive.Playable("technos", "ddragon3") && !HootArchive.Playable("capcom", "cps2simm") && !HootOpmBoard.Handles("capcom", "opn2"), "");
     }
 
     private static void Real(Action<string, bool, string> check)

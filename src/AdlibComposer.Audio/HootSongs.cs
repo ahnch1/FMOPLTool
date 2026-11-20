@@ -140,6 +140,12 @@ public static class HootSongs
             v = HootGaiden.Render(e, dir, code);
             what = "Ninja Gaiden 사운드 보드 · 명령 0x" + code.ToString("X2");
         }
+        else if (HootCapcomOpn.Handles(driver, e.Type))
+        {
+            // hoot 캡콤 opn2 · rushcrsh · tigerroad: 사운드 보드 (Z80 + YM2203 × 2)에서 사운드 ROM을 돌려 미리 렌더
+            v = HootCapcomOpn.Render(e, dir, code);
+            what = HootCapcomOpn.LayoutOf(driver, e.Type, e.Name).Name + " 사운드 보드 · 명령 0x" + code.ToString("X2");
+        }
         else if (HootUpl.Handles(driver, e.Type))
         {
             // hoot UPL robokid 계열: 사운드 보드 (Z80 + YM2203 × 2)에서 사운드 ROM을 돌려 미리 렌더

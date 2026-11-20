@@ -77,6 +77,7 @@
 - [x] 테크모 tecmo16 3 · 112곡 — v2.1.26: `HootOpmBoard.Tecmo16` 배치 (FC00h OKI · FC04h YM2151 · FC08h 명령 NMI), 부팅 3초 (3 / 3, 112곡 모두 — 8곡은 OKI 효과음 하나)
 - [x] 테크모 gaiden 4 · 300곡 — v2.1.27: `HootGaiden` (Z80 + YM2203 × 2 + OKI, 명령 FC20h NMI, IRQ = YM2203 #1만) — 곡 모두, 무음 69 = Strato Fighter 효과음 · 목소리 65 + 龍剣伝 Round Clear 3 · 4 + 코드 모름 1
 - [x] 테크모 gemini 3 · rygar 1 · 122곡 — v2.1.28: `HootTecmoAdpcm` (Z80 + YM3812 + MSM5205 → VGM OKIM6258, 배치 Rygar · Silk Worm · Back Fire) (4 / 4, 122곡 모두, MSM 23곡)
+- [x] 캡콤 opn2 8 · rushcrsh 2 · tigerroad 2 · 282곡 — v2.1.29: `HootCapcomOpn` (Z80 + YM2203 × 2, 배치 셋: gng · lwings 222Hz · srumbler / tigerroad, Avengers는 E006h 되읽기) (12 / 12, 281 / 282곡 — 남은 하나 = 정지 명령). todo의 3.3 "6809: 캡콤 opn2"는 잘못 — 사운드 CPU는 Z80
 - [ ] 테크모 tbowl (YM3812 × 2 + MSM5205 × 2) · spbactn (YM3812 + OKI) · wc90 (YM2608) · solomon (AY × 3)
 - [ ] 세이부 raiden 4 (YM3812 + OKI, Z80 암호화일 수 있음) · raiden2 2
 - [ ] 세가 System 24 4 — 68000 + YM2151 (MC68000 있음)
@@ -99,7 +100,7 @@
 - [ ] 코나미 hornet 8 · gticlub 4 — RF5C400 (CPU 68000)
 
 ### 3.3 새 CPU가 필요
-- [ ] **6809**: 남코 System 2 (C140) 26 · System 1 22 · system86 5 · wsg6809 11, 캡콤 opn2 8, 후지쯔 FM77AV 22 · FM-7 7 — 6809 하나로 약 100항목 (+ C140 칩)
+- [ ] **6809**: 남코 System 2 (C140) 26 · System 1 22 · system86 5 · wsg6809 11, 후지쯔 FM77AV 22 · FM-7 7 — 6809 하나로 약 100항목 (+ C140 칩)
 - [ ] **M6803 / HD63701**: 아이렘 M62 15 · 남코 wsg63701 6
 - [ ] 남코 System 11 · 12 · 22 · NA-1 · NB-1 (C352 · M37702 / H8) 약 80항목 — 큼
 - [ ] 세가 Model 2A (SCSP + 68000) 24 · Model 3 9 — SCSP 큼

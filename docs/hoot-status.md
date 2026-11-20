@@ -31,6 +31,7 @@
 | 2.0.4 | 8-6 (메가드라이브) | hoot megadrive generic_z80 · iyinc: `Audio/HootMegaDrive.cs` (Z80 사운드 쪽 · 카트리지의 Z80 드라이버를 RAM에, 요청 주소) |
 | 2.0.5 | 8-7 (X68000) | MC68000 `Audio/Cpu/M68000.cs` + hoot x68k generic: `Audio/HootX68k.cs` (OPM · ADPCM · DMA · MFP, E00010h = hoot가 대신 하는 IOCS · DOS) |
 | 2.0.6 | 8-7 (X68000 MIDI) | x68k MIDI 판: YM3802 MIDI 보드 (EAFA00h) → 살아 있는 MIDI 곡 (`HootX68k.LoadMidi`) |
+| 2.1.29 | 8-8s (캡콤 YM2203 × 2) | hoot capcom opn2 · rushcrsh · tigerroad (Ghosts'n Goblins · Gun.Smoke · Section Z · Legendary Wings · Trojan · 1943 · 1943 Kai · Avengers · Speed Rumbler · Tiger Road · F-1 Dream): `Audio/HootCapcomOpn.cs` (Z80 + YM2203 × 2) |
 | 2.1.28 | 8-8r (테크모 YM3812 + MSM5205) | hoot tecmo rygar · gemini (Rygar · Silk Worm · Gemini Wing · Back Fire): `Audio/HootTecmoAdpcm.cs` |
 | 2.1.27 | 8-8q (테크모 Ninja Gaiden) | hoot tecmo gaiden (Shadow Warriors · 龍剣伝 · Tecmo Knight · Raiga Strato Fighter): `Audio/HootGaiden.cs` (Z80 + YM2203 × 2 + OKIM6295) |
 | 2.1.26 | 8-8e 더함 (테크모 16) | hoot tecmo tecmo16 (Final Star Force · Ganbare Ginkun · Riot): `HootOpmBoard.Tecmo16` 배치, `Layout.BootSeconds` |
@@ -87,6 +88,7 @@
 | SNK68 (snk 3812) | 4 / 4, 146곡 모두 (키온 또는 uPD7759) | `--test hootsnk` (HOOT_SONGS=1, HOOT_SNKINIT=16진,… 부팅 명령 바꾸기, HOOT_SNKSCAN=곡 = 부팅 명령 00h~FFh 훑기, HOOT_PC · HOOT_PCQ=주소,…) |
 | 토아플랜 1 · Twin Cobra (generic) | 9 / 9, 125곡 모두 (키온) | `--test hoottoaplan` (HOOT_SONGS=1 = 곡마다, HOOT_PROBE=1 = I/O 포트 · 68000 쪽 RAM 후보) |
 | 타이토 YM2151 보드 (fullt) | 9 / 9, 147곡 모두 (FM 키온 또는 MSM 바이트) | `--test hoottaitoopm` (HOOT_SONGS=1 = 곡마다, HOOT_REGS · HOOT_PC · HOOT_PCQ · HOOT_RAM · HOOT_MSMLOG) |
+| 캡콤 YM2203 × 2 (opn2 · rushcrsh · tigerroad) | 12 / 12, 281 / 282곡 (남은 하나 = Gun.Smoke 정지 명령) | `--test hootcapopn` (HOOT_SONGS=1, HOOT_DEBUG=1 = 많이 쓴 레지스터) |
 | 테크모 YM3812 + MSM5205 (rygar · gemini) | 4 / 4, 122곡 모두 (MSM5205 23곡) | `--test hoottecmo` (HOOT_SONGS=1) |
 | 테크모 Ninja Gaiden (gaiden) | 4 / 4, 231 / 300 (곡은 모두 — 무음 = Strato Fighter 효과음 · 목소리 65, 龍剣伝 Round Clear 3 · 4, 코드 모름 1) | `--test hoottecmo` (HOOT_SONGS=1) |
 | 테크모 16 (tecmo16, HootOpmBoard) | 3 / 3, 112곡 모두 (8곡 = OKI 효과음 하나) | `--test hootopm` (HOOT_SONGS=1, HOOT_PCQ=주소,… · HOOT_PCR=시작,끝 — PCR은 부팅부터 셈) |
@@ -302,7 +304,14 @@
   - 배치 (MAME tecmo rygar_sound_map · tecmo_sound_map, ROM 스캔으로 확인): Rygar = ROM ~3FFFh (파일 8KB), RAM 4000h (SP 4800h), YM3812 8000h, C000h 명령 읽기 · ADPCM 시작 쓰기, D000h 끝, E000h 볼륨, F000h NMI 확인. Silk Worm · Gemini Wing = ROM ~7FFFh, RAM 8000h (SP 8800h), YM3812 A000h, C000h / C400h / C800h / CC00h. Back Fire = Silk Worm 배치 + RAM 2000h~27FFh (부팅 때 ROM 0103h~의 루틴을 2000h~로 베껴 부름 — 처음엔 쓰기가 막혀 0028h에서 멈춤, hoot 형식이 같아 이름으로 고름)
   - Z80 · YM3812 4MHz, 명령 = NMI, YM3812 타이머 = IRQ
   - MSM5205 400kHz ÷ 48: 하드웨어가 시작 × 100h ~ (끝 + 1) × 100h 앞까지 ADPCM ROM 바이트를 위 니블 먼저 (MAME adpcm_int) → VGM OKIM6258 (4.2667MHz ÷ 512, 12비트), 바이트 니블 바꿔서. 부팅 때 드라이버가 조용한 샘플을 한 번 시작함 (starts 1 · 바이트 0은 이것)
-- 다음 (8-8s): Z80 + YM2151 + OKIM6295 작은 보드 (tecmo16 · raizing mahou · bgaregga · banpresto dbz · dooyong …) — MAME 배치를 하나씩 확인해 `HootOpmBoard.Layout`에, atari system1 (6502), 그 뒤 새 칩
+- **8-8s. 캡콤 YM2203 × 2 (opn2 · rushcrsh · tigerroad) — ✅ v2.1.29 (12 / 12)** — `Audio/HootCapcomOpn.cs`
+  - 배치 (MAME gng · 1943 · lwings · srumbler · tigeroad sound_map, ROM 스캔으로 확인): ROM ~7FFFh, RAM C000h~C7FFh (SP C800h), 명령 = 래치 읽기 (폴링, IM 1)
+  - opn2 = 래치 C800h, YM2203 E000h · E002h, Z80 3MHz · YM 1.5MHz, IRQ 주기 240Hz (Section Z · Legendary Wings · Trojan · Avengers = lwings 222Hz — 이름으로 고름)
+  - Avengers: 래치를 E006h (soundlatch2)에 썼다가 다시 읽어 C001h와 비교 → 쓴 값을 돌려주지 않으면 명령을 못 받아 모두 무음 (`Layout.Echo`)
+  - rushcrsh (Speed Rumbler) = 래치 E000h, YM2203 8000h · A000h (4MHz), IRQ 240Hz. tigerroad (Tiger Road · F-1 Dream) = 같은 배치, Z80 · YM 3.579545MHz, IRQ = YM2203 #1 타이머. 샘플 CPU (MSM5205) 쪽 포트는 버림
+  - 같은 값 다시 쓰기는 VGM에 안 넣음 (드라이버가 IRQ마다 SSG를 모두 다시 써 8초에 4만 5천 → 약 1천), 28h · 0Dh · 27h · A0h~AEh는 늘 넣음
+  - 클럭 · IRQ 주기는 MAME 기억 — 귀로 템포 확인 필요
+- 다음 (8-8t): Z80 + YM2151 + OKIM6295 작은 보드 (tecmo16 · raizing mahou · bgaregga · banpresto dbz · dooyong …) — MAME 배치를 하나씩 확인해 `HootOpmBoard.Layout`에, atari system1 (6502), 그 뒤 새 칩
   - 남은 것 (8-8a): "소리 남" 기준이 처음 6초에 키온 하나라 몇 항목은 ADPCM 하나뿐 (driftout · liquidk · megablst 등 첫 곡이 짧은 효과음일 수 있음) — 귀로 확인, bshark (code0 · code1 둘), taito z 계열 다른 보드
 
 ### 남은 문제 (단계와 따로)

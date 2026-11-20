@@ -294,7 +294,7 @@ internal sealed class HootTree : UserControl
         if (g.Options.Count > 0) l.Add("옵션: " + string.Join(", ", g.Options.Select(o => o.Key + "=" + o.Value)));
         l.Add(!Playable(g) ? "재생: 아직 못 함 — zip을 Jukebox의 폴더 목록에서 열기"
             : g.Options.ContainsKey("midiout") ? "재생: " + (g.Driver.Equals("pcatdos", StringComparison.OrdinalIgnoreCase) ? "PC/AT" : "PC-98") + " DOS 흉내 → MIDI (MPU-401, Jukebox MIDI 설정으로)"
-            : "재생: " + (g.Driver.Equals("pc98dos", StringComparison.OrdinalIgnoreCase) ? "PC-98 DOS 흉내" : HootArchive.IsPc98Generic(g.Driver) ? "PC-98 흉내 (DOS 없음)" : g.Driver.Equals("pcatdos", StringComparison.OrdinalIgnoreCase) ? "PC/AT DOS 흉내" : g.DriverType.ToUpperInvariant() + " 파일 (곡 코드 = 곡 번호)"));
+            : "재생: " + (g.Driver.Equals("pc98dos", StringComparison.OrdinalIgnoreCase) || g.Driver.Equals("pc9821dos", StringComparison.OrdinalIgnoreCase) ? "PC-98 DOS 흉내" : HootArchive.IsPc98Generic(g.Driver) ? "PC-98 흉내 (DOS 없음)" : g.Driver.Equals("pcatdos", StringComparison.OrdinalIgnoreCase) ? "PC/AT DOS 흉내" : g.DriverType.ToUpperInvariant() + " 파일 (곡 코드 = 곡 번호)"));
         return string.Join("\n", l);
     }
 

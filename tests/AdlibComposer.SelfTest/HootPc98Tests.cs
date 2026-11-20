@@ -62,6 +62,7 @@ public static class HootPc98Tests
 
     public static void Run(Action<string, bool, string> check)
     {
+        check("hoot pc9821dos: playable as PC-98 DOS (opn · opna · 86), MIDI out too", HootArchive.Playable("pc9821dos", "opn") && HootArchive.Playable("pc9821dos", "86") && !HootArchive.Playable("pc9821dos", "soundblaster16") && HootArchive.MidiPlayable("pc9821dos"), "");
         string root = Path.Combine(Path.GetTempPath(), "fmopl_hoot98_" + Guid.NewGuid().ToString("N").Substring(0, 8));
         string oldCache = ZipFolder.CacheBase;
         try
@@ -249,7 +250,7 @@ public static class HootPc98Tests
             foreach (var h in Directory.GetFiles(dir, "*" + HootArchive.Extension))
             {
                 var e = HootArchive.Load(h);
-                if (!e.Driver.Equals("pc98dos", StringComparison.OrdinalIgnoreCase) && !HootPc98.IsGeneric(e)) continue;
+                if (!e.Driver.Equals("pc98dos", StringComparison.OrdinalIgnoreCase) && !e.Driver.Equals("pc9821dos", StringComparison.OrdinalIgnoreCase) && !HootPc98.IsGeneric(e)) continue;
                 if (HootPc98.IsMidiEntry(e)) continue;
                 string key = (HootPc98.IsGeneric(e) ? e.Driver.ToLowerInvariant() + " " : "") + e.Type.ToLowerInvariant();
                 stats.TryGetValue(key, out var st);
@@ -281,7 +282,7 @@ public static class HootPc98Tests
                     note = cause.PadRight(22) + " key-ons " + keyOns + ", beeps " + beeps + ", fm " + fmWrites + " (boot " + logBoot + "), hoot " + m.HootDelivered + (m.HootInterruptEnabled ? "" : " off") +
                         ", vec " + vec.ToString("X2") + (hooked ? "" : " stub") + ", shells " + string.Join("/", shells.Select(r => r.ToString().Substring(0, 3))) +
                         (m.UnknownFunctions.Count > 0 ? ", dos " + string.Join(" ", m.UnknownFunctions.Keys.Take(5).Select(k => k.ToString("X")) ) : "") +
-                        (m.Cpu.UnknownOps > 0 ? ", op@" + m.Cpu.CS.ToString("X4") + ":" + m.Cpu.IP.ToString("X4") : "") +
+                        (m.Cpu.UnknownOps > 0 ? ", op@" + m.Cpu.CS.ToString("X4") + ":" + m.Cpu.IP.ToString("X4") + " " + string.Join(" ", Enumerable.Range(-2, 8).Select(i => m.PeekByte(m.Cpu.CS, (m.Cpu.IP + i) & 0xFFFF).ToString("X2"))) : "") +
                         (m.UnknownPorts.Count > 0 ? ", ports " + string.Join(" ", m.UnknownPorts.Take(8).Select(p => (p > 0xFFFF ? "w" : "r") + (p & 0xFFFF).ToString("X")) ) : "") +
                         " | " + m.ConsoleText.Replace("\r", " ").Replace("\n", " ").Trim().Split(' ').Where(x => x.Length > 0).TakeLast(12).Aggregate("", (a, b) => a + " " + b);
                 }
@@ -312,7 +313,7 @@ public static class HootPc98Tests
     public static int TraceEntry(string zip, int which, double seconds)
     {
         string dir = ZipFolder.Extract(zip);
-        var hoots = Directory.GetFiles(dir, "*" + HootArchive.Extension).Where(h => { var he = HootArchive.Load(h); return he.Driver == "pc98dos" || HootPc98.IsGeneric(he); }).OrderBy(x => x, StringComparer.Ordinal).ToList();
+        var hoots = Directory.GetFiles(dir, "*" + HootArchive.Extension).Where(h => { var he = HootArchive.Load(h); return he.Driver == "pc98dos" || he.Driver == "pc9821dos" || HootPc98.IsGeneric(he); }).OrderBy(x => x, StringComparer.Ordinal).ToList();
         if (hoots.Count == 0) { Console.WriteLine("no pc98dos entry"); return 1; }
         var e = HootArchive.Load(hoots[Math.Min(which, hoots.Count - 1)]);
         Console.WriteLine(e.Name + "  " + e.Type + "  " + string.Join(", ", e.Options.Select(o => o.Key + "=" + o.Value)));

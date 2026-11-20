@@ -128,6 +128,12 @@ public static class HootSongs
             v = HootOpmBoard.Render(e, dir, code);
             what = HootOpmBoard.LayoutOf(driver, e.Type).Name + " 사운드 보드 · 명령 0x" + code.ToString("X2");
         }
+        else if (HootNichibutsu.Handles(driver, e.Type))
+        {
+            // hoot 니치부츠 terracre · terraf: 사운드 보드 (Z80 + YM3526/YM3812 + DAC)에서 사운드 ROM을 돌려 미리 렌더
+            v = HootNichibutsu.Render(e, dir, code);
+            what = "니치부츠 사운드 보드 · 명령 0x" + code.ToString("X2");
+        }
         else if (HootSnk68.Handles(driver, e.Type))
         {
             // hoot SNK68: 사운드 보드 (Z80 + YM3812 + uPD7759)에서 사운드 ROM을 돌려 미리 렌더

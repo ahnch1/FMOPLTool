@@ -31,6 +31,7 @@
 | 2.0.4 | 8-6 (메가드라이브) | hoot megadrive generic_z80 · iyinc: `Audio/HootMegaDrive.cs` (Z80 사운드 쪽 · 카트리지의 Z80 드라이버를 RAM에, 요청 주소) |
 | 2.0.5 | 8-7 (X68000) | MC68000 `Audio/Cpu/M68000.cs` + hoot x68k generic: `Audio/HootX68k.cs` (OPM · ADPCM · DMA · MFP, E00010h = hoot가 대신 하는 IOCS · DOS) |
 | 2.0.6 | 8-7 (X68000 MIDI) | x68k MIDI 판: YM3802 MIDI 보드 (EAFA00h) → 살아 있는 MIDI 곡 (`HootX68k.LoadMidi`) |
+| 2.1.23 | 8-8n (니치부츠) | hoot nichibutsu terracre · terraf: `Audio/HootNichibutsu.cs` (Z80 + YM3526/YM3812 + DAC → VGM YM2612 DAC, 주기 IRQ, 명령 (코드 << 1) | 1) |
 | 2.1.22 | 8-8m (SNK68) | hoot snk 3812 (P.O.W. · SAR · Street Smart · Ikari III): `Audio/HootSnk68.cs` (Z80 + YM3812 + uPD7759, 명령 0Dh × 2 = 음악 켬) |
 | 2.1.21 | 8-8b 더함 (midres) | hoot dataeast midres (Midnight Resistance): `Audio/HootDeco.cs` midres 배치 — YM3812 (타이머 = IRQ2) · YM2203 · OKIM6295 · 명령 138000h |
 | 2.1.20 | — (UI) | **Hoot 페이지** (PLAY, Jukebox 옆): 같은 `JukeboxView` + 왼쪽 `Shell/HootBrowser.cs` (목록 고르기 · 설정 · `HootTree`), 왼쪽 목록 접점 `ISongList`, 설정 Preferences → Hoot (HootXmlFolders · HootDataFolder), 처음 열 때 읽음. 왼쪽 목록 [hoot] 버튼은 없앰 |
@@ -75,6 +76,7 @@
 | 네오지오 | 137 / 146 (음악일 만한 코드 10h 이상 3곡까지) | `--hootneosurvey roms 200 6` |
 | 타이토 YM2610 보드 (f2 · b · dual68 · x · fx1a · sonicb) | 67 / 67 (첫 곡이 조용하면 다음 곡 3개까지) | `--hoottaitosurvey roms 200 6` |
 | 데이터 이스트 6502 (cobracom · drgninja · karnov · triothep · lastmisn · makyosen) | 20 / 20, 곡 283 / 285 (무음 2 = cobracom SE 12 · ghostb 효과음 하나) | `--test hootdeco65` (HOOT_SONGS=1 = 곡마다) |
+| 니치부츠 (terracre · terraf) | 10 / 10, 곡 161 / 161 (terracre 0x00 = 목록의 구분 줄) | `--test hootnichi` (HOOT_SONGS=1) |
 | SNK68 (snk 3812) | 4 / 4, 146곡 모두 (키온 또는 uPD7759) | `--test hootsnk` (HOOT_SONGS=1, HOOT_SNKINIT=16진,… 부팅 명령 바꾸기, HOOT_SNKSCAN=곡 = 부팅 명령 00h~FFh 훑기, HOOT_PC · HOOT_PCQ=주소,…) |
 | 토아플랜 1 · Twin Cobra (generic) | 9 / 9, 125곡 모두 (키온) | `--test hoottoaplan` (HOOT_SONGS=1 = 곡마다, HOOT_PROBE=1 = I/O 포트 · 68000 쪽 RAM 후보) |
 | 타이토 YM2151 보드 (fullt) | 9 / 9, 147곡 모두 (FM 키온 또는 MSM 바이트) | `--test hoottaitoopm` (HOOT_SONGS=1 = 곡마다, HOOT_REGS · HOOT_PC · HOOT_PCQ · HOOT_RAM · HOOT_MSMLOG) |
@@ -265,7 +267,12 @@
   - **음악 켬**: 드라이버 깃발 (P.O.W. F115h, SAR F116h) 처음 0Ch — bit2 = BGM 끔 (곡 처리기 09ACh가 그냥 돌아감), bit3 = 효과음 · 목소리 끔. 명령 형식 표 (ROM, 0 무시 · 1 제어 · 2 BGM · 3 효과음 · 4 …)의 형식 1 중 낮은 니블만 있는 명령 (00h~0Fh)은 **같은 값이 두 번 연달아** 와야 처리 (F12Fh에 앞 값), 처리기는 bit1 = 끔 · bit0 = 켬 (bit2 BGM · bit3 효과음) → 0Dh 두 번 = 둘 다 켬. 35h는 P.O.W. · Ikari III에서만 BGM 켬 (SAR · Street Smart는 형식 표가 달라 그냥 돌아감)
   - 찾은 길: 타이머 쓰기 기록 (부팅 80h · 60h · 21h 뒤 곡 명령에서 r4 = 6Bh = 두 타이머 가림) → 곡 처리기의 깃발 검사 → 깃발 지우는 RES 2 · 그 앞 분기 · 두 번 오기 검사. 진단 `HOOT_SNKSCAN` (부팅 명령 훑기)은 3Ah · BFh처럼 자기 소리를 내는 명령도 걸리니 조심
   - 3Ah = 소리 초기화 (RAM · ROM 시험 뒤 다시 시작), BFh = 짧은 효과 — hoot 목록 맨 앞 줄
-- 다음 (8-8n): Z80 + YM2151 + OKIM6295 작은 보드 (tecmo16 · raizing mahou · bgaregga · banpresto dbz · dooyong …) — MAME 배치를 하나씩 확인해 `HootOpmBoard.Layout`에, atari system1 (6502), 그 뒤 새 칩
+- **8-8n. 니치부츠 terracre · terraf — ✅ v2.1.23 (10 / 10)** — `Audio/HootNichibutsu.cs`
+  - 배치 (MAME terracre · galivan · armedf가 같은 꼴): Z80 4MHz, ROM (48KB 이하면 ~BFFFh · RAM C000h~, 아니면 ~F7FFh · RAM F800h~ — terraf 계열은 SP 0000h로 FFFFh부터), I/O 00h · 01h OPL (이름에 YM3812면 3812, 아니면 3526, 4MHz), 02h · 03h DAC 둘, 04h 읽기 = 명령 지움, 06h 읽기 = 명령
+  - 인터럽트 = 4MHz / 512 = 7812.5Hz 주기 IRQ (HOLD, IM 1 / IM 2) — 음악 틱 (C00Ch를 세어 1Fh마다)과 DAC 출력. OPL 타이머 · 상태는 안 씀
+  - 명령: 주 루프가 06h를 읽어 bit0이 1일 때만 받고 오른쪽으로 민다 → 68000이 (코드 << 1) | 1로 쓴다 (처음엔 코드 그대로 넣어 홀수 코드만 소리 났음)
+  - DAC 둘 → VGM에 그냥 DAC가 없어 YM2612 DAC (2Bh = 80h, 2Ah = 둘의 평균, 바뀔 때만). 드럼 곡은 8초에 DAC 쓰기 1만~2만 개
+- 다음 (8-8o): Z80 + YM2151 + OKIM6295 작은 보드 (tecmo16 · raizing mahou · bgaregga · banpresto dbz · dooyong …) — MAME 배치를 하나씩 확인해 `HootOpmBoard.Layout`에, atari system1 (6502), 그 뒤 새 칩
   - 남은 것 (8-8a): "소리 남" 기준이 처음 6초에 키온 하나라 몇 항목은 ADPCM 하나뿐 (driftout · liquidk · megablst 등 첫 곡이 짧은 효과음일 수 있음) — 귀로 확인, bshark (code0 · code1 둘), taito z 계열 다른 보드
 
 ### 남은 문제 (단계와 따로)

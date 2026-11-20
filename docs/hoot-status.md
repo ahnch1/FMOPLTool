@@ -31,6 +31,7 @@
 | 2.0.4 | 8-6 (메가드라이브) | hoot megadrive generic_z80 · iyinc: `Audio/HootMegaDrive.cs` (Z80 사운드 쪽 · 카트리지의 Z80 드라이버를 RAM에, 요청 주소) |
 | 2.0.5 | 8-7 (X68000) | MC68000 `Audio/Cpu/M68000.cs` + hoot x68k generic: `Audio/HootX68k.cs` (OPM · ADPCM · DMA · MFP, E00010h = hoot가 대신 하는 IOCS · DOS) |
 | 2.0.6 | 8-7 (X68000 MIDI) | x68k MIDI 판: YM3802 MIDI 보드 (EAFA00h) → 살아 있는 MIDI 곡 (`HootX68k.LoadMidi`) |
+| 2.1.64 | 8-9n (윤성) | hoot yunsung nmg5 · pclubys (Multi 5 · Search Eye · Wonder Stick · Puzzle Club · Garogun Seroyang · 7 Ordi): `Audio/HootYunsung.cs` (Z80 + YM3812 + OKIM6295) |
 | 2.1.63 | 8-9m 더함 (세이부 raiden2) | hoot seibu raiden2 (Raiden II · Raiden DX): `HootSeibu` YM2151 + OKIM6295 × 2 변형 |
 | 2.1.62 | 8-9m (세이부 사운드 시스템) | hoot seibu raiden (Raiden · Toki no Mahjong Paradise · Heated Barrel · Seibu Cup Soccer): `Audio/HootSeibu.cs` (Z80 + YM3812 + OKIM6295) |
 | 2.1.61 | 8-9l (타이토 Bubble Bobble) | hoot taito bubblebobble (Bubble Bobble · Tokio): `Audio/HootTaitoBubble.cs` (Z80 + YM2203 + YM3526) |
@@ -135,6 +136,7 @@
 | SNK OPL (3526_8950 · 3526x2 · fitegolf) | 10 / 10, 372곡 중 347 (무음 25 = 머리 줄 · Victory Road 목소리 D2h~DBh) (무음 77 = Y8950 ADPCM 목소리 · 머리 줄) | `--test hootsnkopl` (HOOT_SONGS=1) |
 | 타이토 Bubble Bobble (bubblebobble) | 2 / 2, 28곡 중 26 (무음 = 머리 줄 · SSG-OFF) | `--test hootbub` (HOOT_SONGS=1, HOOT_DEBUG=1 = PC 표) |
 | 세이부 사운드 시스템 (raiden · raiden2) | 6 / 6, 99곡 중 90 (무음 = Raiden 북 파트 · Cup Soccer 홀수 번호 · raiden2 둘) | `--test hootseibu` (HOOT_SONGS=1) |
+| 윤성 (nmg5 · pclubys) | 6 / 6, 64곡 모두 | `--test hootys` (HOOT_SONGS=1) |
 | 아이렘 M62 / M52 (m62) | 15 / 15, 137 / 145 (남은 8 = Traverse USA 효과음 — MSM #2로 보임) | `--test hootm62` (HOOT_SONGS=1) |
 | 남코 Pac-Land 계열 (wsg63701) | 6 / 6, 157곡 모두 | `--test hootns86` (HOOT_SONGS=1, HOOT_DEBUG=1 = 슬롯 · 요청 바이트) |
 | 남코 System 86 (system86) | 5 / 5, 71곡 모두 (63701X 음성은 없음) | `--test hootns86` (6801 합성 둘 포함, HOOT_SONGS=1) |
@@ -464,6 +466,8 @@
   - 인터럽트 IM 0: YM3812 IRQ = RST 10h, 명령 = RST 18h (4003h = 받음). 명령 낱말 4011h = 동작 (80h 곡 시작 · 81h 멈춤 · 84h · 90h 리셋 …), 4010h = 번호 (0이면 버림) — hoot 코드는 번호
   - v2.1.63 raiden2 (MAME raiden2): 4008h · 4009h = YM2151 3.58MHz (상태는 4009h로 읽음, 타이머 IRQ = RST 10h), 6000h · 6002h = OKIM6295 × 2 (1.023MHz 핀7 높음, ROM = pcm 자리 0 · 나머지)
   - YM3812 IRQ 받기: 드라이버가 4h에 42h를 써서 (T1 가림 + 깃발 지움) IRQ를 내림 — MAME fmopl처럼 4h bit6 · 5 = 그 깃발 지움 + 남은 게 다 가려지면 IRQ 내림 (bit7 리셋만 따르면 IRQ가 쉬지 않음)
+- **8-9n. 윤성 Z80 + YM3812 + OKIM6295 — ✅ v2.1.64 (6 / 6, 64곡)** — `Audio/HootYunsung.cs`
+  - MAME nmg5.cpp: Z80 4MHz, ROM ~DFFFh, RAM E000h (pclubys 배치는 F800h~FFFFh, 스택 0000h → FFFFh), I/O 00h OKI 뱅크 · 10h · 11h YM3812 · 18h 명령 (NMI) · 1Ch OKIM6295 1MHz. IRQ = YM3812 (fmopl 깃발 지움)
 - 다음: 타이토 F3 (ES5505 + MC68681, 36항목), 아이렘 M92 (V35 + GA20), 코나미 K007232 보드 (매피 계열, 6809 + 남코 WSG 15xx) · system86 (HD63701)
 - 그 다음 (8-8v): Z80 + YM2151 + OKIM6295 작은 보드 (tecmo16 · raizing mahou · bgaregga · banpresto dbz · dooyong …) — MAME 배치를 하나씩 확인해 `HootOpmBoard.Layout`에, atari system1 (6502), 그 뒤 새 칩
   - 남은 것 (8-8a): "소리 남" 기준이 처음 6초에 키온 하나라 몇 항목은 ADPCM 하나뿐 (driftout · liquidk · megablst 등 첫 곡이 짧은 효과음일 수 있음) — 귀로 확인, bshark (code0 · code1 둘), taito z 계열 다른 보드

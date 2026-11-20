@@ -337,7 +337,8 @@ Shift_JIS 바이트에서 그대로 찾아도 안전하다: `<` `>` `!` `-` `/`(
 - `archiver` → `archive`, `adressing` → `addressing` 같은 오타 경고 (고쳐 쓰는 것은 hoot 동작이 바뀔 수 있어 선택).
 - 쉼표 archive (`a,b`)는 첫 zip을 열쇠로 할지, 집합으로 볼지 결정.
 - 기계 이름 · `driveralias type` 표기 통일 (선택: 원래 바이트 보존 원칙과 부딪힘 → 하려면 그 항목만 다시 쓴다).
-- archive zip이 기종 폴더에 실제로 있는지 · rom 파일이 zip 안에 있는지 확인 (`HootArchive.MissingRom` 참고).
+- rom 파일이 zip 안에 있는지 확인 (`HootArchive.MissingRom` 참고).
+  (archive zip이 hoot 폴더에 있는지는 `HootMissing`이 한다 — 11장.)
 
 ## 11. 참고 구현 · 검증
 
@@ -348,6 +349,13 @@ Shift_JIS 바이트에서 그대로 찾아도 안전하다: `<` `>` `!` `-` `/`(
 | 비교 · 합치기 UI | `src/AdlibComposer.App/Views/HootCompareForm.cs` |
 | 시험 | `tests/AdlibComposer.SelfTest/HootTests.cs` (`-- --test hoot`) |
 | 명령 줄 합치기 | SelfTest `Program.cs` (`HootLists.Merge(dirs, outDir, hootXml)`) |
+| 없는 zip 목록 · 폴더 구성 CSV | `src/AdlibComposer.Formats/HootMissing.cs` — UI: hoot 트리 오른쪽 클릭, 명령 줄: SelfTest `--hootmissing 목록폴더 출력.csv [hoot폴더]` |
+
+**없는 zip CSV (`HootMissing`)**: 목록의 `archive`(쉼표면 zip마다)를 hoot 폴더 아래 모든 `*.zip`과 맞춘다.
+없는 zip이 들어갈 폴더 = 같은 driver/type의 zip이 가장 많이 있는 폴더 (hoot.ini `data_dir`에 든 폴더만 배움) → 없으면 driver → 폴더 기본 표 (아케이드 = `roms`).
+`…_missing.csv` = 없는 zip마다 한 줄 (폴더 · 파일 · 경로 · driver · type · 제작사 · 게임 수 · 기계 · 게임 · 곡 수),
+`…_folders.csv` = 폴더 · driver/type마다 zip 전체 · 있음 · 없음 + 폴더 합계 + 전체. 둘 다 UTF-8 BOM (엑셀).
+2026-11-20 `xml_new` 기준: zip 6,570 · 있음 5,892 · **없음 678** (pc98 362 · X68k 69 · msx 58 · pc88 46 · smd 44 …), archive 없는 항목 9.
 
 새 코드의 검증 기준: 같은 입력(xml · xml2 · xml3 순서)으로 지금 구현과 **항목 수 9,494 · 파일 577개**가 같은지,
 다르면 `_report.txt`끼리 비교해 어느 판단이 바뀌었는지 설명할 수 있어야 한다.

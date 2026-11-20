@@ -90,7 +90,7 @@ internal sealed class FileBrowser : UserControl
         var bar = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 36, Padding = new Padding(6, 5, 6, 0), BackColor = Color.FromArgb(246, 247, 249), WrapContents = false };
         SetupButton(openButton, " 폴더 열기", Glyphs.Open, 104, "곡 폴더 열기 (폴더를 끌어다 놓아도 된다) — 그 폴더와 아래 폴더만 오간다");
         SetupButton(upButton, " 위로", '', 64, "위 폴더로 (연 폴더 위로는 가지 않는다) · Backspace");
-        SetupButton(hootButton, " hoot", Glyphs.Jukebox, 70, "hoot 목록 열기: hoot 게임 목록 폴더(xml · xml_new …, 제작사마다 .xml)를 골라 제작사 → 장비 → 게임 → 곡 트리로 본다\n곡 두 번 클릭 = 재생 (PC-98 DOS 항목) / 그 밖의 기종은 아카이브 zip을 폴더 목록에서 연다\n이미 읽었으면 트리로 돌아가고, Shift+클릭은 폴더를 다시 고른다");
+        SetupButton(hootButton, " hoot", Glyphs.Jukebox, 70, "hoot 목록 열기: hoot 게임 목록 폴더(xml · xml_new …, 제작사마다 .xml)를 골라 제작사 → 장비 → 게임 → 곡 트리로 본다\n곡 두 번 클릭 = 재생 (PC-98 DOS 항목) / 그 밖의 기종은 아카이브 zip을 폴더 목록에서 연다\n이미 읽었으면 트리로 돌아가고, Shift+클릭은 폴더를 다시 고른다\n트리에서 오른쪽 클릭: 없는 파일(zip) 목록 · 폴더 구성을 CSV로 저장");
         openButton.Click += delegate { BrowseFolder(); };
         upButton.Click += delegate { GoUp(); };
         hootButton.Click += delegate { OpenHoot((ModifierKeys & Keys.Shift) != 0); };

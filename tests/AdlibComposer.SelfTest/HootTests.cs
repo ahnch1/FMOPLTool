@@ -113,5 +113,46 @@ public static class HootTests
             check("Hoot merge: report written", File.Exists(r.ReportPath) && File.ReadAllText(r.ReportPath).Contains("뺀 중복"), "");
         }
         finally { try { Directory.Delete(root, true); } catch (Exception) { } }
+        RunMissing(check);
+    }
+
+    /// <summary>없는 zip 목록 · 폴더 구성 CSV (HootMissing): 있는 zip에서 폴더를 배우고, 쉼표 archive는 zip마다, 기본 표로 나머지.</summary>
+    private static void RunMissing(Action<string, bool, string> check)
+    {
+        string root = Path.Combine(Path.GetTempPath(), "fmopl_hoot_missing_test");
+        try
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+            string list = Path.Combine(root, "xml");
+            WriteList(list, "maker.xml", string.Join("\r\n\t", new[]
+            {
+                Game("[PC-9801] Have (OPN)", "pc98dos", "opn", "have_98", 2),
+                Game("[PC-9801] Lost, \"Quoted\" (OPN)", "pc98dos", "opn", "lost_98", 3),
+                Game("[MSX] Two Zips (OPLL)", "msx", "kss", "two_msx,fmpac_msx", 1),
+                Game("[X68000] Default (OPM)", "x68k", "generic", "def_68", 1),
+                Game("[Arcade] Board (YM2151)", "cps1", "capcom", "board", 1),
+            }), HootLists.ShiftJis);
+            Directory.CreateDirectory(Path.Combine(root, "pc98_mine"));
+            File.WriteAllBytes(Path.Combine(root, "pc98_mine", "have_98.zip"), new byte[] { 0x50, 0x4B, 5, 6 });
+            Directory.CreateDirectory(Path.Combine(root, "msx"));
+            File.WriteAllBytes(Path.Combine(root, "msx", "fmpac_msx.zip"), new byte[] { 0x50, 0x4B, 5, 6 });
+            File.WriteAllText(Path.Combine(root, "hoot.ini"), "[config]\r\ndata_dir=pc98_mine;msx;X68k;roms;\r\n");
+
+            var r = HootMissing.Check(list);
+            string Where(string zip) { var m = r.Missing.FirstOrDefault(x => x.Zip == zip); return m == null ? "(있음)" : m.RelPath; }
+            check("Hoot missing: counts (comma archive = two zips)", r.Games == 5 && r.Zips == 6 && r.Present == 2 && r.Missing.Count == 4, r.Zips + "/" + r.Present + "/" + r.Missing.Count);
+            check("Hoot missing: folder learned from existing zips", Where("lost_98.zip") == "pc98_mine/lost_98.zip", Where("lost_98.zip"));
+            check("Hoot missing: default folder keeps data_dir spelling, arcade → roms", Where("def_68.zip") == "X68k/def_68.zip" && Where("board.zip") == "roms/board.zip" && Where("two_msx.zip") == "msx/two_msx.zip",
+                Where("def_68.zip") + " " + Where("board.zip") + " " + Where("two_msx.zip"));
+
+            string csv = Path.Combine(root, "out_missing.csv");
+            HootMissing.WriteCsv(r, csv);
+            var b = File.ReadAllBytes(csv);
+            string text = File.ReadAllText(csv);
+            string folders = File.ReadAllText(Path.Combine(root, "out_folders.csv"));
+            check("Hoot missing: CSV is UTF-8 BOM, quoted cells", b[0] == 0xEF && text.Contains("\"[PC-9801] Lost, \"\"Quoted\"\" (OPN)\"") && text.Split("\r\n", StringSplitOptions.RemoveEmptyEntries).Length == 5, "");
+            check("Hoot missing: folders CSV has per-folder rows and total", folders.Contains("pc98_mine,pc98dos,opn,2,1,1") && folders.Contains("(전체),,,6,2,4"), folders.Replace("\r\n", " / "));
+        }
+        finally { try { Directory.Delete(root, true); } catch (Exception) { } }
     }
 }

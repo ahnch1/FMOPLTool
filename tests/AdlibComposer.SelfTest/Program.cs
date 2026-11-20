@@ -35,6 +35,15 @@ public static class Program
             Console.WriteLine("report: " + r.ReportPath + (r.HootXmlPath.Length > 0 ? ", hoot: " + r.HootXmlPath : ""));
             return 0;
         }
+        if (args.Length > 2 && args[0] == "--hootmissing")
+        {
+            // hoot 목록에 있지만 hoot 폴더에 없는 zip: --hootmissing 목록폴더 출력.csv [hoot폴더]  (폴더 구성은 출력_folders.csv)
+            var r = AdlibComposer.Formats.HootMissing.Check(args[1], args.Length > 3 ? args[3] : null);
+            AdlibComposer.Formats.HootMissing.WriteCsv(r, args[2]);
+            Console.WriteLine("games " + r.Games + ", zips " + r.Zips + ", present " + r.Present + ", missing " + r.Missing.Count + ", no archive " + r.NoArchive);
+            Console.WriteLine("csv: " + r.MissingCsv + ", folders: " + r.FoldersCsv);
+            return 0;
+        }
         if (args.Length > 1 && args[0] == "--extsurvey") return ExtModuleTests.Survey(args[1]);   // 진단: --extsurvey 폴더 (XM · IT)
         if (args.Length > 1 && args[0] == "--extrender")   // 진단: --extrender 폴더|파일 [초] [wav 폴더]
             return ExtModuleTests.Render(args[1], args.Length > 2 ? double.Parse(args[2], System.Globalization.CultureInfo.InvariantCulture) : 20, args.Length > 3 ? args[3] : null);

@@ -84,6 +84,11 @@ internal sealed class HootTree : UserControl
             }
         };
 
+        var menu = new ContextMenuStrip { Font = ShellTheme.Ui };
+        menu.Items.Add("없는 파일 목록 · 폴더 구성 CSV로 저장…", null, delegate { ExportMissing(); });
+        menu.Opening += (s, e) => menu.Items[0].Enabled = listDir != null && zipTask != null;
+        tree.ContextMenuStrip = menu;
+
         Controls.Add(tree);
         Controls.Add(status);
         Controls.Add(search);
@@ -285,6 +290,49 @@ internal sealed class HootTree : UserControl
     private static bool Playable(HootGame g)
     {
         return HootArchive.PlayableGame(g.Driver, g.DriverType, g.Options.ContainsKey("midiout"));
+    }
+
+    // ---------------------------------------------------------------- 없는 파일 CSV
+
+    /// <summary>
+    /// 오른쪽 클릭 [없는 파일 목록 · 폴더 구성 CSV로 저장]: 목록의 아카이브 zip 중 hoot 폴더에 없는 것 (<see cref="HootMissing"/>)을
+    /// "…_missing.csv"(zip마다 한 줄: 들어갈 폴더 · 파일 · 게임)와 "…_folders.csv"(폴더 · 드라이버마다 있음 / 없음)로.
+    /// </summary>
+    public void ExportMissing()
+    {
+        if (listDir == null || zipTask == null) return;
+        string hootRoot = Path.GetDirectoryName(listDir.TrimEnd('\\')) ?? listDir;
+        string path;
+        using (var dlg = new SaveFileDialog
+        {
+            Title = "없는 파일 목록 CSV 저장 (폴더 구성은 옆에 _folders.csv로)",
+            Filter = "CSV (*.csv)|*.csv",
+            FileName = "hoot_" + Path.GetFileName(listDir.TrimEnd('\\')) + "_missing.csv",
+            InitialDirectory = hootRoot,
+            OverwritePrompt = true,
+        })
+        {
+            if (dlg.ShowDialog(FindForm()) != DialogResult.OK) return;
+            path = dlg.FileName;
+        }
+        var old = Cursor;
+        Cursor = Cursors.WaitCursor;
+        try
+        {
+            var full = zipTask.Result;
+            var rel = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var kv in full)
+            {
+                string d = Path.GetRelativePath(hootRoot, Path.GetDirectoryName(kv.Value) ?? hootRoot).Replace('\\', '/');
+                rel[kv.Key] = d == "." ? "" : d;
+            }
+            var r = HootMissing.Check(listDir, hootRoot, games, rel);
+            HootMissing.WriteCsv(r, path);
+            AppLog.Info("hoot", "없는 파일 " + r.Missing.Count + "개 / zip " + r.Zips + "개 → CSV 저장: " + r.MissingCsv,
+                "폴더 구성: " + r.FoldersCsv + "\n게임 " + r.Games + " · zip 있음 " + r.Present + " · archive 없는 항목 " + r.NoArchive + " (찾은 곳: " + hootRoot + " 아래)");
+        }
+        catch (Exception ex) { AppLog.Error("hoot", "CSV를 저장하지 못했습니다: " + path, ex); }
+        finally { Cursor = old; }
     }
 
     // ---------------------------------------------------------------- 재생

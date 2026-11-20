@@ -9,22 +9,41 @@ using AdlibComposer.Formats;
 namespace AdlibComposer.Audio;
 
 /// <summary>
-/// hoot 코나미 Z80 + YM2151 (+ K007232) 보드 (driver konami, type scontra: Super Contra · Gang Busters (garuka) · Crazy Cop (Thunder Cross 계열),
-/// type thundercross: Thunder Cross · Block Hole): 사운드 CPU를 흉내 낸다.
-/// <para>기계 (MAME thunderx scontra_sound_map / thunderx_sound_map + ROM 스캔): Z80 3.58MHz, 0000h~7FFFh ROM, 8000h~87FFh RAM, A000h = 명령 (메인이 쓰면 IRQ, hold),
-/// B000h~B00Dh = K007232 (12 = 바깥 포트: 위 니블 = 채널 0 왼쪽 음량, 아래 = 채널 1 오른쪽 음량), C000h · C001h = YM2151 (3.58MHz), F000h = K007232 뱅크 (bit0~1 = 채널 0, bit2~3 = 채널 1, 128KB 단위).</para>
-/// <para>곡: rom code = Z80 ROM, pcm = K007232 ROM. 부팅 1초 뒤 명령, 180초를 YM2151 + K007232 (이 프로그램 안 명령 DBh) VGM으로.</para>
+/// hoot 코나미 Z80 + K007232 보드 (driver konami): 사운드 CPU를 흉내 낸다. 배치는 type마다 <see cref="Layouts"/> (MAME 사운드 맵 + ROM 스캔).
+/// <list type="bullet">
+/// <item>scontra (Super Contra · Gang Busters · Crazy Cop) · thundercross (Thunder Cross · Block Hole): A000h 명령, B000h K007232, C000h YM2151, F000h 뱅크 (MAME thunderx)</item>
+/// <item>salamander (Salamander · Life Force): 같은 배치, 뱅크 없음, D000h~F000h VLM5030 (빼고) (MAME nemesis salamand)</item>
+/// <item>hcastle (Haunted Castle · City Bomber · Kitten Kaboodle): 9800h SCC (K051649), A000h YM3812 (IRQ → NMI), B000h K007232, C000h 뱅크, D000h 명령 (MAME hcastle)</item>
+/// <item>crimfght (Crime Fighters · Aliens): A000h YM2151 (CT 핀 = 뱅크), C000h 명령, E000h K007232, 음량 아래 니블 = 채널 0 (MAME crimfght · aliens)</item>
+/// </list>
+/// <para>공통: Z80 3.58MHz, 0000h~7FFFh ROM, 8000h~ RAM, 명령 = 래치 + IRQ (hold). K007232 바깥 포트 (reg 12) = 두 채널 음량 니블, 뱅크 = 채널마다 128KB.</para>
+/// <para>곡: rom code = Z80 ROM, pcm = K007232 ROM (pcm2 = VLM5030 · uPD7759는 아직). 부팅 1초 뒤 명령, 180초를 YM2151 / YM3812 + SCC + K007232 (이 프로그램 안 명령 DBh) VGM으로.</para>
 /// </summary>
 public static class HootKonamiK007232
 {
-    public const double CpuClock = 3579545, OpmClock = 3579545, PcmClock = 3579545;
+    public const double CpuClock = 3579545, OpmClock = 3579545, PcmClock = 3579545, SccClock = 3579545 / 2.0;
     public const double DefaultSeconds = 180, DefaultFade = 4;
+
+    /// <summary>보드 배치. -1 = 없음. VolHi0 = 바깥 포트 위 니블이 채널 0 음량, BankCt = YM2151 CT 핀 (1Bh bit7 → 채널 0, bit6 → 1)이 뱅크, OplNmi = YM3812 IRQ가 NMI.</summary>
+    public sealed class Layout
+    {
+        public int RamEnd = 0x8800, Latch = 0xA000, K = 0xB000, Opm = 0xC000, Opl = -1, Scc = -1, Bank = -1, VlmBusy = -1;
+        public bool VolHi0 = true, BankCt, OplNmi;
+    }
+
+    public static readonly Dictionary<string, Layout> Layouts = new Dictionary<string, Layout>
+    {
+        ["scontra"] = new Layout { Bank = 0xF000 },
+        ["thundercross"] = new Layout { Bank = 0xF000 },
+        ["salamander"] = new Layout { RamEnd = 0x9000, VlmBusy = 0xE000 },
+        ["hcastle"] = new Layout { Opm = -1, Opl = 0xA000, Scc = 0x9800, Bank = 0xC000, Latch = 0xD000, OplNmi = true },
+        ["crimfght"] = new Layout { Opm = 0xA000, Latch = 0xC000, K = 0xE000, VolHi0 = false, BankCt = true },
+    };
 
     public static bool Handles(string driver, string type)
     {
         if (!string.Equals((driver ?? "").Trim(), "konami", StringComparison.OrdinalIgnoreCase)) return false;
-        string t = (type ?? "").Trim().ToLowerInvariant();
-        return t == "scontra" || t == "thundercross";
+        return Layouts.ContainsKey((type ?? "").Trim().ToLowerInvariant());
     }
 
     public static VgmSong Render(HootArchive.Entry e, string dir, int code, double seconds = DefaultSeconds, double fade = DefaultFade)
@@ -55,7 +74,8 @@ public static class HootKonamiK007232
         if (!any) missing.Add("(code)");
         var p = new byte[pcm.Count == 0 ? 0 : (int)pcm.Max(x => x.off + x.d.Length)];
         foreach (var (off, d) in pcm) Array.Copy(d, 0, p, off, d.Length);
-        var m = new Machine(rom, p);
+        Layouts.TryGetValue((e.Type ?? "").Trim().ToLowerInvariant(), out var layout);
+        var m = new Machine(rom, p, layout);
         m.Missing.AddRange(missing);
         foreach (var u in unsupported) m.Unsupported.Add(u);
         m.RunSeconds(1);
@@ -65,26 +85,28 @@ public static class HootKonamiK007232
     public sealed class Machine : IZ80Bus
     {
         public readonly byte[] Rom, Pcm;
-        public readonly byte[] Ram = new byte[0x800];
+        public readonly byte[] Ram = new byte[0x1000];
+        public readonly Layout L;
         public readonly Z80 Cpu;
         public readonly List<string> Missing = new List<string>();
         public readonly HashSet<string> Unsupported = new HashSet<string>();
-        /// <summary>칩 쓰기: chip 0 = YM2151, 1 = K007232 (reg 0~0Dh, 가짜 10h~15h).</summary>
+        /// <summary>칩 쓰기: chip 0 = YM2151, 1 = K007232 (reg 0~0Dh, 가짜 10h~15h), 2 = YM3812, 3 = SCC (reg = VGM 포트 &lt;&lt; 8 | 레지스터).</summary>
         public readonly List<(double t, int chip, int reg, int val)> Log = new List<(double, int, int, int)>();
-        public int Irqs, LatchReads;
+        public int Irqs, Nmis, LatchReads;
+        public bool UsedOpl, UsedScc;
         public readonly Dictionary<int, int> OtherWrites = new Dictionary<int, int>(), OtherReads = new Dictionary<int, int>();
 
-        private int latch, opmAddr;
-        private bool irqLine;
+        private int latch, ymAddr;
+        private bool irqLine, nmiPending;
         private long playStart = -1;
         private int timerA, timerB, timerCtl, timerFlags;
         private long nextTimerA = long.MaxValue, nextTimerB = long.MaxValue;
         private readonly int[] last = Enumerable.Repeat(-1, 0x100).ToArray();
         private readonly byte[] kreg = new byte[0x20];
 
-        public Machine(byte[] rom, byte[] pcm)
+        public Machine(byte[] rom, byte[] pcm, Layout layout = null)
         {
-            Rom = rom; Pcm = pcm;
+            Rom = rom; Pcm = pcm; L = layout ?? new Layout();
             Cpu = new Z80(this);
             Cpu.PC = 0; Cpu.SP = 0xFFFF; Cpu.Im = 1;
         }
@@ -105,8 +127,9 @@ public static class HootKonamiK007232
             Write(Cpu.SP, (byte)v); Write((Cpu.SP + 1) & 0xFFFF, (byte)(v >> 8));
         }
 
-        private long TimerAPeriod { get { return Math.Max(1, (long)(64.0 * (1024 - timerA) / OpmClock * CpuClock)); } }
-        private long TimerBPeriod { get { return Math.Max(1, (long)(1024.0 * (256 - timerB) / OpmClock * CpuClock)); } }
+        private bool Opl { get { return L.Opl >= 0; } }
+        private long TimerAPeriod { get { return Math.Max(1, Opl ? (long)(80e-6 * (256 - timerA) * CpuClock) : (long)(64.0 * (1024 - timerA) / OpmClock * CpuClock)); } }
+        private long TimerBPeriod { get { return Math.Max(1, Opl ? (long)(320e-6 * (256 - timerB) * CpuClock) : (long)(1024.0 * (256 - timerB) / OpmClock * CpuClock)); } }
 
         public void RunSeconds(double s) { Run((long)(CpuClock * s)); }
 
@@ -116,8 +139,29 @@ public static class HootKonamiK007232
             while (Cpu.Cycles < end)
             {
                 long now = Cpu.Cycles;
-                if (now >= nextTimerA) { nextTimerA += TimerAPeriod; if ((timerCtl & 4) != 0) timerFlags |= 1; }
-                if (now >= nextTimerB) { nextTimerB += TimerBPeriod; if ((timerCtl & 8) != 0) timerFlags |= 2; }
+                if (Opl)
+                {
+                    // YM3812: 4h bit6 · bit5 = 가림, 깃발 bit6 (T1) · bit5 (T2) · bit7 (IRQ, 0 → 1이면 NMI)
+                    int before = timerFlags;
+                    if (now >= nextTimerA) { nextTimerA += TimerAPeriod; if ((timerCtl & 0x40) == 0) timerFlags |= 0xC0; }
+                    if (now >= nextTimerB) { nextTimerB += TimerBPeriod; if ((timerCtl & 0x20) == 0) timerFlags |= 0xA0; }
+                    if ((before & 0x80) == 0 && (timerFlags & 0x80) != 0 && L.OplNmi) nmiPending = true;
+                }
+                else
+                {
+                    if (now >= nextTimerA) { nextTimerA += TimerAPeriod; if ((timerCtl & 4) != 0) timerFlags |= 1; }
+                    if (now >= nextTimerB) { nextTimerB += TimerBPeriod; if ((timerCtl & 8) != 0) timerFlags |= 2; }
+                }
+                if (nmiPending)
+                {
+                    nmiPending = false;
+                    Nmis++;
+                    Cpu.Halted = false;
+                    Cpu.Iff2 = Cpu.Iff1; Cpu.Iff1 = false;
+                    Push(Cpu.PC);
+                    Cpu.PC = 0x66;
+                    Cpu.Cycles += 11;
+                }
                 if (irqLine && Cpu.Iff1)
                 {
                     irqLine = false;
@@ -128,7 +172,12 @@ public static class HootKonamiK007232
                     Cpu.PC = 0x38;
                     Cpu.Cycles += 13;
                 }
-                if (Cpu.Halted && !irqLine) { Cpu.Cycles = end; break; }
+                if (Cpu.Halted && !irqLine)
+                {
+                    long next = Math.Min(nextTimerA, nextTimerB);
+                    if (L.OplNmi && next < end) { Cpu.Cycles = Math.Max(Cpu.Cycles + 4, next); continue; }
+                    Cpu.Cycles = end; break;
+                }
                 Cpu.Step();
             }
         }
@@ -137,10 +186,12 @@ public static class HootKonamiK007232
         {
             a &= 0xFFFF;
             if (a < 0x8000) return Rom[a];
-            if (a < 0x8800) return Ram[a - 0x8000];
-            if (a == 0xA000) { LatchReads++; return (byte)latch; }
-            if (a == 0xC000 || a == 0xC001) return (byte)timerFlags;
-            if (a >= 0xB000 && a < 0xB00E) { if (a == 0xB005 || a == 0xB00B) KWrite(a - 0xB000, kreg[a - 0xB000]); return 0; }   // 읽기 5 · 11 = 다시 시작
+            if (a < L.RamEnd) return Ram[a - 0x8000];
+            if (a == L.Latch) { LatchReads++; return (byte)latch; }
+            if ((L.Opm >= 0 && (a == L.Opm || a == L.Opm + 1)) || (Opl && (a == L.Opl || a == L.Opl + 1))) return (byte)timerFlags;
+            if (a >= L.K && a < L.K + 0x0E) { int r = a - L.K; if (r == 5 || r == 11) KWrite(r, kreg[r]); return 0; }   // 읽기 5 · 11 = 다시 시작
+            if (L.Scc >= 0 && a >= L.Scc && a < L.Scc + 0x100) return 0xFF;
+            if (a == L.VlmBusy) return 0;   // VLM5030 바쁨 아님
             OtherReads.TryGetValue(a, out int c); OtherReads[a] = c + 1;
             return 0xFF;
         }
@@ -148,27 +199,72 @@ public static class HootKonamiK007232
         public void Write(int a, byte v)
         {
             a &= 0xFFFF;
-            if (a >= 0x8000 && a < 0x8800) { Ram[a - 0x8000] = v; return; }
+            if (a >= 0x8000 && a < L.RamEnd) { Ram[a - 0x8000] = v; return; }
             if (a < 0x8000) return;
-            if (a == 0xC000) { opmAddr = v; return; }
-            if (a == 0xC001) { OpmWrite(opmAddr, v); return; }
-            if (a >= 0xB000 && a < 0xB00E) { KWrite(a - 0xB000, v); return; }
-            if (a == 0xF000) { Emit(1, 0x14, v & 3); Emit(1, 0x15, (v >> 2) & 3); return; }   // 뱅크
+            if (L.Opm >= 0 && a == L.Opm) { ymAddr = v; return; }
+            if (L.Opm >= 0 && a == L.Opm + 1) { OpmWrite(ymAddr, v); return; }
+            if (Opl && a == L.Opl) { ymAddr = v; return; }
+            if (Opl && a == L.Opl + 1) { OplWrite(ymAddr, v); return; }
+            if (a >= L.K && a < L.K + 0x0E) { KWrite(a - L.K, v); return; }
+            if (a == L.Bank) { Emit(1, 0x14, v & 3); Emit(1, 0x15, (v >> 2) & 3); return; }   // 뱅크
+            if (L.Scc >= 0 && a >= L.Scc && a < L.Scc + 0x100) { SccWrite(a - L.Scc, v); return; }
             OtherWrites.TryGetValue(a, out int c); OtherWrites[a] = c + 1;
         }
 
         private void KWrite(int r, int v)
         {
             kreg[r] = (byte)v;
-            if (r == 12) { Emit(1, 0x10, (v >> 4) * 0x11); Emit(1, 0x11, 0); Emit(1, 0x12, 0); Emit(1, 0x13, (v & 15) * 0x11); return; }   // 바깥 포트 = 음량
+            if (r == 12)   // 바깥 포트 = 음량
+            {
+                int v0 = L.VolHi0 ? v >> 4 : v & 15, v1 = L.VolHi0 ? v & 15 : v >> 4;
+                Emit(1, 0x10, v0 * 0x11); Emit(1, 0x11, 0); Emit(1, 0x12, 0); Emit(1, 0x13, v1 * 0x11);
+                return;
+            }
             Emit(1, r, v);
         }
 
         public byte In(int p) { return 0xFF; }
         public void Out(int p, byte v) { }
 
+        private void OplWrite(int reg, int v)
+        {
+            switch (reg)
+            {
+                case 0x02: timerA = v; return;
+                case 0x03: timerB = v; return;
+                case 0x04:
+                    {
+                        if ((v & 0x80) != 0) { timerFlags = 0; return; }
+                        int old = timerCtl;
+                        timerCtl = v;
+                        if ((v & 1) != 0 && (old & 1) == 0) nextTimerA = Cpu.Cycles + TimerAPeriod; else if ((v & 1) == 0) nextTimerA = long.MaxValue;
+                        if ((v & 2) != 0 && (old & 2) == 0) nextTimerB = Cpu.Cycles + TimerBPeriod; else if ((v & 2) == 0) nextTimerB = long.MaxValue;
+                        return;
+                    }
+            }
+            UsedOpl = true;
+            Emit(2, reg, v);
+        }
+
+        private void SccWrite(int off, int v)
+        {
+            // K051649: 00h~7Fh 파형 (채널 3 · 4 같이), 80h~89h 주파수, 8Ah~8Eh 음량, 8Fh 켜기 → VGM D2h 포트 0~3
+            int port, r;
+            if (off < 0x80) { port = 0; r = off; }
+            else
+            {
+                off &= 0x8F;
+                if (off < 0x8A) { port = 1; r = off - 0x80; }
+                else if (off < 0x8F) { port = 2; r = off - 0x8A; }
+                else { port = 3; r = 0; }
+            }
+            UsedScc = true;
+            Emit(3, port << 8 | r, v);
+        }
+
         private void OpmWrite(int reg, int v)
         {
+            if (reg == 0x1B && L.BankCt) { Emit(1, 0x14, (v >> 7) & 1); Emit(1, 0x15, (v >> 6) & 1); }
             switch (reg)
             {
                 case 0x10: timerA = (timerA & 3) | (v << 2); return;
@@ -199,7 +295,9 @@ public static class HootKonamiK007232
         public VgmSong ToVgm(double seconds, double fade)
         {
             var w = new VgmWriter { System = "Konami K007232 (hoot)", Notes = "hoot konami k007232" };
-            w.SetClock(VgmWriter.ClockYm2151, OpmClock);
+            if (L.Opm >= 0) w.SetClock(VgmWriter.ClockYm2151, OpmClock);
+            if (UsedOpl) w.SetClock(VgmWriter.ClockYm3812, OpmClock);
+            if (UsedScc) w.SetClock(VgmWriter.ClockK051649, SccClock);
             bool pcm = Pcm.Length > 0 && Log.Any(x => x.chip == 1 && (x.reg == 5 || x.reg == 0x0B));
             double total = seconds * VgmSong.Rate;
             long at = 0;
@@ -209,6 +307,8 @@ public static class HootKonamiK007232
                 long ts = (long)Math.Min(total, Math.Max(0, x.t));
                 if (ts > at) { w.Wait(ts - at); at = ts; }
                 if (x.chip == 0) w.Write(0x54, x.reg, x.val);
+                else if (x.chip == 2) w.Write(0x5A, x.reg, x.val);
+                else if (x.chip == 3) w.Write(new byte[] { 0xD2, (byte)(x.reg >> 8), (byte)x.reg, (byte)x.val });
                 else w.Write(new byte[] { 0xDB, (byte)x.reg, (byte)x.val, 0 });
             }
             if ((long)total > at) w.Wait((long)total - at);

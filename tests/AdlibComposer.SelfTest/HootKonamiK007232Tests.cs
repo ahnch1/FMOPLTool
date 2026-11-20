@@ -9,11 +9,11 @@ namespace AdlibComposer.SelfTest;
 /// <summary>hoot 코나미 Z80 + YM2151 + K007232 (HootKonamiK007232, type scontra · thundercross): 실제 zip, 진단 (HOOT_SONGS = 곡마다).</summary>
 public static class HootKonamiK007232Tests
 {
-    public static readonly string[] Archives = { "scontra", "garuka", "crazycop", "thunderx", "thunderxa", "blockhl" };
+    public static readonly string[] Archives = { "scontra", "garuka", "crazycop", "thunderx", "thunderxa", "blockhl", "lifefrce", "salamand", "lifefrcej", "hcastle", "citybomb", "kittenk", "crimfght", "aliens" };
 
     public static void Run(Action<string, bool, string> check)
     {
-        check("hoot konami scontra · thundercross: playable, own board", HootArchive.Playable("konami", "scontra") && HootArchive.Playable("Konami", "ThunderCross") && !HootKonamiK007232.Handles("konami", "twin16"), "");
+        check("hoot konami scontra · thundercross · salamander · hcastle · crimfght: playable, own board", HootArchive.Playable("konami", "scontra") && HootArchive.Playable("Konami", "ThunderCross") && HootArchive.Playable("konami", "salamander") && HootArchive.Playable("konami", "hcastle") && HootArchive.Playable("konami", "crimfght") && !HootKonamiK007232.Handles("konami", "twin16"), "");
 
         string root = SopTests.FindDir("_incoming");
         string folder = root == null ? null : Path.Combine(root, "Hootarchive", "roms");
@@ -43,9 +43,10 @@ public static class HootKonamiK007232Tests
         var m = HootKonamiK007232.Boot(e, name => { string f = HootArchive.FindFile(dir, name); return f != null ? File.ReadAllBytes(f) : null; });
         m.Play(code);
         m.RunSeconds(seconds);
-        int keyOn = m.Log.Count(x => x.t > 0 && x.chip == 0 && x.reg == 0x08 && (x.val & 0x78) != 0);
+        int keyOn = m.Log.Count(x => x.t > 0 && ((x.chip == 0 && x.reg == 0x08 && (x.val & 0x78) != 0) || (x.chip == 2 && x.reg >= 0xB0 && x.reg <= 0xB8 && (x.val & 0x20) != 0)
+            || (x.chip == 3 && x.reg == 0x300 && x.val != 0)));
         int pcm = m.Log.Count(x => x.t > 0 && x.chip == 1 && (x.reg == 5 || x.reg == 0x0B));
-        string note = "opm " + keyOn + " pcm " + pcm + ", writes " + m.Log.Count + ", irq " + m.Irqs + " latch " + m.LatchReads + ", PC " + m.Cpu.PC.ToString("X4")
+        string note = "opm " + keyOn + " pcm " + pcm + ", writes " + m.Log.Count + ", irq " + m.Irqs + " nmi " + m.Nmis + " latch " + m.LatchReads + ", PC " + m.Cpu.PC.ToString("X4")
             + (m.OtherWrites.Count > 0 ? ", other " + string.Join(" ", m.OtherWrites.OrderByDescending(x => x.Value).Take(5).Select(x => x.Key.ToString("X4") + ":" + x.Value)) : "")
             + (m.OtherReads.Count > 0 ? ", reads " + string.Join(" ", m.OtherReads.OrderByDescending(x => x.Value).Take(5).Select(x => x.Key.ToString("X4") + ":" + x.Value)) : "")
             + (m.Missing.Count > 0 ? ", missing " + string.Join(" ", m.Missing) : "") + (m.Unsupported.Count > 0 ? ", unsupported " + string.Join(" ", m.Unsupported) : "");

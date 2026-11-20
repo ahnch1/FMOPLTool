@@ -31,6 +31,7 @@
 | 2.0.4 | 8-6 (메가드라이브) | hoot megadrive generic_z80 · iyinc: `Audio/HootMegaDrive.cs` (Z80 사운드 쪽 · 카트리지의 Z80 드라이버를 RAM에, 요청 주소) |
 | 2.0.5 | 8-7 (X68000) | MC68000 `Audio/Cpu/M68000.cs` + hoot x68k generic: `Audio/HootX68k.cs` (OPM · ADPCM · DMA · MFP, E00010h = hoot가 대신 하는 IOCS · DOS) |
 | 2.0.6 | 8-7 (X68000 MIDI) | x68k MIDI 판: YM3802 MIDI 보드 (EAFA00h) → 살아 있는 MIDI 곡 (`HootX68k.LoadMidi`) |
+| 2.1.55 | 8-9j (코나미 Z80 + YM2203) | hoot konami ironhors (Iron Horse · Scooter Shooter): `Audio/HootKonamiIronHorse.cs` |
 | 2.1.54 | 8-9a 더함 (코나미 frogger) | hoot konami frogger (Frogger · Hustler): `HootKonamiAy` frogger 배치 (AY 하나, I/O bit6 자료 · bit7 주소, RAM 4000h, 사운드 ROM 앞 800h bit0 · 1 되돌림, 타이머 bit3 · 5 바꿈) |
 | 2.1.53 | 8-9e 더함 (코나미 lethal) | hoot konami lethal (Lethal Enforcers · G.I. Joe): `HootKonami54539` lethal 배치 (ROM ~EFFFh, RAM F000h, K054539 F800h, K054321 FC00h, YM2151 없음) |
 | 2.1.52 | 8-9i 더함 (코나미 Twin16) | uPD7759 마스터 모드 (칩이 ROM 머리 표에서 직접, VGM 8Ch bit31 · ROM 블록 92h · 뱅크 레지스터 3) + hoot konami twin16 (Devil World · Vulcan Venture · Final Round · Cue Brick · M.I.A.): `HootKonamiK007232` 배치 |
@@ -122,6 +123,7 @@
 | 남코 System 2 (system2) | 25 / 26항목, 827 / 870곡 (C140 키온 498곡) — 무음 43 = Four Trax 27 (옵션 foutrax) · Final Lap 9 · Rolling Thunder 2 4 · 그 밖 3 | `--test hootns2` (HOOT_SONGS=1, HOOT_DEBUG=1 = C140 레지스터 분포) |
 | 타이토 SJ (taitosj) | 12 / 12, 285곡 모두 | `--test hootsj` (HOOT_SONGS=1) |
 | 코나미 Z80 + AY (scramble · timeplt · pooyan · frogger) | 15 / 15, 139 / 200 (pooyan 18 / 18, frogger 34 / 40) — 무음 41 = 한 곡을 채널마다 나눈 ch2 · ch3 파트와 일부 BGM (혼자 보내면 AY 쓰기 없음) | `--test hootkonay` (HOOT_SONGS=1) |
+| 코나미 Z80 + YM2203 (ironhors) | 2 / 2, 40곡 모두 | `--test hootih` (HOOT_SONGS=1) |
 | 아이렘 M62 / M52 (m62) | 15 / 15, 137 / 145 (남은 8 = Traverse USA 효과음 — MSM #2로 보임) | `--test hootm62` (HOOT_SONGS=1) |
 | 남코 Pac-Land 계열 (wsg63701) | 6 / 6, 157곡 모두 | `--test hootns86` (HOOT_SONGS=1, HOOT_DEBUG=1 = 슬롯 · 요청 바이트) |
 | 남코 System 86 (system86) | 5 / 5, 71곡 모두 (63701X 음성은 없음) | `--test hootns86` (6801 합성 둘 포함, HOOT_SONGS=1) |
@@ -433,6 +435,8 @@
   - Block Hole은 E00Ch에 쓰지만 MAME에도 K007232가 없음 → YM2151만
   - v2.1.52 twin16 (MAME twin16): scontra 배치 + RAM ~8FFFh, 9000h bit1 = uPD7759 /RESET, D000h = 번호, E000h bit0 = START, F000h 읽기 = 쉬는 중 (1). uPD7759 마스터 모드 (MAME): 시작 때 번호 = 데이터 포트, ROM[0] = 마지막 번호, ROM[5 + 2n] · [6 + 2n] = 주소 (× 512 · × 2), 빈 바이트 뒤 블록, C0h 되풀이 = 자리로 돌아감. 음악은 uPD를 안 씀 (목소리 효과음)
   - v2.1.51 배치 표 (`Layouts`): salamander (MAME nemesis salamand — RAM 8000h~8FFFh, E000h 읽기 = VLM5030 바쁨 → 0을 돌려줘야 부팅 · D000h · F000h VLM 빼고, 뱅크 없음; K007232는 효과음 채널 8 · 9만 — 음악은 FM만), hcastle (9800h SCC 3.58 / 2MHz → VGM D2h, A000h YM3812 — 타이머 IRQ = NMI, C000h 뱅크, D000h 명령), crimfght · aliens (A000h YM2151, C000h 명령, E000h K007232, 음량 아래 니블 = 채널 0, 뱅크 = YM2151 1Bh CT 핀 bit7 · bit6)
+- **8-9j. 코나미 Z80 + YM2203 — ✅ v2.1.55 (2 / 2, 40곡)** — `Audio/HootKonamiIronHorse.cs`
+  - MAME ironhors · scotrsht: Z80 3.072MHz, ROM ~3FFFh, RAM 4000h, 8000h 명령 (IRQ hold), I/O 00h · 01h YM2203 3.072MHz. 박자 = 본 고리가 YM2203 상태 bit1 (타이머 B)을 폴링
 - 다음: 타이토 F3 (ES5505 + MC68681, 36항목), 아이렘 M92 (V35 + GA20), 코나미 K007232 보드 (매피 계열, 6809 + 남코 WSG 15xx) · system86 (HD63701)
 - 그 다음 (8-8v): Z80 + YM2151 + OKIM6295 작은 보드 (tecmo16 · raizing mahou · bgaregga · banpresto dbz · dooyong …) — MAME 배치를 하나씩 확인해 `HootOpmBoard.Layout`에, atari system1 (6502), 그 뒤 새 칩
   - 남은 것 (8-8a): "소리 남" 기준이 처음 6초에 키온 하나라 몇 항목은 ADPCM 하나뿐 (driftout · liquidk · megablst 등 첫 곡이 짧은 효과음일 수 있음) — 귀로 확인, bshark (code0 · code1 둘), taito z 계열 다른 보드

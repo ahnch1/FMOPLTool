@@ -69,7 +69,7 @@ public static class HootArchive
                 || t == "system2"                                                                          // 6809 + YM2151 + C140 (HootNamcoSys2)
                 || t == "system86" || t == "wsg63701";                                                     // HD63701 MCU + (YM2151) + CUS30 (HootNamcoSys86)
             case "konami": return t == "scramble" || t == "timeplt" || t == "pooyan" || t == "frogger"                     // Z80 + AY-3-8910 × 2 (HootKonamiAy)
-                || t == "scontra" || t == "thundercross" || t == "salamander" || t == "hcastle" || t == "crimfght" || t == "twin16" || t == "lethal"                                                // Z80 + YM2151 + K007232 (HootKonamiK007232)
+                || t == "scontra" || t == "thundercross" || t == "salamander" || t == "hcastle" || t == "crimfght" || t == "twin16" || t == "lethal" || t == "ironhors"                                                // Z80 + YM2151 + K007232 (HootKonamiK007232)
                 || t == "053260"                                                                           // Z80 + YM2151 + K053260 (HootKonami53260)
                 || t == "054539" || t == "054539x2"                                                        // Z80 + (YM2151) + K054539 × 1~2 (HootKonami54539)
                 || t == "systemgx";                                                                        // 68000 + K054539 × 2 (HootKonamiGx)

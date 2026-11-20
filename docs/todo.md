@@ -106,6 +106,7 @@
 - [x] 코나미 twin16 5 · 82곡 — v2.1.52 uPD7759 마스터 모드 + 같은 보드, 모두
 - [x] 코나미 lethal 2 · 51곡 — v2.1.53 `HootKonami54539` lethal 배치, 모두
 - [x] 코나미 frogger 2 · 40곡 — v2.1.54 `HootKonamiAy` frogger 배치, 34곡 (무음 = 채널 파트)
+- [x] 코나미 ironhors 2 · 40곡 — v2.1.55 `HootKonamiIronHorse`, 모두
 - [ ] 코나미 gx400 5 (VLM5030 · K005289)
 - [ ] 세가 model2 4 · system_multi 4 (315-5560 = MultiPCM)
 - [ ] 코나미 hornet 8 · gticlub 4 — RF5C400 (CPU 68000)

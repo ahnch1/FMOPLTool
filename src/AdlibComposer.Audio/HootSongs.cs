@@ -140,6 +140,12 @@ public static class HootSongs
             v = HootGaiden.Render(e, dir, code);
             what = "Ninja Gaiden 사운드 보드 · 명령 0x" + code.ToString("X2");
         }
+        else if (HootKonamiIronHorse.Handles(driver, e.Type))
+        {
+            // hoot 코나미 ironhors: 사운드 CPU (Z80 + YM2203)에서 ROM을 돌려 미리 렌더
+            v = HootKonamiIronHorse.Render(e, dir, code);
+            what = "Konami Z80 + YM2203 사운드 보드 · 명령 0x" + code.ToString("X2");
+        }
         else if (HootKonamiK007232.Handles(driver, e.Type))
         {
             // hoot 코나미 scontra · thundercross: 사운드 CPU (Z80 + YM2151 + K007232)에서 ROM을 돌려 미리 렌더

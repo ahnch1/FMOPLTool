@@ -61,7 +61,7 @@ public static class HootArchive
                 || t == "masterw" || t == "viofight"   // 타이토 B: Z80 + YM2203 (+ OKIM6295) + TC0140SYT (HootTaitoOpm)
                 || t == "bubblebobble"                 // Z80 + YM2203 + YM3526 (HootTaitoBubble)
                 || t == "taitosj"; // Z80 + AY × 3 + DAC (HootTaitoSj)
-            case "seibu": return t == "raiden";                                                          // Z80 + YM3812 + OKIM6295 (HootSeibu)
+            case "seibu": return t == "raiden" || t == "raiden2";                                                          // Z80 + YM3812 + OKIM6295 (HootSeibu)
             case "upl": return t == "robokid";                                                           // Z80 + YM2203 × 2 (HootUpl, VGM 듀얼 YM2203)
             case "alpha": return t == "68k2";                                                             // Z80 + YM2203 + YM2413 + DAC (HootAlpha68k)
             case "nichibutsu": return t == "terracre" || t == "terraf";                                  // Z80 + YM3526/YM3812 + DAC (HootNichibutsu)

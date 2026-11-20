@@ -9,11 +9,11 @@ namespace AdlibComposer.SelfTest;
 /// <summary>hoot 세이부 사운드 시스템 (HootSeibu, type raiden): 실제 zip, 진단 (HOOT_SONGS = 곡마다).</summary>
 public static class HootSeibuTests
 {
-    public static readonly string[] Archives = { "raiden", "totmejan", "heatbrl", "cupsoc" };
+    public static readonly string[] Archives = { "raiden", "totmejan", "heatbrl", "cupsoc", "raidndx", "raiden2" };
 
     public static void Run(Action<string, bool, string> check)
     {
-        check("hoot seibu raiden: playable, own board", HootArchive.Playable("seibu", "raiden") && HootSeibu.Handles("Seibu", "Raiden") && !HootSeibu.Handles("seibu", "raiden2"), "");
+        check("hoot seibu raiden: playable, own board", HootArchive.Playable("seibu", "raiden") && HootSeibu.Handles("Seibu", "Raiden") && HootArchive.Playable("seibu", "raiden2") && !HootSeibu.Handles("seibu", "sengoku"), "");
 
 
         string root = SopTests.FindDir("_incoming");
@@ -44,8 +44,8 @@ public static class HootSeibuTests
         var m = HootSeibu.Boot(e, name => { string f = HootArchive.FindFile(dir, name); return f != null ? File.ReadAllBytes(f) : null; });
         m.Play(code);
         m.RunSeconds(seconds);
-        int keyOn = m.Log.Count(x => x.t > 0 && x.chip == 0 && ((x.reg >= 0xB0 && x.reg <= 0xB8 && (x.val & 0x20) != 0) || (x.reg == 0xBD && (x.val & 0x1F) != 0)));
-        int oki = m.Log.Count(x => x.t > 0 && x.chip == 1 && (x.val & 0x80) != 0);
+        int keyOn = m.Log.Count(x => x.t > 0 && x.chip == 0 && m.Opm && x.reg == 0x08 && (x.val & 0x78) != 0) + m.Log.Count(x => x.t > 0 && x.chip == 0 && !m.Opm && ((x.reg >= 0xB0 && x.reg <= 0xB8 && (x.val & 0x20) != 0) || (x.reg == 0xBD && (x.val & 0x1F) != 0)));
+        int oki = m.Log.Count(x => x.t > 0 && (x.chip == 1 || x.chip == 2) && (x.val & 0x80) != 0);
         string note = "opl " + keyOn + " oki " + oki + ", writes " + m.Log.Count + ", rst10 " + m.Irqs10 + " rst18 " + m.Irqs18 + " latch " + m.LatchReads + ", PC " + m.Cpu.PC.ToString("X4")
             + (m.OtherWrites.Count > 0 ? ", other " + string.Join(" ", m.OtherWrites.OrderByDescending(x => x.Value).Take(5).Select(x => x.Key.ToString("X4") + ":" + x.Value)) : "")
             + (m.OtherReads.Count > 0 ? ", reads " + string.Join(" ", m.OtherReads.OrderByDescending(x => x.Value).Take(5).Select(x => x.Key.ToString("X4") + ":" + x.Value)) : "")

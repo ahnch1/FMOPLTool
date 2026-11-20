@@ -31,6 +31,7 @@
 | 2.0.4 | 8-6 (메가드라이브) | hoot megadrive generic_z80 · iyinc: `Audio/HootMegaDrive.cs` (Z80 사운드 쪽 · 카트리지의 Z80 드라이버를 RAM에, 요청 주소) |
 | 2.0.5 | 8-7 (X68000) | MC68000 `Audio/Cpu/M68000.cs` + hoot x68k generic: `Audio/HootX68k.cs` (OPM · ADPCM · DMA · MFP, E00010h = hoot가 대신 하는 IOCS · DOS) |
 | 2.0.6 | 8-7 (X68000 MIDI) | x68k MIDI 판: YM3802 MIDI 보드 (EAFA00h) → 살아 있는 MIDI 곡 (`HootX68k.LoadMidi`) |
+| 2.1.17 | 8-8j (타이토 YM2151 · fullt) | hoot taito fullt (Rastan · Top Speed · Asuka · Cadash · Exzisus · Visco 3): `Audio/HootTaitoOpm.cs` (Z80 + YM2151 + TC0140SYT + MSM5205 → VGM OKIM6258) |
 | 2.1.16 | 8-6 더함 (메가드라이브 1c00 · koei) | hoot megadrive 1c00 (세가 SMPS Z80) · koei (드라이버 · 우편함 · 곡 표를 카트리지에서 찾음): `Audio/HootMegaDrive.cs`, 진단 `--hootkoeitrace` (MD 버스 68000 부팅) |
 | 2.1.15 | 8-8i (CPS-1 QSound · ZN) | hoot capcom cps1qs · zn: `Audio/HootCps2.cs` (Kabuki 풀기 · 래치 + NMI), Z80 `OpcodeRead` (명령 바이트 따로 읽기) |
 | 2.1.14 | — (도구) | hoot 목록의 없는 zip 목록 · 폴더 구성 CSV: `Formats/HootMissing.cs` (트리 오른쪽 클릭, `--hootmissing`) |
@@ -68,6 +69,7 @@
 | X1 (psg · opm) | 143 / 152 — opm 65/71 · psg 78/81 | `--hootx1survey x1 1000 8` |
 | 네오지오 | 137 / 146 (음악일 만한 코드 10h 이상 3곡까지) | `--hootneosurvey roms 200 6` |
 | 타이토 YM2610 보드 (f2 · b · dual68 · x · fx1a · sonicb) | 67 / 67 (첫 곡이 조용하면 다음 곡 3개까지) | `--hoottaitosurvey roms 200 6` |
+| 타이토 YM2151 보드 (fullt) | 9 / 9, 147곡 모두 (FM 키온 또는 MSM 바이트) | `--test hoottaitoopm` (HOOT_SONGS=1 = 곡마다, HOOT_REGS · HOOT_PC · HOOT_PCQ · HOOT_RAM · HOOT_MSMLOG) |
 | CPS-1 · Double Dragon 2 · 3 (YM2151 + OKIM6295) | 39 / 39 (FM 키온 16개 또는 OKI 2번 이상, 처음 6곡까지) | `--hootopmsurvey roms 200 6` |
 | 세가 System 1 · 아이렘 M72 계열 | 52 / 52 — system1 29/29 · m72 23/23 | `--hootarcadesurvey roms 200 6` (HOOT_ONLY=zip이름,…) |
 | 데이터 이스트 HuC6280 보드 | 41 / 43 — 빠진 2: wizdfire (zip에 사운드 ROM 없음), hangzo (시제품, 곡 목록이 틀뿐) | `--hootdecosurvey roms 300 6` |
@@ -226,7 +228,15 @@
   - ZN (ZN-1 · ZN-2, sfex · sfex2 · sfex2p · starglad · plsmaswd · rvschool · strider2 · techromn · tgmj · ts2): Z80 ROM 암호 없음, C000h~CFFFh = 그냥 RAM. 명령 = 포트 00h 래치 + NMI, 바이트 하나에 NMI 하나 — 드라이버가 둘씩 묶는다 (sfex: F100h + F015h에 쌓고 F017h로 셈). 곡 코드 16비트 (tgmj 0x409, techromn 0x8020)를 **위 바이트 먼저** (거꾸로면 16비트 코드 게임 4개 무음) · 1ms 사이
   - 곡마다 확인 (`HOOT_SONGS=5`): 곡 코드마다 쓰기 수가 다름 = 정말 곡을 고름. "Credit" 코드는 짧은 효과음 (키온 80~90), tgmj 0xFF04 · 0xFF05 (모노 · 스테레오 전환)는 소리 없는 명령
   - Z80 ROM이 없어 못 하는 ZN: 타이토 ZN (Ray Storm · G Darius · Fighters' Impact = ZSG2, archive 없음)
-- 다음 (8-8j): Z80 + YM2151 + OKIM6295 작은 보드 (tecmo16 · raizing mahou · bgaregga · banpresto dbz · dooyong …) — MAME 배치를 하나씩 확인해 `HootOpmBoard.Layout`에, atari system1 (6502), 그 뒤 새 칩
+- **8-8j. 타이토 YM2151 보드 (fullt) — ✅ v2.1.17 (9 / 9, 147곡 모두)** — `Audio/HootTaitoOpm.cs`
+  - 배치 (MAME rastan · taito_asuka · topspeed · exzisus): Z80 4MHz, ROM 0000h~3FFFh + 뱅크 4000h~7FFFh (YM2151 1Bh의 CT1 · CT2 = bit6~7 → ROM n × 4000h, 32KB ROM은 뱅크 없음), RAM 8000h~8FFFh, YM2151 9000h · 9001h (타이머 = IRQ), TC0140SYT (PC060HA) A000h 모드 · A001h 통신 — 니블 · NMI는 `HootTaito`와 같음
+  - YM2610 드라이버처럼 처음엔 소리 꺼짐 — 명령 EFh = 소리 켬 (Rastan 0368h: EEh → 8F26h = 0, EFh → 1, 곡 시작 02FEh가 8F26h = 0이면 그냥 돌아감). 처리 코드 `FE EF C0 3E`가 있으면 부팅 뒤 EFh (9개 모두)
+  - 드라이버가 주 루프에서 1Bh (뱅크)를 쉴 새 없이 씀 (8초에 약 6만 번) → VGM에는 LFO 파형 (bit0~1)이 바뀔 때만
+  - MSM5205 (384kHz ÷ 48 = 8kHz): 하드웨어가 VCK마다 ADPCM ROM에서 위 니블 먼저 넣음. VGM에 MSM5205가 없어 같은 4비트 OKI ADPCM인 OKIM6258 (4.096MHz ÷ 512 = 8kHz, 12비트)에 바이트마다 0xB7 쓰기 (니블 바꿔서), 시작 = 명령 2 · 멈춤 = 1
+  - Rastan · Asuka 배치: B000h = 주소 위 바이트, C000h = 시작, D000h = 멈춤. 곡에서는 안 씀 (Rastan · Asuka · Mofflott의 ADPCM은 효과음) → 음악은 FM만
+  - Top Speed: B000h~ = 칩 1 · C000h~ = 칩 2, 주소 bit10~11: B000h = 주소 위 바이트, B400h = 시작 (약 10ms 뒤), B800h = 멈춤 (쉴 때 틱마다 씀), D000h~D600h = 볼륨 (안 씀). 드럼 = 칩 1 (곡 04h~07h · 09h · 0Ah), 0x09 Accel #1은 MSM만. pcm 둘째 ROM (10000h) = 칩 2, VGM OKIM6258은 하나라 칩 2는 칩 1이 쉴 때만
+  - hoot 옵션 opm_mix · pcm_mix (음량 비)는 안 씀. 소리는 귀로 아직 확인 안 함
+- 다음 (8-8k): Z80 + YM2151 + OKIM6295 작은 보드 (tecmo16 · raizing mahou · bgaregga · banpresto dbz · dooyong …) — MAME 배치를 하나씩 확인해 `HootOpmBoard.Layout`에, atari system1 (6502), 그 뒤 새 칩
   - 남은 것 (8-8a): "소리 남" 기준이 처음 6초에 키온 하나라 몇 항목은 ADPCM 하나뿐 (driftout · liquidk · megablst 등 첫 곡이 짧은 효과음일 수 있음) — 귀로 확인, bshark (code0 · code1 둘), taito z 계열 다른 보드
 
 ### 남은 문제 (단계와 따로)

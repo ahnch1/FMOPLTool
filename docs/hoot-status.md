@@ -31,6 +31,7 @@
 | 2.0.4 | 8-6 (메가드라이브) | hoot megadrive generic_z80 · iyinc: `Audio/HootMegaDrive.cs` (Z80 사운드 쪽 · 카트리지의 Z80 드라이버를 RAM에, 요청 주소) |
 | 2.0.5 | 8-7 (X68000) | MC68000 `Audio/Cpu/M68000.cs` + hoot x68k generic: `Audio/HootX68k.cs` (OPM · ADPCM · DMA · MFP, E00010h = hoot가 대신 하는 IOCS · DOS) |
 | 2.0.6 | 8-7 (X68000 MIDI) | x68k MIDI 판: YM3802 MIDI 보드 (EAFA00h) → 살아 있는 MIDI 곡 (`HootX68k.LoadMidi`) |
+| 2.2.0 | 판 올림 | 2.1.x 정리: 아케이드 보드 70여 가지 · 386 리얼 모드 · DOS 로더 · Game Blaster / Tandy · Hoot 페이지 화면 — docs/todo.md 현황 다시 잼 |
 | 2.1.76 | Hoot 페이지 화면 | 가사가 없으니 표시 방식 단추 · 가사 상자를 빼고 믹서 (Implay) | 작은 악보 (Ocplay)를 좌우로 (`JukeboxView` hootLayout) |
 | 2.1.75 | DOS 로더 | 64KB 넘는 EXE 그림을 선형 주소로 (오프셋 감김 → 그림 앞이 덮여 깨짐), 4B03h 오버레이 = 머리말 그림 크기만, device= 전략 · 인터럽트를 DS = 드라이버로 부름 · 명령 줄의 파일 이름 뒤 NUL (MS-DOS SYSINIT) → pc98dos 300 표본 235/303 → 271/303 (Present · FP2 · Mirror · Nut Berry · Kyrandia · Ultima IV · Rakuichi · Xak · SBP · Logical …), PC/AT 그대로 |
 | 2.1.74 | 386 · 86 PCM 포트 | x86 386 리얼 모드 (`Cpu/X86.386.cs`: 32비트 레지스터 · FS · GS · 66h · 67h · 0F 확장, pc9821dos에서 켬) → pc9821dos 12 / 12. 86 보드 PCM 포트 A466h~A46Ch (IRQ 깃발 0, 소리 없음) → pc98dos 300 표본 86 8→10 · opna 26→28 |

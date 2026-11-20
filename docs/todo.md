@@ -1,4 +1,4 @@
-# FMOPLTool 할 일 (2026-11-20, v2.1.28 기준)
+# FMOPLTool 할 일 (2026-11-21, v2.2.0 기준)
 
 - 이 파일 = **해야 할 일**과 **남겨 둔 일**(보류)을 체크박스로. 끝난 일의 자세한 내용 · 진단 명령 · 원인 분석은 [`hoot-status.md`](hoot-status.md), 사용법 · 구조는 [`../README.md`](../README.md).
 - 옛 할 일 기록(v1.x ~ v2.0 진행 일지)은 `_incoming/Todo.md`(git에 안 들어감)에 그대로 둔다.
@@ -25,11 +25,13 @@
 
 | 기종 | 형식 (zip 있는 항목) | 곡 | 방식 · 클래스 | 소리 남 (조사) |
 |---|---|---:|---|---|
-| PC-98 DOS | opn 1416 · opna 230 · 86 92 · beep 80 | 65,005 | x86 + MS-DOS + PC-98 기계 (`HootPc98`) | 300 zip 표본 226 / 301 |
+| PC-98 DOS | opn 1416 · opna 230 · 86 92 · beep 80 | 65,005 | x86 + MS-DOS + PC-98 기계 (`HootPc98`, v2.1.75 DOS 로더 고침) | 300 zip 표본 271 / 303 (v2.1.75, 처음 226 / 301) |
+| PC-9821 DOS | pc9821dos opn 6 · opna 3 · 86 3 | 약 200 | 같은 기계 + 386 리얼 모드 (`Cpu/X86.386.cs`) · 86 PCM 포트 (v2.1.73~74) | 12 / 12 |
 | PC-98 DOS MIDI 판 | beep 444 · opn 237 · 86 5 | 17,778 | MPU-PC98 → 살아 있는 MIDI | 360 / 641 |
 | PC-98 (DOS 없음) | pc98vx opn 198 · beep 40 · opna 25 · 86 9, pc98 opn 81 · beep 4 · opna 2 | 12,054 | `BootGeneric` | 314 / 354 |
 | pc98vx MIDI 판 | opn 93 · beep 12 | 3,143 | MPU-PC98 | 97 / 109 |
-| PC/AT DOS | adlib 412 · sb16 71 · beep 5 | 6,453 | `PcAtMachine` | 482 / 488 |
+| PC/AT DOS | adlib 412 · sb16 71 · beep 5 | 6,453 | `PcAtMachine` | adlib 410 / 419 · sb16 67 / 71 (v2.2.0 다시 잼) |
+| PC/AT Game Blaster · Tandy | gameblaster 8 · tandy 4 | 약 250 | `PcAtMachine` + `Saa1099Pair` · SN76489 (v2.1.72) | 12 / 12 |
 | PC/AT MIDI 판 | beep 579 · adlib 7 | 8,180 | MPU-401 | 571 / 586 |
 | MSX | generic 498 · kss 230 | 13,334 | MSX 기계 (`HootMsx`) · KSS | 481 / 498 (KSS 71항목은 zip에 .kss 없음) |
 | PC-88 | opn 389 · opna 142 | 13,623 | `HootPc88` | 487 / 527 |
@@ -51,6 +53,7 @@
 | 세가 System 16 | system16b 28 · system16a 10 | 약 1,000 | `HootSegaSystem16` + uPD7759 (v2.1.11) | 37 / 38 |
 | 캡콤 CPS-2 | cps2 38 | 약 2,700 | `HootCps2` + QSound HLE (v2.1.12) | 38 / 38 |
 | 캡콤 CPS-1 QSound · ZN | zn 10 · cps1qs 4 | 1,038 | `HootCps2` + Kabuki 풀기 · 래치 NMI (v2.1.15) | 14 / 14 |
+| 남코 갤러그 계열 | wsgz80 4 | 71 | `HootNamcoWsgZ80` (Z80 + WSG → 15XX, v2.1.71) | 4 / 4 (71곡 모두) |
 | 세가 PCM 보드 | toutrun 7 · gforce 4 · aburner 3 · shangon 2 · eropnx2 2 · pdrift · outrun · hangon · sharrier · spmonaco · bootleg outrun | 약 600 | `HootSegaPcmBoard` + SegaPCM (v2.1.13) | 20 / 24 |
 
 ---
@@ -173,6 +176,7 @@
 - [ ] `SelfTest --hootcensus <hoot 폴더>`: 이 파일 1 · 3장 숫자를 다시 만드는 진단 (지금은 스크래치 파이썬)
 - [ ] 트리: 장비 이름 정리 (PC-98 / PC-9801 / PC-9821, Genesis / Mega Drive …), 제작사 표시 이름, zip은 있지만 .kss가 없는 KSS 71항목 미리 빨강
 - [ ] 트리: 기계 흉내 항목의 무음 · 확인 안 됨 표시 (조사 결과를 색으로)
+- [x] Hoot 페이지 화면: 가사가 없으니 표시 방식 단추 · 가사 상자를 빼고 믹서 (Implay) | 작은 악보 (Ocplay) 좌우 (v2.1.76)
 - [ ] 칩 곡 불러오기를 UI 스레드 밖으로 (NSF 0.4~0.8초 · HES 1.5초 · 기계 흉내 곡 렌더 동안 멈춤)
 - [ ] 곡 길이 자동 (KSS · NSF · HES는 m3u 없으면 2분): 무음 · 되풀이 감지
 - [ ] 칩 음량 맞추기 (N163 · FDS · 아케이드 칩 사이 비율)

@@ -142,7 +142,7 @@ public static class HootSongs
         }
         else if (HootAtariSys1.Handles(driver, e.Type))
         {
-            // hoot 아타리 System 1: 사운드 보드 (6502 + YM2151)에서 사운드 ROM을 돌려 미리 렌더 (POKEY · TMS5220 없음)
+            // hoot 아타리 System 1: 사운드 보드 (6502 + YM2151 + POKEY)에서 사운드 ROM을 돌려 미리 렌더 (TMS5220 음성 없음)
             v = HootAtariSys1.Render(e, dir, code);
             what = "Atari System 1 사운드 보드 · 명령 0x" + code.ToString("X2");
         }

@@ -10,13 +10,13 @@ namespace AdlibComposer.Audio;
 /// <summary>
 /// hoot 아타리 System 1 (driver atari, type system1: Marble Madness · Peter Pack-Rat · Indiana Jones and the Temple of Doom · Road Runner · Road Blasters): 사운드 보드를 흉내 내고 6502 사운드 ROM을 돌린다.
 /// <para>기계 (MAME atarisy1 sound_map, ROM 스캔으로 확인): 6502 1.79MHz (14.318MHz ÷ 8), 0000h~0FFFh = RAM, 1000h~100Fh = VIA 6522 (TMS5220 음성 — 없음),
-/// 1800h · 1801h = YM2151 (3.58MHz, 타이머 = IRQ), 1810h 읽기 = 명령 · 쓰기 = 응답, 1820h = 스위치 (bit3 = 명령 있음, bit7 = 자가 시험 끔), 1824h~1827h = LED, 1870h~187Fh = POKEY (없음 — 쓰기는 셈만), 4000h~FFFFh = ROM.
+/// 1800h · 1801h = YM2151 (3.58MHz, 타이머 = IRQ), 1810h 읽기 = 명령 · 쓰기 = 응답, 1820h = 스위치 (bit3 = 명령 있음, bit7 = 자가 시험 끔), 1824h~1827h = LED, 1870h~187Fh = POKEY (1.79MHz), 4000h~FFFFh = ROM.
 /// 명령은 메인 CPU가 쓰면 NMI (atari_sound_comm).</para>
-/// <para>곡: rom code = 6502 ROM (offset = 주소), 부팅 1초 뒤 곡 코드를 명령으로, 180초를 YM2151 VGM으로.</para>
+/// <para>곡: rom code = 6502 ROM (offset = 주소), 부팅 1초 뒤 곡 코드를 명령으로, 180초를 YM2151 + POKEY VGM으로 (TMS5220 음성은 없음).</para>
 /// </summary>
 public static class HootAtariSys1
 {
-    public const double CpuClock = 14318181 / 8.0, OpmClock = 14318181 / 4.0;
+    public const double CpuClock = 14318181 / 8.0, OpmClock = 14318181 / 4.0, PokeyClock = CpuClock;
     public const double DefaultSeconds = 180, DefaultFade = 4;
 
     public static bool Handles(string driver, string type)
@@ -62,13 +62,13 @@ public static class HootAtariSys1
         public readonly Cpu6502 Cpu;
         public readonly List<string> Missing = new List<string>();
         public readonly HashSet<string> Unsupported = new HashSet<string>();
-        /// <summary>칩 쓰기: chip 0 = YM2151.</summary>
+        /// <summary>칩 쓰기: chip 0 = YM2151, 1 = POKEY.</summary>
         public readonly List<(double t, int chip, int reg, int val)> Log = new List<(double, int, int, int)>();
         public int Nmis, Irqs, LatchReads, PokeyWrites, ViaWrites;
         /// <summary>진단: 알 수 없는 자리 쓰기 · 읽기.</summary>
         public readonly Dictionary<int, int> OtherWrites = new Dictionary<int, int>(), OtherReads = new Dictionary<int, int>();
 
-        private int latch, opmAddr;
+        private int latch, opmAddr, rnd = 0x1FFFF;
         private bool pending;
         private long playStart = -1;
         // YM2151 타이머: A = 64 × (1024 − TA) / 클럭, B = 1024 × (256 − TB) / 클럭
@@ -131,6 +131,8 @@ public static class HootAtariSys1
                 case 0x1820: return (byte)(0x87 | (pending ? 0x08 : 0));   // 동전 없음 (낮음 = 눌림), bit3 = 명령 있음, bit4 = 응답 안 읽힘 (늘 읽힘), bit7 = 자가 시험 끔 (0이면 부팅이 RAM 시험 · 대기로 1초 넘게 걸려 첫 명령을 놓침 — Indiana Jones)
             }
             if (a >= 0x1000 && a < 0x1010) return 0;   // VIA (TMS5220) — 없음
+            if (a == 0x187A) { rnd = (rnd >> 1) ^ (-(rnd & 1) & 0x12000); return (byte)rnd; }   // POKEY RANDOM (poly17 위 8비트를 흉내)
+            if (a >= 0x1870 && a < 0x1880) return 0xFF;
             OtherReads.TryGetValue(a, out int c); OtherReads[a] = c + 1;
             return 0;
         }
@@ -148,7 +150,7 @@ public static class HootAtariSys1
                 case 0x1824: case 0x1825: case 0x1826: case 0x1827: return;   // LED
             }
             if (a >= 0x1000 && a < 0x1010) { ViaWrites++; return; }
-            if (a >= 0x1870 && a < 0x1880) { PokeyWrites++; return; }
+            if (a >= 0x1870 && a < 0x1880) { PokeyWrites++; PokeyWrite(a & 15, v); return; }
             OtherWrites.TryGetValue(a, out int c); OtherWrites[a] = c + 1;
         }
 
@@ -174,13 +176,20 @@ public static class HootAtariSys1
             Emit(0, reg, v);
         }
 
-        private readonly int[] last = Enumerable.Repeat(-1, 0x100).ToArray();
+        private readonly int[] last = Enumerable.Repeat(-1, 0x200).ToArray();
+
+        /// <summary>POKEY: 쓰기 레지스터 0~8 (소리) · 9 (STIMER) · Fh (SKCTL)만 VGM에, 나머지 (시리얼 · 키보드 · 팟)는 버림.</summary>
+        private void PokeyWrite(int reg, int v)
+        {
+            if (reg <= 9 || reg == 0x0F) Emit(1, reg, v);
+        }
 
         private void Emit(int chip, int reg, int val)
         {
-            // 같은 값 다시 쓰기는 버린다 (타이머 14h를 IRQ마다 써서 VGM이 부푼다) — 키온 08h · LFO 리셋 01h는 다시 쓰기도 뜻이 있어 둔다
-            if (reg != 0x08 && reg != 0x01 && last[reg] == val) return;
-            last[reg] = val;
+            // 같은 값 다시 쓰기는 버린다 (타이머 14h를 IRQ마다 써서 VGM이 부푼다) — 키온 08h · LFO 리셋 01h · POKEY STIMER 9는 다시 쓰기도 뜻이 있어 둔다
+            bool keep = chip == 0 ? reg == 0x08 || reg == 0x01 : reg == 0x09;
+            if (!keep && last[chip << 8 | reg] == val) return;
+            last[chip << 8 | reg] = val;
             if (playStart < 0) playStart = Cpu.Cycles;
             Log.Add((Math.Max(0, (Cpu.Cycles - playStart) * VgmSong.Rate / CpuClock), chip, reg, val));
         }
@@ -189,19 +198,20 @@ public static class HootAtariSys1
         {
             var w = new VgmWriter { System = "Atari System 1 (hoot)", Notes = "hoot atari system1" };
             w.SetClock(VgmWriter.ClockYm2151, OpmClock);
+            bool pokey = Log.Any(x => x.chip == 1);
+            if (pokey) w.SetClock(VgmWriter.ClockPokey, PokeyClock);
             double total = seconds * VgmSong.Rate;
             long at = 0;
             foreach (var x in Log.OrderBy(x => x.t))
             {
                 long ts = (long)Math.Min(total, Math.Max(0, x.t));
                 if (ts > at) { w.Wait(ts - at); at = ts; }
-                w.Write(0x54, x.reg, x.val);
+                w.Write(x.chip == 0 ? (byte)0x54 : (byte)0xBB, x.reg, x.val);
             }
             if ((long)total > at) w.Wait((long)total - at);
             var v = VgmFormat.Read(w.ToArray());
             v.FadeSeconds = Math.Max(0, Math.Min(fade, seconds / 2));
             if (Log.Count == 0) v.UnsupportedChips.Add("(칩 쓰기 없음)");
-            if (PokeyWrites > 0) v.UnsupportedChips.Add("POKEY");
             return v;
         }
     }

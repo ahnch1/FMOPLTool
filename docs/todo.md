@@ -82,7 +82,7 @@
 - [ ] 세이부 raiden 4 (YM3812 + OKI, Z80 암호화일 수 있음) · raiden2 2
 - [ ] 세가 System 24 4 — 68000 + YM2151 (MC68000 있음)
 - [ ] 세가 SG-1000 7 — Z80 + SN76489
-- [x] 아타리 System 1 4 · 275곡 — v2.1.30: `HootAtariSys1` (6502 + YM2151, 1820h bit7 = 자가 시험 끔), 음악 모두 · 무음 145 = 효과음 · 음성 (POKEY · TMS5220 없음 → 4장), Road Blasters는 곡 목록 없음
+- [x] 아타리 System 1 4 · 275곡 — v2.1.30: `HootAtariSys1` (6502 + YM2151, 1820h bit7 = 자가 시험 끔), 179 / 275곡 (v2.1.31 POKEY), 무음 96 = TMS5220 음성 (4장), Road Blasters는 곡 목록 없음
 - [ ] 남코 wsgz80 4 — Z80 + 남코 WSG (칩 있음)
 - [ ] 타이토 taitosj 12 · 코나미 scramble 8 · timeplt 4 — Z80 + AY-3-8910 여러 개 (VGM 듀얼 AY 필요) + DAC
 - [ ] YM2151 + OKI 작은 보드: banpresto (dbz 2 · agallet 2 · ultraman · godzilla · sdgndmps · metmqstr) · raizing (mahou 2 · bgaregga · batrider — NMK112 뱅크) · dooyong superx · technosoft hyperduel · atlus wingforc · tatsumi apache3 · toaplan enmadaio · tp 3 — 각 1~3항목, 보드마다 사운드 ROM을 읽어 `HootOpmBoard.Layout`에 줄 더하기
@@ -119,7 +119,8 @@
 - [ ] MSX 무음 17 · PC-88 무음 40 · X1 무음 9 · 네오지오 무음 9 (암호화 V ROM · m1_decrypt) · 메가드라이브 무음 38 (generic_z80 요청 주소) · X68000 무음 54 (같이 쓰는 zmusic.x 판 차이) · X68000 MIDI 무음 25 — 원인 목록은 `hoot-status.md`
 - [ ] 아케이드 무음: deco wizdfire (zip에 사운드 ROM 없음) · hangzo, System 16 eswat (ROM 없음), 세가 PCM endurob2 × 2 · outrunb · smgp
 - [ ] 86 PCM · OPNA ADPCM RAM · fm_mix / ssg_mix · pcm_mix 옵션 반영 (지금 무시)
-- [ ] POKEY 칩 + VGM BBh (아타리 System 1 효과음 · 칩 시험 145곡, 다른 아타리 보드), TMS5220 음성
+- [x] POKEY 칩 + VGM BBh — v2.1.31 (아타리 System 1 효과음 · 칩 시험 49곡 더 소리)
+- [ ] TMS5220 음성 (아타리 System 1 96곡: Indy 92 · Road Runner 3, VIA 6522 뒤)
 - [ ] X68000 PCM8 (TRAP #2) 12항목, mxdrv 형식 3
 - [ ] M72 DAC 샘플 (북 · 목소리) — 포트 80h~84h · 주기 NMI · v0 ROM
 - [ ] uPD7759 마스터 모드 (자기 ROM) — VGM bit31

@@ -60,7 +60,7 @@ public static class HootArchive
             case "nichibutsu": return t == "terracre" || t == "terraf";                                  // Z80 + YM3526/YM3812 + DAC (HootNichibutsu)
             case "snk": return t == "3812";                                                               // SNK68: Z80 + YM3812 + uPD7759 (HootSnk68)
             case "toaplan": return t == "generic";                                                        // 토아플랜 1 · Twin Cobra: Z80 + YM3812 (HootToaplan)
-            case "atari": return t == "system1";                                                         // 6502 + YM2151 (HootAtariSys1, POKEY · TMS5220 없음)
+            case "atari": return t == "system1";                                                         // 6502 + YM2151 + POKEY (HootAtariSys1, TMS5220 없음)
             case "megadrive": return t == "generic_z80" || t == "iyinc" || t == "1c00" || t == "koei";
             case "x68k": return t == "generic";
             case "nes": return t == "nsf";

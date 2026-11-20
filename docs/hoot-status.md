@@ -31,6 +31,7 @@
 | 2.0.4 | 8-6 (메가드라이브) | hoot megadrive generic_z80 · iyinc: `Audio/HootMegaDrive.cs` (Z80 사운드 쪽 · 카트리지의 Z80 드라이버를 RAM에, 요청 주소) |
 | 2.0.5 | 8-7 (X68000) | MC68000 `Audio/Cpu/M68000.cs` + hoot x68k generic: `Audio/HootX68k.cs` (OPM · ADPCM · DMA · MFP, E00010h = hoot가 대신 하는 IOCS · DOS) |
 | 2.0.6 | 8-7 (X68000 MIDI) | x68k MIDI 판: YM3802 MIDI 보드 (EAFA00h) → 살아 있는 MIDI 곡 (`HootX68k.LoadMidi`) |
+| 2.1.30 | 8-8t (아타리 System 1) | hoot atari system1 (Marble Madness · Peter Pack-Rat · Indiana Jones · Road Runner): `Audio/HootAtariSys1.cs` (6502 + YM2151, POKEY · TMS5220 없음) |
 | 2.1.29 | 8-8s (캡콤 YM2203 × 2) | hoot capcom opn2 · rushcrsh · tigerroad (Ghosts'n Goblins · Gun.Smoke · Section Z · Legendary Wings · Trojan · 1943 · 1943 Kai · Avengers · Speed Rumbler · Tiger Road · F-1 Dream): `Audio/HootCapcomOpn.cs` (Z80 + YM2203 × 2) |
 | 2.1.28 | 8-8r (테크모 YM3812 + MSM5205) | hoot tecmo rygar · gemini (Rygar · Silk Worm · Gemini Wing · Back Fire): `Audio/HootTecmoAdpcm.cs` |
 | 2.1.27 | 8-8q (테크모 Ninja Gaiden) | hoot tecmo gaiden (Shadow Warriors · 龍剣伝 · Tecmo Knight · Raiga Strato Fighter): `Audio/HootGaiden.cs` (Z80 + YM2203 × 2 + OKIM6295) |
@@ -88,6 +89,7 @@
 | SNK68 (snk 3812) | 4 / 4, 146곡 모두 (키온 또는 uPD7759) | `--test hootsnk` (HOOT_SONGS=1, HOOT_SNKINIT=16진,… 부팅 명령 바꾸기, HOOT_SNKSCAN=곡 = 부팅 명령 00h~FFh 훑기, HOOT_PC · HOOT_PCQ=주소,…) |
 | 토아플랜 1 · Twin Cobra (generic) | 9 / 9, 125곡 모두 (키온) | `--test hoottoaplan` (HOOT_SONGS=1 = 곡마다, HOOT_PROBE=1 = I/O 포트 · 68000 쪽 RAM 후보) |
 | 타이토 YM2151 보드 (fullt) | 9 / 9, 147곡 모두 (FM 키온 또는 MSM 바이트) | `--test hoottaitoopm` (HOOT_SONGS=1 = 곡마다, HOOT_REGS · HOOT_PC · HOOT_PCQ · HOOT_RAM · HOOT_MSMLOG) |
+| 아타리 System 1 (system1) | 4 / 4 (Road Blasters는 곡 목록 없음), 음악은 모두 — 무음 145 / 275 = 효과음 · 음성 · 칩 시험 (POKEY · TMS5220 몫) | `--test hootatari1` (HOOT_SONGS=1, HOOT_DEBUG=1, HOOT_PCS=1 = PC 분포 · RAM 0200h~) |
 | 캡콤 YM2203 × 2 (opn2 · rushcrsh · tigerroad) | 12 / 12, 281 / 282곡 (남은 하나 = Gun.Smoke 정지 명령) | `--test hootcapopn` (HOOT_SONGS=1, HOOT_DEBUG=1 = 많이 쓴 레지스터) |
 | 테크모 YM3812 + MSM5205 (rygar · gemini) | 4 / 4, 122곡 모두 (MSM5205 23곡) | `--test hoottecmo` (HOOT_SONGS=1) |
 | 테크모 Ninja Gaiden (gaiden) | 4 / 4, 231 / 300 (곡은 모두 — 무음 = Strato Fighter 효과음 · 목소리 65, 龍剣伝 Round Clear 3 · 4, 코드 모름 1) | `--test hoottecmo` (HOOT_SONGS=1) |
@@ -311,7 +313,12 @@
   - rushcrsh (Speed Rumbler) = 래치 E000h, YM2203 8000h · A000h (4MHz), IRQ 240Hz. tigerroad (Tiger Road · F-1 Dream) = 같은 배치, Z80 · YM 3.579545MHz, IRQ = YM2203 #1 타이머. 샘플 CPU (MSM5205) 쪽 포트는 버림
   - 같은 값 다시 쓰기는 VGM에 안 넣음 (드라이버가 IRQ마다 SSG를 모두 다시 써 8초에 4만 5천 → 약 1천), 28h · 0Dh · 27h · A0h~AEh는 늘 넣음
   - 클럭 · IRQ 주기는 MAME 기억 — 귀로 템포 확인 필요
-- 다음 (8-8t): Z80 + YM2151 + OKIM6295 작은 보드 (tecmo16 · raizing mahou · bgaregga · banpresto dbz · dooyong …) — MAME 배치를 하나씩 확인해 `HootOpmBoard.Layout`에, atari system1 (6502), 그 뒤 새 칩
+- **8-8t. 아타리 System 1 — ✅ v2.1.30 (4 / 4)** — `Audio/HootAtariSys1.cs`
+  - 배치 (MAME atarisy1 sound_map, ROM 스캔으로 확인): 6502 1.79MHz (10진 모드 있음), RAM 0000h~0FFFh, VIA 1000h (TMS5220 — 없음, 읽기 0), YM2151 1800h (3.58MHz, 타이머 = IRQ), 1810h 명령 (메인이 쓰면 NMI) · 응답, 1820h 스위치, 1824h LED, POKEY 1870h (없음, 쓰기만 셈), ROM 4000h~
+  - 1820h: bit0~2 동전 (높음 = 안 눌림), bit3 = 명령 있음, bit4 = 응답 안 읽힘 (늘 0 — NMI 처리기가 이게 1이면 기다림), **bit7 = 자가 시험 끔** — 0이면 Indiana Jones가 RAM 시험 + 대기 루프로 부팅이 1초를 넘겨 첫 명령이 큐 대신 자료 받기 길 (0213h = 0)로 빠져 모두 무음
+  - YM2151 같은 값 다시 쓰기는 VGM에 안 넣음 (08h · 01h는 늘) — 8초에 3만 → 수백
+  - 남은 것: POKEY (효과음 · 칩 시험, 곡마다 초당 1천 번 넘게 씀) · TMS5220 (음성) — POKEY 칩 + VGM BBh가 생기면 이어 붙이기
+- 다음 (8-8u): Z80 + YM2151 + OKIM6295 작은 보드 (tecmo16 · raizing mahou · bgaregga · banpresto dbz · dooyong …) — MAME 배치를 하나씩 확인해 `HootOpmBoard.Layout`에, atari system1 (6502), 그 뒤 새 칩
   - 남은 것 (8-8a): "소리 남" 기준이 처음 6초에 키온 하나라 몇 항목은 ADPCM 하나뿐 (driftout · liquidk · megablst 등 첫 곡이 짧은 효과음일 수 있음) — 귀로 확인, bshark (code0 · code1 둘), taito z 계열 다른 보드
 
 ### 남은 문제 (단계와 따로)

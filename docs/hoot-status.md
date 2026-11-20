@@ -31,6 +31,7 @@
 | 2.0.4 | 8-6 (메가드라이브) | hoot megadrive generic_z80 · iyinc: `Audio/HootMegaDrive.cs` (Z80 사운드 쪽 · 카트리지의 Z80 드라이버를 RAM에, 요청 주소) |
 | 2.0.5 | 8-7 (X68000) | MC68000 `Audio/Cpu/M68000.cs` + hoot x68k generic: `Audio/HootX68k.cs` (OPM · ADPCM · DMA · MFP, E00010h = hoot가 대신 하는 IOCS · DOS) |
 | 2.0.6 | 8-7 (X68000 MIDI) | x68k MIDI 판: YM3802 MIDI 보드 (EAFA00h) → 살아 있는 MIDI 곡 (`HootX68k.LoadMidi`) |
+| 2.1.40 | 8-9b (타이토 SJ) | hoot taito taitosj (Elevator Action · Front Line · Alpine Ski · Time Tunnel · Wild Western · Bio Attack · Tinstar · Kick Start · Sea Fighter Poseidon …): `Audio/HootTaitoSj.cs` (Z80 + AY × 3 + DAC), VGM 셋째 AY (안 명령 D9h) |
 | 2.1.39 | 8-9a (코나미 Z80 + AY × 2) | hoot konami scramble · timeplt (Scramble · Super Cobra · Amidar · The End · Strategy X · Turtles · Super Fighter X · Time Pilot · Tutankham · Jungler): `Audio/HootKonamiAy.cs`, hoot 롬 이름이 다른 zip은 기판 위치 코드로 찾기 (`HootArchive.ByBoardLocation`) |
 | 2.1.38 | 8-8z (아이렘 M62 / M52) | hoot irem m62 (Kung-Fu Master · Lode Runner 1~4 · Spelunker 1 · 2 · Kid Niki · Battle Road · Lot Lot · Horizon · Youjyuden · Moon Patrol · Traverse USA · 10-Yard Fight): `Audio/HootIremM62.cs` (M6803 + AY × 2 + MSM5205), VGM 듀얼 AY |
 | 2.1.37 | 8-8y (남코 Pac-Land 계열) | hoot namco wsg63701 (Dragon Buster · Pac-Land · Baraduke · Metro-Cross · Sky Kid · Hopping Mappy): `HootNamcoSys86` 슬롯 요청, 6301 문서 밖 명령 12h · 13h |
@@ -98,6 +99,7 @@
 | SNK68 (snk 3812) | 4 / 4, 146곡 모두 (키온 또는 uPD7759) | `--test hootsnk` (HOOT_SONGS=1, HOOT_SNKINIT=16진,… 부팅 명령 바꾸기, HOOT_SNKSCAN=곡 = 부팅 명령 00h~FFh 훑기, HOOT_PC · HOOT_PCQ=주소,…) |
 | 토아플랜 1 · Twin Cobra (generic) | 9 / 9, 125곡 모두 (키온) | `--test hoottoaplan` (HOOT_SONGS=1 = 곡마다, HOOT_PROBE=1 = I/O 포트 · 68000 쪽 RAM 후보) |
 | 타이토 YM2151 보드 (fullt) | 9 / 9, 147곡 모두 (FM 키온 또는 MSM 바이트) | `--test hoottaitoopm` (HOOT_SONGS=1 = 곡마다, HOOT_REGS · HOOT_PC · HOOT_PCQ · HOOT_RAM · HOOT_MSMLOG) |
+| 타이토 SJ (taitosj) | 12 / 12, 285곡 모두 | `--test hootsj` (HOOT_SONGS=1) |
 | 코나미 Z80 + AY × 2 (scramble · timeplt) | 10 / 10, 75 / 116 — 무음 41 = 한 곡을 채널마다 나눈 ch2 · ch3 파트와 일부 BGM (혼자 보내면 AY 쓰기 없음) | `--test hootkonay` (HOOT_SONGS=1) |
 | 아이렘 M62 / M52 (m62) | 15 / 15, 137 / 145 (남은 8 = Traverse USA 효과음 — MSM #2로 보임) | `--test hootm62` (HOOT_SONGS=1) |
 | 남코 Pac-Land 계열 (wsg63701) | 6 / 6, 157곡 모두 | `--test hootns86` (HOOT_SONGS=1, HOOT_DEBUG=1 = 슬롯 · 요청 바이트) |
@@ -370,7 +372,11 @@
   - scramble: RAM 8000h~ (쓰기 9000h~ = 필터), I/O bit6/bit7 = AY #1 주소/자료, bit4/bit5 = AY #2 (처음엔 반대로 넣어 명령을 못 읽었음). timeplt: 메모리 4000h~7000h, RAM 3000h — Jungler는 locomotn 배치 (RAM 2000h, 3000h = 필터: ROM이 가리키는 RAM 쪽으로 고름)
   - 무음 41: Scramble · Amidar · Strategy X · Turtles · Jungler의 "ch2 · ch3" 파트와 몇 BGM — 명령은 받고 빈 슬롯에 넣지만 AY 쓰기가 없음 (앞 파트와 함께여야 하는 듯, 먼저 보내 본 실험은 결론 없음)
   - hoot 롬 이름 불일치 (amidar.5c ↔ zip s1.5c, 11-7a.bin ↔ s1.7a): `FindFile`이 못 찾으면 기판 위치 코드 (숫자 + 글자 2~3자)가 하나로 맞는 파일
-- 다음: 타이토 taitosj (12, Z80 + AY × 3 + DAC — VGM은 AY 둘까지라 셋째 칩 처리 필요), 남코 System 2 (C140) (매피 계열, 6809 + 남코 WSG 15xx) · system86 (HD63701)
+- **8-9b. 타이토 SJ — ✅ v2.1.40 (12 / 12, 285곡)** — `Audio/HootTaitoSj.cs`
+  - MAME taitosj + Elevator Action 디스어셈블: Z80 3MHz, ROM ~3FFFh, RAM 4000h~43FFh, AY × 3 (1.5MHz) 4800h · 4802h · 4804h (LD (nn),HL = 주소 + 자료 한 번에), 명령 5000h = NMI, 5001h 읽기 = 깃발 (bit3 = 명령 있음 — 많은 판이 이걸 보고 받음, 5001h 쓰기로 지움), IRQ 주기 36.6Hz, E000h 진단 ROM = 없음
+  - DAC = AY #1 포트 A (볼륨 = 포트 B 반전) → VGM YM2612 DAC (Bio Attack 등)
+  - VGM 셋째 AY: `VgmSong.AyClock3` + 이 프로그램 안 명령 D9h rr vv 00 (VGM 파일 밖에선 그 칩 없음)
+- 다음: 남코 System 2 (6809 + YM2151 + C140, 26항목) — 새 칩 C140 (매피 계열, 6809 + 남코 WSG 15xx) · system86 (HD63701)
 - 그 다음 (8-8v): Z80 + YM2151 + OKIM6295 작은 보드 (tecmo16 · raizing mahou · bgaregga · banpresto dbz · dooyong …) — MAME 배치를 하나씩 확인해 `HootOpmBoard.Layout`에, atari system1 (6502), 그 뒤 새 칩
   - 남은 것 (8-8a): "소리 남" 기준이 처음 6초에 키온 하나라 몇 항목은 ADPCM 하나뿐 (driftout · liquidk · megablst 등 첫 곡이 짧은 효과음일 수 있음) — 귀로 확인, bshark (code0 · code1 둘), taito z 계열 다른 보드
 

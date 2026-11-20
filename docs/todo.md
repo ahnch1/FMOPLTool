@@ -85,7 +85,7 @@
 - [x] 아타리 System 1 4 · 275곡 — v2.1.30: `HootAtariSys1` (6502 + YM2151, 1820h bit7 = 자가 시험 끔), 179 / 275곡 (v2.1.31 POKEY), 무음 96 = TMS5220 음성 (4장), Road Blasters는 곡 목록 없음
 - [ ] 남코 wsgz80 4 — Z80 + 남코 WSG (칩 있음)
 - [x] 코나미 scramble 8 · timeplt 4 · 116곡 — v2.1.39 `HootKonamiAy`, 75곡 (무음 = ch2 · ch3 파트 등)
-- [ ] 타이토 taitosj 12 — Z80 + AY × 3 + DAC (VGM은 AY 둘까지)
+- [x] 타이토 taitosj 12 · 285곡 — v2.1.40 `HootTaitoSj` (AY × 3 — 셋째는 안 명령 D9h, DAC → YM2612 DAC), 모두
 - [ ] YM2151 + OKI 작은 보드: banpresto (dbz 2 · agallet 2 · ultraman · godzilla · sdgndmps · metmqstr) · raizing (mahou 2 · bgaregga · batrider — NMK112 뱅크) · dooyong superx · technosoft hyperduel · atlus wingforc · tatsumi apache3 · toaplan enmadaio · tp 3 — 각 1~3항목, 보드마다 사운드 ROM을 읽어 `HootOpmBoard.Layout`에 줄 더하기
 - [ ] PC/AT Game Blaster 8 · Tandy 4 — `PcAtMachine`에 SAA1099 · SN76489 포트 (칩 있음)
 - [ ] PC-98 DOS soundblaster16 9 · pc9821dos opn 6 · opna 3 · 86 3 · pc98 rashin 5 · pc98vx amd98 4 (AY × 3) — 기존 PC-98 기계 변형

@@ -44,6 +44,8 @@ public sealed class VgmSong
     public double AyClock;
     /// <summary>둘째 AY-3-8910 (머리말 74h bit30, 명령 A0h의 aa bit7) — 0이면 없음.</summary>
     public double AyClock2;
+    /// <summary>셋째 AY-3-8910 — VGM에 없음: hoot 렌더가 읽은 뒤 세우고, 이 프로그램 안 명령 0xD9 rr vv 00으로 온다 (타이토 SJ).</summary>
+    public double AyClock3;
     /// <summary>AY 종류 (0x00 AY-3-8910, 0x01 AY-3-8912, 0x03 AY8930, 0x10 YM2149, 0x11 YM3439 …).</summary>
     public int AyType;
     /// <summary>AY 깃발 (bit4 = YM2149 클럭 반으로).</summary>
@@ -158,7 +160,7 @@ public sealed class VgmSong
             if ((NsfChips & 0x10) != 0) l.Add("N163");
             if ((NsfChips & 0x08) != 0) l.Add("MMC5");
             if (Huc6280Clock > 0) l.Add("HuC6280");
-            if (HasPsg) l.Add((NsfChips & 0x20) != 0 ? "Sunsoft 5B" : AyClock2 > 0 ? AyTypeName + " ×2" : AyTypeName);
+            if (HasPsg) l.Add((NsfChips & 0x20) != 0 ? "Sunsoft 5B" : AyClock3 > 0 ? AyTypeName + " ×3" : AyClock2 > 0 ? AyTypeName + " ×2" : AyTypeName);
             if (HasScc) l.Add(SccPlus ? "SCC+" : "SCC");
             if (Ymf262Clock > 0) l.Add("OPL3");
             else if (Ym3812Clock > 0) l.Add("OPL2");

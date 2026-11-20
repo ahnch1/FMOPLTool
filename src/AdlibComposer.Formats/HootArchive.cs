@@ -19,7 +19,7 @@ public static class HootArchive
 {
     public const string Extension = ".hoot";
     /// <summary>항목을 써 둔 표시 (재생할 수 있는 드라이버가 늘면 이름을 바꿔 이미 푼 zip에도 다시 쓴다: 2 = SPC · KSS · NSF · GBS 더함, 3 = PC/AT DOS, 4 = MIDI 판, 5 = pc98vx · pc98).</summary>
-    private const string Mark = ".fmopl_hoot37";
+    private const string Mark = ".fmopl_hoot38";
 
     /// <summary>
     /// 재생할 수 있는 hoot 드라이버 · 형식: pc98dos opn · opna · 86 · beep · pcatdos adlib · soundblaster16 · beep (기계 흉내), 그리고 이미 읽는 파일을 곡 코드로 고르는 것 —
@@ -61,6 +61,7 @@ public static class HootArchive
             case "nichibutsu": return t == "terracre" || t == "terraf";                                  // Z80 + YM3526/YM3812 + DAC (HootNichibutsu)
             case "snk": return t == "3812";                                                               // SNK68: Z80 + YM3812 + uPD7759 (HootSnk68)
             case "toaplan": return t == "generic";                                                        // 토아플랜 1 · Twin Cobra: Z80 + YM3812 (HootToaplan)
+            case "namco": return t == "system1";                                                         // 6809 + YM2151 (+ CUS30) (HootNamcoSys1)
             case "atari": return t == "system1";                                                         // 6502 + YM2151 + POKEY (HootAtariSys1, TMS5220 없음)
             case "megadrive": return t == "generic_z80" || t == "iyinc" || t == "1c00" || t == "koei";
             case "x68k": return t == "generic";

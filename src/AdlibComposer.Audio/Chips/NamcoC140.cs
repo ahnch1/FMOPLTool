@@ -132,8 +132,8 @@ public sealed class NamcoC140 : ISoundChip
             l += (dt * lv) >> 10;
             r += (dt * rv) >> 10;
         }
-        left = SoundChips.Clip(l * 4.0);
-        right = SoundChips.Clip(r * 4.0);
+        left = SoundChips.Clip(l * 8.0);   // MAME c140 (고전): 출력 = 8 × 합
+        right = SoundChips.Clip(r * 8.0);
     }
 
     public void SetMute(int c, bool m) { if (c >= 0 && c < Voices) mute[c] = m; }

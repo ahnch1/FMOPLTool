@@ -105,7 +105,7 @@
 - [x] CUS30 칩 (남코 System 1 · 86의 파형 8목소리) — v2.1.34, VGM 안 명령 D8h
 - [x] 남코 wsg6809 11 · 263곡 — v2.1.35 `HootNamcoWsg6809` (6809 + 15XX), 262곡
 - [x] 남코 system86 5 · 71곡 — v2.1.36 새 CPU 6801 계열 (`Cpu6801`) + `HootNamcoSys86`, 71곡 모두 (63701X 음성 없음)
-- [~] 남코 System 2 26 · 870곡 — v2.1.41 `HootNamcoSys2` + C140 칩, FM 344곡만 (C140 키온 안 됨, 코드 21h 이상 · 음성 무음, Four Trax 무음)
+- [x] 남코 System 2 26 · 870곡 — v2.1.41~42 `HootNamcoSys2` + C140 칩, 827곡 (C140 = PCM 묶음 7200h), 남은 무음 43 (Four Trax 27)
 - [ ] **6809 (CPU는 v2.1.32에 있음)**: 후지쯔 FM77AV 22 · FM-7 7 — 6809 하나로 약 100항목 (+ C140 칩)
 - [x] 남코 wsg63701 6 · 157곡 — v2.1.37 (`HootNamcoSys86` 슬롯 요청), 모두
 - [x] 아이렘 M62 15 · 145곡 — v2.1.38 `HootIremM62` (M6803 + AY × 2 + MSM5205 → OKIM6258), VGM 듀얼 AY, 137곡

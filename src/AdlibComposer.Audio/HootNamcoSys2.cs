@@ -15,7 +15,8 @@ namespace AdlibComposer.Audio;
 /// <para>기계 (MAME namcos2 sound + Metal Hawk 디스어셈블): 6809 2.048MHz, 0000h~3FFFh = 뱅크 (사운드 ROM 16KB 단위, C000h · C001h에 쓴 값 &gt;&gt; 4), 4000h = YM2151 (3.58MHz),
 /// 5000h~6FFFh = C140 (200h 거울), 7000h~7FFFh = 메인과 나누는 RAM (2KB 거울), 8000h~9FFFh = RAM, C000h~FFFFh = ROM 첫 16KB.
 /// IRQ = 화면 120Hz, FIRQ = C140 타이머 (1FEh bit0 켬, 주기 = 1F8h × 2 / 21.3kHz, 1FAh = 확인). 부팅 맞춤 = 703Ah = A6h · 703Bh = 0, 뱅크 8 표시 확인이 실패하면 (77FEh = FFh) 메인이 77FDh에 A6h · 6Ah로 답함.</para>
-/// <para>요청: hoot 옵션 codeaddr (7100h · 7110h) + 2 × 묶음 = 곡 번호, 다음 바이트 = 명령 (40h) — hoot 코드 = 묶음 &lt;&lt; 8 | 곡 (System 1과 같음).</para>
+/// <para>요청: hoot 옵션 codeaddr (7100h · 7110h) + 2 × 묶음 = 곡 번호, 다음 바이트 = 명령 (40h) — hoot 코드 = 묶음 &lt;&lt; 8 | 곡 (System 1과 같음).
+/// C140 효과음 · 음성은 같은 꼴의 PCM 묶음 (codeaddr + 100h = 7200h~): FM으로 1.5초 시도해 소리가 없으면 그쪽으로 (<see cref="Start"/>).</para>
 /// <para>곡: 부팅 1초 뒤 요청, 180초를 YM2151 + C140 VGM으로 (C140 ROM = rom pcm, VGM 블록 8Dh).</para>
 /// </summary>
 public static class HootNamcoSys2
@@ -31,10 +32,23 @@ public static class HootNamcoSys2
 
     public static VgmSong Render(HootArchive.Entry e, string dir, int code, double seconds = DefaultSeconds, double fade = DefaultFade)
     {
-        var m = Boot(e, name => { string f = HootArchive.FindFile(dir, name); return f != null ? File.ReadAllBytes(f) : null; });
-        m.Play(code);
-        m.RunSeconds(seconds);
+        var m = Start(e, name => { string f = HootArchive.FindFile(dir, name); return f != null ? File.ReadAllBytes(f) : null; }, code);
+        m.RunSeconds(seconds - m.PlayedSeconds);
         return m.ToVgm(seconds, fade);
+    }
+
+    public const double ProbeSeconds = 1.5;
+
+    /// <summary>부팅하고 요청: FM 묶음 (codeaddr, 7100h~)으로 <see cref="ProbeSeconds"/> 돌려 보고 YM2151 키온도 C140 키온도 없으면 다시 부팅해 PCM 묶음 (codeaddr + 100h, 7200h~ — 효과음 · 음성)으로.</summary>
+    public static Machine Start(HootArchive.Entry e, Func<string, byte[]> file, int code)
+    {
+        var m = Boot(e, file);
+        m.Play(code);
+        m.RunSeconds(ProbeSeconds);
+        if (m.Sounding) return m;
+        m = Boot(e, file);
+        m.Play(code, true);
+        return m;
     }
 
     public static Machine Boot(HootArchive.Entry e, Func<string, byte[]> file)
@@ -104,13 +118,21 @@ public static class HootNamcoSys2
             nextIrq = irqCycles;
         }
 
-        public void Play(int code)
+        public double PlayedSeconds { get { return playStart < 0 ? 0 : (Cpu.Cycles - playStart) / CpuClock; } }
+
+        /// <summary>요청 뒤 YM2151 키온 또는 C140 키온이 있었는가.</summary>
+        public bool Sounding { get { return Log.Any(x => x.t > 0 && ((x.chip == 0 && x.reg == 0x08 && (x.val & 0x78) != 0) || (x.chip == 1 && (x.reg & 15) == 5 && (x.val & 0x80) != 0))); } }
+
+        public void Play(int code) { Play(code, false); }
+
+        /// <summary>요청. pcm = true면 PCM 묶음 (codeaddr + 100h: 7200h~, 드라이버 FIRQ의 D7F9h 쪽 — C140 효과음 · 음성).</summary>
+        public void Play(int code, bool pcm)
         {
             var init = Log.Select(x => (0.0, x.chip, x.reg, x.val)).ToList();
             Log.Clear();
             Log.AddRange(init);
             playStart = Cpu.Cycles;
-            int a = (CodeAddr & 0x7FF) + (code >> 8) * 2;
+            int a = (CodeAddr & 0x7FF) + (pcm ? 0x100 : 0) + (code >> 8) * 2;
             if (a + 1 < Shared.Length) { Shared[a] = (byte)code; Shared[a + 1] = (byte)PlayCommand; }
         }
 

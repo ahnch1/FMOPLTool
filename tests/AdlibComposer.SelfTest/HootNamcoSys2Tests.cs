@@ -45,6 +45,14 @@ public static class HootNamcoSys2Tests
                 foreach (var t in hoot.Titles) Console.WriteLine("  " + arc + " 0x" + t.Code.ToString("X2") + " " + Measure(hoot, dir, t.Code, 8).note + " | " + t.Title);
                 continue;
             }
+            if (arc == "metlhawk")
+            {
+                var v2 = HootNamcoSys2.Render(hoot, dir, 0x41, 3, 0);   // 음성 "Metal Hawk hasshin!" = C140 (PCM 묶음 7200h)
+                var p2 = new VgmPlayer(); p2.Start(v2, 0, null);
+                double pk = 0;
+                for (int i = 0; i < 44100 * 3; i++) { p2.Step(); p2.Generate(out double l, out double rr); pk = Math.Max(pk, Math.Max(Math.Abs(l), Math.Abs(rr))); }
+                check("hoot namco system2 metlhawk: C140 voice plays through VGM", v2.C140Clock > 0 && pk > 100, "peak " + pk.ToString("0") + ", " + v2.ChipSummary);
+            }
             var r = (sound: false, note: "");
             int code = 0;
             if (arc == "fourtrax") { Console.WriteLine("SKIP  hoot namco system2 fourtrax (알려진 무음: hoot 옵션 foutrax, 요청 방식 다름)"); continue; }
@@ -55,9 +63,16 @@ public static class HootNamcoSys2Tests
 
     public static (bool sound, string note) Measure(HootArchive.Entry e, string dir, int code, double seconds)
     {
-        var m = HootNamcoSys2.Boot(e, name => { string f = HootArchive.FindFile(dir, name); return f != null ? File.ReadAllBytes(f) : null; });
-        m.Play(code);
-        m.RunSeconds(seconds);
+        var m = HootNamcoSys2.Start(e, name => { string f = HootArchive.FindFile(dir, name); return f != null ? File.ReadAllBytes(f) : null; }, code);
+        var hitEnv = Environment.GetEnvironmentVariable("HOOT_PCHIT");
+        var hits = new System.Collections.Generic.Dictionary<int, int>();
+        if (hitEnv != null)
+        {
+            var addrs = hitEnv.Split(',').Select(x => Convert.ToInt32(x, 16)).ToList();
+            long stop = m.Cpu.Cycles + (long)(HootNamcoSys2.CpuClock * 2);
+            while (m.Cpu.Cycles < stop) { m.Run(1); if (addrs.Contains(m.Cpu.PC)) { hits.TryGetValue(m.Cpu.PC, out int c); hits[m.Cpu.PC] = c + 1; } }
+        }
+        m.RunSeconds(seconds - m.PlayedSeconds);
         int keyOn = m.Log.Count(x => x.t > 0 && x.chip == 0 && x.reg == 0x08 && (x.val & 0x78) != 0);
         int pcm = m.Log.Count(x => x.t > 0 && x.chip == 1 && (x.reg & 15) == 5 && (x.val & 0x80) != 0);
         string note = "opm " + keyOn + " c140 " + pcm + ", writes " + m.Log.Count + ", irq " + m.Irqs + " firq " + m.Firqs + ", PC " + m.Cpu.PC.ToString("X4") + " unk " + m.Cpu.UnknownOps
@@ -65,6 +80,7 @@ public static class HootNamcoSys2Tests
             + (m.OtherReads.Count > 0 ? ", reads " + string.Join(" ", m.OtherReads.OrderByDescending(x => x.Value).Take(5).Select(x => x.Key.ToString("X4") + ":" + x.Value)) : "")
             + (m.Missing.Count > 0 ? ", missing " + string.Join(" ", m.Missing) : "") + (m.Unsupported.Count > 0 ? ", unsupported " + string.Join(" ", m.Unsupported) : "");
         if (Environment.GetEnvironmentVariable("HOOT_DEBUG") != null) note += " c140regs " + string.Join(" ", m.Log.Where(x => x.chip == 1).GroupBy(x => x.reg & 15).OrderBy(g => g.Key).Select(g => g.Key.ToString("X") + ":" + g.Count() + "/" + string.Join(",", g.Select(x => x.val.ToString("X2")).Distinct().Take(4))));
+        if (hits.Count > 0 || hitEnv != null) note += " hits " + string.Join(" ", hits.Select(x => x.Key.ToString("X4") + ":" + x.Value));
         return (keyOn + pcm > 0, note);
     }
 }

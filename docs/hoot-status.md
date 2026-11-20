@@ -31,6 +31,7 @@
 | 2.0.4 | 8-6 (메가드라이브) | hoot megadrive generic_z80 · iyinc: `Audio/HootMegaDrive.cs` (Z80 사운드 쪽 · 카트리지의 Z80 드라이버를 RAM에, 요청 주소) |
 | 2.0.5 | 8-7 (X68000) | MC68000 `Audio/Cpu/M68000.cs` + hoot x68k generic: `Audio/HootX68k.cs` (OPM · ADPCM · DMA · MFP, E00010h = hoot가 대신 하는 IOCS · DOS) |
 | 2.0.6 | 8-7 (X68000 MIDI) | x68k MIDI 판: YM3802 MIDI 보드 (EAFA00h) → 살아 있는 MIDI 곡 (`HootX68k.LoadMidi`) |
+| 2.1.42 | 8-9c 더함 (System 2 C140 요청) | PCM 묶음 7200h (FM으로 1.5초 시도 → 없으면 다시 부팅해 7200h), C140 출력 × 8 |
 | 2.1.41 | 8-9c (남코 System 2, 일부) | 새 칩 C140: `Audio/Chips/NamcoC140.cs` (VGM A8h · D4h · 8Dh), hoot namco system2: `Audio/HootNamcoSys2.cs` (6809 + YM2151 + C140) — FM 곡만 |
 | 2.1.40 | 8-9b (타이토 SJ) | hoot taito taitosj (Elevator Action · Front Line · Alpine Ski · Time Tunnel · Wild Western · Bio Attack · Tinstar · Kick Start · Sea Fighter Poseidon …): `Audio/HootTaitoSj.cs` (Z80 + AY × 3 + DAC), VGM 셋째 AY (안 명령 D9h) |
 | 2.1.39 | 8-9a (코나미 Z80 + AY × 2) | hoot konami scramble · timeplt (Scramble · Super Cobra · Amidar · The End · Strategy X · Turtles · Super Fighter X · Time Pilot · Tutankham · Jungler): `Audio/HootKonamiAy.cs`, hoot 롬 이름이 다른 zip은 기판 위치 코드로 찾기 (`HootArchive.ByBoardLocation`) |
@@ -100,7 +101,7 @@
 | SNK68 (snk 3812) | 4 / 4, 146곡 모두 (키온 또는 uPD7759) | `--test hootsnk` (HOOT_SONGS=1, HOOT_SNKINIT=16진,… 부팅 명령 바꾸기, HOOT_SNKSCAN=곡 = 부팅 명령 00h~FFh 훑기, HOOT_PC · HOOT_PCQ=주소,…) |
 | 토아플랜 1 · Twin Cobra (generic) | 9 / 9, 125곡 모두 (키온) | `--test hoottoaplan` (HOOT_SONGS=1 = 곡마다, HOOT_PROBE=1 = I/O 포트 · 68000 쪽 RAM 후보) |
 | 타이토 YM2151 보드 (fullt) | 9 / 9, 147곡 모두 (FM 키온 또는 MSM 바이트) | `--test hoottaitoopm` (HOOT_SONGS=1 = 곡마다, HOOT_REGS · HOOT_PC · HOOT_PCQ · HOOT_RAM · HOOT_MSMLOG) |
-| 남코 System 2 (system2) — 일부 | 25 / 26항목, 344 / 870곡 (YM2151만 — C140 키온이 한 번도 안 일어남, Four Trax 전부 무음) | `--test hootns2` (HOOT_SONGS=1, HOOT_DEBUG=1 = C140 레지스터 분포) |
+| 남코 System 2 (system2) | 25 / 26항목, 827 / 870곡 (C140 키온 498곡) — 무음 43 = Four Trax 27 (옵션 foutrax) · Final Lap 9 · Rolling Thunder 2 4 · 그 밖 3 | `--test hootns2` (HOOT_SONGS=1, HOOT_DEBUG=1 = C140 레지스터 분포) |
 | 타이토 SJ (taitosj) | 12 / 12, 285곡 모두 | `--test hootsj` (HOOT_SONGS=1) |
 | 코나미 Z80 + AY × 2 (scramble · timeplt) | 10 / 10, 75 / 116 — 무음 41 = 한 곡을 채널마다 나눈 ch2 · ch3 파트와 일부 BGM (혼자 보내면 AY 쓰기 없음) | `--test hootkonay` (HOOT_SONGS=1) |
 | 아이렘 M62 / M52 (m62) | 15 / 15, 137 / 145 (남은 8 = Traverse USA 효과음 — MSM #2로 보임) | `--test hootm62` (HOOT_SONGS=1) |
@@ -383,8 +384,10 @@
   - FIRQ = C140 타이머 (1FEh bit0, 주기 1F8h × 2 / 21.3kHz, 1FAh 확인), IRQ 120Hz (처리기는 RTI만). 부팅 맞춤 703Ah = A6h · 703Bh = 0, 뱅크 8 "KOBA"/"KOMO" 확인 실패 (77FEh = FFh)면 메인이 77FDh에 A6h → 6Ah로 답함 (Burning Force · Marvel Land · Golly Ghost · Bubble Trouble)
   - 요청: 옵션 codeaddr (7100h · 7110h) + 2 × 묶음 = 곡, 다음 = 명령 40h (System 1과 같음, ack = (cmd & 3Fh) | 80h)
   - C140 칩 (MAME c140 고전 구현): 목소리 24, 모드 bit7 키온 · bit4 반복 · bit3 압축 ((s>>3)<<(s&7) ± 표), 선형 = 8비트 << 4, System 2 주소 ((bank<<16 + a) & 200000h) >> 2 | & 7FFFFh, VGM A8h · 96h (형식) · D4h · 블록 8Dh. 합성 시험은 통과
-  - **남은 것**: 드라이버가 C140 모드에 0만 씀 — 키온 코드 (모드 = 값 | C0h, Metal Hawk DC55h)까지 가지 않음. 곡 표 [0000h]~[0002h]의 21h 이상 항목이 곡 머리 (20h)가 아니라 자료 한가운데를 가리킴, 명령 bit4 경로가 7201h를 읽음 (음성 요청 자리?) — 코드 21h 이상 곡 · 음성은 무음. Four Trax (옵션 foutrax)는 전부 무음
-- 다음: 남코 System 2 C140 요청 경로 (7201h · 명령 bit4), 또는 코나미 K053260 / K054539 (매피 계열, 6809 + 남코 WSG 15xx) · system86 (HD63701)
+  - v2.1.42: **C140 효과음 · 음성은 따로 묶음 7200h~720Fh** (FIRQ의 D7F9h가 훑음 — FM 7100h와 같은 (곡, 명령 40h) 꼴, C140 채널 키온은 상태 6,Y = 40h · 8,Y = 0일 때 D9EAh → DC11h). hoot 코드에 구분이 없어 FM으로 1.5초 돌려 보고 소리가 없으면 다시 부팅해 7200h로 (`Start`) → 무음 526 → 43
+  - C140 출력 = 8 × 합 (MAME 고전 c140), 그래도 FM보다 작을 수 있음 — 귀로 확인
+  - 남은 것: Four Trax 전부 (hoot 옵션 foutrax — 요청 방식 다른 듯), Final Lap 9 · Rolling Thunder 2 4
+- 다음: 코나미 K053260 (11항목, Z80 + YM2151 + K053260) · K054539, 또는 세가 System 24 · 세이부 (매피 계열, 6809 + 남코 WSG 15xx) · system86 (HD63701)
 - 그 다음 (8-8v): Z80 + YM2151 + OKIM6295 작은 보드 (tecmo16 · raizing mahou · bgaregga · banpresto dbz · dooyong …) — MAME 배치를 하나씩 확인해 `HootOpmBoard.Layout`에, atari system1 (6502), 그 뒤 새 칩
   - 남은 것 (8-8a): "소리 남" 기준이 처음 6초에 키온 하나라 몇 항목은 ADPCM 하나뿐 (driftout · liquidk · megablst 등 첫 곡이 짧은 효과음일 수 있음) — 귀로 확인, bshark (code0 · code1 둘), taito z 계열 다른 보드
 

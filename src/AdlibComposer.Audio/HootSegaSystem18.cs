@@ -18,13 +18,20 @@ namespace AdlibComposer.Audio;
 public static class HootSegaSystem18
 {
     public const double CpuClock = 8000000, OpnClock = 8000000, PcmClock = 10000000;
+    public const double S32Clock = 8053975, S32PcmClock = 12500000;
     public const double DefaultSeconds = 180, DefaultFade = 4;
 
     public static bool Handles(string driver, string type)
     {
-        return string.Equals((driver ?? "").Trim(), "sega", StringComparison.OrdinalIgnoreCase)
-            && string.Equals((type ?? "").Trim(), "system18", StringComparison.OrdinalIgnoreCase);
+        if (!string.Equals((driver ?? "").Trim(), "sega", StringComparison.OrdinalIgnoreCase)) return false;
+        string t = (type ?? "").Trim().ToLowerInvariant();
+        return t == "system18" || t == "system32";
     }
+
+    /// <summary>System 32 (Rad Mobile? · Air Rescue · Spider-Man · Arabian Fight · Burning Rival · Golden Axe RoG · Holosseum · Dark Edge · F1 …): 같은 칩, Z80 · YM 8.05MHz, RF5C68 12.5MHz,
+    /// 명령 = 공유 RAM E000h~E008h 큐 (80h 또는 00h = 빔, 드라이버가 한 틱에 하나씩 밀어냄), 박자 = YM3438 타이머 A 폴링, 뱅크 = 포트 A0h~AFh (아래 6비트) · B0h~BFh (bit2 → bank bit6, bit0~1 → bit7~8) → 사운드 영역 100000h + 뱅크 × 2000h
+    /// (영역: 100000h~ = 코드 롬, 200000h + hoot 오프셋 = PCM 롬 — MAME segas32).</summary>
+    public static bool IsSystem32(string type) { return string.Equals((type ?? "").Trim(), "system32", StringComparison.OrdinalIgnoreCase); }
 
     public static VgmSong Render(HootArchive.Entry e, string dir, int code, double seconds = DefaultSeconds, double fade = DefaultFade)
     {
@@ -52,7 +59,22 @@ public static class HootSegaSystem18
             any = true;
         }
         if (!any) missing.Add("(code)");
-        var m = new Machine(code, pcm.OrderBy(x => x.off).Select(x => x.d).ToArray());
+        Machine m;
+        if (IsSystem32(e.Type))
+        {
+            // 사운드 영역 (MAME segas32): 100000h~1FFFFFh = 코드 롬 (거울), 200000h + 오프셋 = PCM 롬 (1MB 칸을 거울로 채움)
+            var region = new byte[0x500000];
+            var codeFile = e.Roms.Where(r => r.Item1 == "code").Select(r => file(r.Item3)).FirstOrDefault(d => d != null) ?? code;
+            for (int at = 0x100000; at < 0x200000; at += codeFile.Length) Array.Copy(codeFile, 0, region, at, Math.Min(codeFile.Length, 0x200000 - at));
+            foreach (var (off, d) in pcm)
+            {
+                long slot = 0x200000 + off;
+                int span = d.Length < 0x100000 && (off & 0xFFFFF) == 0 ? 0x100000 : d.Length;
+                for (long at = slot; at < slot + span && at < region.Length; at += d.Length) Array.Copy(d, 0, region, at, (int)Math.Min(d.Length, region.Length - at));
+            }
+            m = new Machine(code, new[] { region }, true);
+        }
+        else m = new Machine(code, pcm.OrderBy(x => x.off).Select(x => x.d).ToArray());
         m.Missing.AddRange(missing);
         foreach (var u in unsupported) m.Unsupported.Add(u);
         m.RunSeconds(1);
@@ -81,9 +103,14 @@ public static class HootSegaSystem18
         private readonly int[] last = Enumerable.Repeat(-1, 0x400).ToArray();
         private byte[] ramAtPlay;
 
-        public Machine(byte[] code, byte[][] pcmRoms)
+        /// <summary>System 32 배치.</summary>
+        public readonly bool S32;
+        private int bankLo, bankHi;
+
+        public Machine(byte[] code, byte[][] pcmRoms, bool system32 = false)
         {
-            Code = code; PcmRoms = pcmRoms;
+            Code = code; PcmRoms = pcmRoms; S32 = system32;
+            if (S32) for (int i = 0; i < 9; i++) Ram[i] = 0x80;
             Cpu = new Z80(this);
             Cpu.PC = 0; Cpu.SP = 0xFFFF; Cpu.Im = 1;
         }
@@ -100,6 +127,7 @@ public static class HootSegaSystem18
 
         public void Send(int code)
         {
+            if (S32) { int q = 0; while (q < 8 && Ram[q] != 0x80 && Ram[q] != 0) q++; if (q < 8) Ram[q] = (byte)code; return; }   // 공유 RAM 큐 (빈 칸 = 80h 또는 00h — 판마다)
             latch = code;
             Nmis++;
             Cpu.Halted = false;
@@ -145,6 +173,12 @@ public static class HootSegaSystem18
 
         private byte BankRead(int a)
         {
+            if (S32)
+            {
+                int bank = bankLo | ((bankHi & 4) << 4) | ((bankHi & 3) << 7);
+                var reg = PcmRoms[0];
+                return reg[(0x100000 + bank * 0x2000 + (a - 0xA000)) % reg.Length];
+            }
             int rom = (bankReg >> 6) & 3;
             if (rom >= PcmRoms.Length || PcmRoms[rom].Length == 0) return 0xFF;
             var r = PcmRoms[rom];
@@ -197,6 +231,12 @@ public static class HootSegaSystem18
                 else OpnWrite(chip, p, opnAddr[chip * 2 + p], v);
                 return;
             }
+            if (S32)
+            {
+                if ((port & 0xF0) == 0xA0) { bankLo = v & 0x3F; return; }
+                if ((port & 0xF0) == 0xB0) { bankHi = v; return; }
+                if ((port & 0xF0) == 0xC0 || (port & 0xF8) == 0xD0 || port == 0xF1) return;   // 인터럽트 제어 · 더미
+            }
             if ((port & 0xE0) == 0xA0) { bankReg = v; return; }
             if ((port & 0xE0) == 0xC0) return;   // 메인으로 답
             OtherPorts.TryGetValue(0x100 | port, out int c); OtherPorts[0x100 | port] = c + 1;
@@ -244,13 +284,13 @@ public static class HootSegaSystem18
 
         public VgmSong ToVgm(double seconds, double fade)
         {
-            var w = new VgmWriter { System = "Sega System 18 (hoot)", Notes = "hoot sega system18" };
+            var w = new VgmWriter { System = S32 ? "Sega System 32 (hoot)" : "Sega System 18 (hoot)", Notes = S32 ? "hoot sega system32" : "hoot sega system18" };
             bool two = Log.Any(x => x.chip == 1);
-            w.SetClock(VgmWriter.ClockYm2612, OpnClock, two ? 0x40000000u : 0);
+            w.SetClock(VgmWriter.ClockYm2612, S32 ? S32Clock : OpnClock, two ? 0x40000000u : 0);
             bool pcm = Log.Any(x => x.chip >= 2);
             if (pcm)
             {
-                w.SetClock(VgmWriter.ClockRf5c68, PcmClock);
+                w.SetClock(VgmWriter.ClockRf5c68, S32 ? S32PcmClock : PcmClock);
                 var ram = ramAtPlay ?? Pcm.Ram;
                 var cmd = new byte[7 + 2 + ram.Length];   // RAM 블록 C0h: 시작 2바이트 + 64KB
                 cmd[0] = 0x67; cmd[1] = 0x66; cmd[2] = 0xC0;

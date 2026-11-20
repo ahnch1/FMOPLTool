@@ -98,7 +98,7 @@
 - [ ] 코나미 System GX 17 (68000 사운드 + K054539 × 2)
 - [ ] 아이렘 M92 (m92) 16 — V35 (x86 계열) + YM2151 + **GA20**
 - [x] 세가 System 18 6 · 251곡 — v2.1.45 `HootSegaSystem18` + RF5C68 칩 + VGM 둘째 YM2612, 246곡
-- [ ] 세가 System 32 9 — 같은 칩, 명령 자리 다름
+- [x] 세가 System 32 9 · 146곡 — v2.1.46 (`HootSegaSystem18` System 32 배치), 정지 명령 빼고 모두
 - [ ] 코나미 System GX 17 — 시도함 (68000 부팅이 기다리는 것 모름, hoot-status 참고)
 - [ ] 코나미 twin16 5 (K007232 + uPD7759) 등 K007232 보드 (aliens · scontra · gradius3 …)
 - [ ] 세가 model2 4 · system_multi 4 (315-5560 = MultiPCM)

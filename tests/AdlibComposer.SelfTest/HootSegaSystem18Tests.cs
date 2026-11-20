@@ -9,7 +9,7 @@ namespace AdlibComposer.SelfTest;
 /// <summary>hoot 세가 System 18 (HootSegaSystem18, Z80 + YM3438 × 2 + RF5C68): 실제 zip, 진단 (HOOT_SONGS = 곡마다).</summary>
 public static class HootSegaSystem18Tests
 {
-    public static readonly string[] Archives = { "pontoon", "shdancer", "astorm", "bloxeed", "mwalk", "cltchitr" };
+    public static readonly string[] Archives = { "pontoon", "shdancer", "astorm", "bloxeed", "mwalk", "cltchitr", "arescue", "spidman", "arabfgt", "brival", "ga2", "holo", "darkedge", "f1lap", "f1en" };
 
     public static void Run(Action<string, bool, string> check)
     {

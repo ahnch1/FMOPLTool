@@ -31,6 +31,7 @@
 | 2.0.4 | 8-6 (메가드라이브) | hoot megadrive generic_z80 · iyinc: `Audio/HootMegaDrive.cs` (Z80 사운드 쪽 · 카트리지의 Z80 드라이버를 RAM에, 요청 주소) |
 | 2.0.5 | 8-7 (X68000) | MC68000 `Audio/Cpu/M68000.cs` + hoot x68k generic: `Audio/HootX68k.cs` (OPM · ADPCM · DMA · MFP, E00010h = hoot가 대신 하는 IOCS · DOS) |
 | 2.0.6 | 8-7 (X68000 MIDI) | x68k MIDI 판: YM3802 MIDI 보드 (EAFA00h) → 살아 있는 MIDI 곡 (`HootX68k.LoadMidi`) |
+| 2.1.46 | 8-9f 더함 (세가 System 32) | hoot sega system32 (Air Rescue · Spider-Man · Arabian Fight · Burning Rival · Golden Axe RoG · Holosseum · Dark Edge · F1 Super Lap · F1 Exhaust Note): `HootSegaSystem18` System 32 배치 |
 | 2.1.45 | 8-9f (세가 System 18) | 새 칩 RF5C68: `Audio/Chips/Rf5c68.cs`, VGM 둘째 YM2612 · RF5C68, hoot sega system18 (Shadow Dancer · Alien Storm · Bloxeed · Moonwalker · Clutch Hitter · Pontoon): `Audio/HootSegaSystem18.cs`; `FindFile` 앞부분 맞춤 대안 |
 | 2.1.44 | 8-9e (코나미 K054539, Z80 판) | 새 칩 K054539: `Audio/Chips/K054539.cs` (VGM A0h · D3h · 8Ch, 둘), hoot konami 054539 · 054539x2 (Xexex · Bucky O'Hare · Moo Mesa · X-Men · Poly-Net Warriors · Run and Gun · Metamorphic Force · Martial Champion · Mystic Warriors · Violent Storm): `Audio/HootKonami54539.cs` |
 | 2.1.43 | 8-9d (코나미 K053260) | 새 칩 K053260: `Audio/Chips/K053260.cs` (VGM ACh · BAh · 8Eh), hoot konami 053260 (Lightning Fighters · Parodius · Escape Kids · Thunder Cross II · Vendetta · Punk Shot · Sunset Riders · Bells & Whistles · TMNT 2 · Quiz Gakumon · Simpsons): `Audio/HootKonami53260.cs` |
@@ -104,7 +105,7 @@
 | SNK68 (snk 3812) | 4 / 4, 146곡 모두 (키온 또는 uPD7759) | `--test hootsnk` (HOOT_SONGS=1, HOOT_SNKINIT=16진,… 부팅 명령 바꾸기, HOOT_SNKSCAN=곡 = 부팅 명령 00h~FFh 훑기, HOOT_PC · HOOT_PCQ=주소,…) |
 | 토아플랜 1 · Twin Cobra (generic) | 9 / 9, 125곡 모두 (키온) | `--test hoottoaplan` (HOOT_SONGS=1 = 곡마다, HOOT_PROBE=1 = I/O 포트 · 68000 쪽 RAM 후보) |
 | 타이토 YM2151 보드 (fullt) | 9 / 9, 147곡 모두 (FM 키온 또는 MSM 바이트) | `--test hoottaitoopm` (HOOT_SONGS=1 = 곡마다, HOOT_REGS · HOOT_PC · HOOT_PCQ · HOOT_RAM · HOOT_MSMLOG) |
-| 세가 System 18 (system18) | 6 / 6, 246 / 251곡 (남은 5 = 정지 명령), RF5C68 126곡 | `--test hoots18` (RF5C68 합성 포함, HOOT_SONGS=1) |
+| 세가 System 18 · 32 (system18 · system32) | 15 / 15, 388 / 397곡 (남은 9 = 정지 명령) | `--test hoots18` (RF5C68 합성 포함, HOOT_SONGS=1) |
 | 코나미 K054539 (054539 · 054539x2) | 10 / 10, 266 / 267곡 | `--test hootk54` (K054539 합성 포함, HOOT_SONGS=1, HOOT_DEBUG=1 = YM2151 타이머) |
 | 코나미 K053260 (053260) | 11 / 11, 606 / 616곡 (남은 10 = 정지 명령 7 · 효과음 3) | `--test hootk53` (K053260 합성 포함, HOOT_SONGS=1) |
 | 남코 System 2 (system2) | 25 / 26항목, 827 / 870곡 (C140 키온 498곡) — 무음 43 = Four Trax 27 (옵션 foutrax) · Final Lap 9 · Rolling Thunder 2 4 · 그 밖 3 | `--test hootns2` (HOOT_SONGS=1, HOOT_DEBUG=1 = C140 레지스터 분포) |
@@ -407,7 +408,8 @@
   - MAME segas18: Z80 8MHz, ROM 0~9FFFh, 뱅크 A000h~BFFFh = PCM 롬 8KB 단위 (포트 A0h bit6~7 = 롬 번호, 아래 6비트 = 뱅크 — hoot pcm 파일 차례대로), RF5C68 레지스터 C000h~ · 메모리 창 D000h~DFFFh (뱅크 = 레지스터 7), RAM E000h~, YM3438 #1 · #2 = 포트 80h · 90h (8MHz), 명령 = 포트 C0h + NMI
   - RF5C68 (MAME): 8채널, 부호-크기 8비트, FFh = 반복 표시, 걸음 11비트 소수, 팬 아래 니블 = 왼쪽, 클럭 10MHz ÷ 384. VGM: 요청 때 RAM 그림을 블록 C0h로, 그 뒤 메모리 쓰기는 C1h (바뀐 바이트만)
   - VGM 둘째 YM2612 (`Ym2612Clock2`, A2h · A3h). Shadow Dancer의 xml 이름 "mpr-12715.b4b4" → `FindFile` 앞부분 맞춤
-- 다음: 세가 System 32 (9항목, 같은 칩 — 명령은 공유 RAM), 68000 디스어셈블러 (GX · System 24용) (매피 계열, 6809 + 남코 WSG 15xx) · system86 (HD63701)
+  - v2.1.46 System 32 (MAME segas32): Z80 · YM3438 8.05MHz, RF5C68 12.5MHz, 명령 = 공유 RAM E000h~E008h 큐 (빈 칸 80h 또는 00h — 판마다, 드라이버가 한 틱에 하나씩 밀어냄), 박자 = YM 타이머 A 폴링 (인터럽트 안 씀), 뱅크 = 포트 A0h (아래 6비트) · B0h (bit2 → 6, bit0~1 → 7~8) → 사운드 영역 100000h + 뱅크 × 2000h (100000h~ = 코드 롬 거울, 200000h + hoot 오프셋 = PCM 롬, 1MB 칸 거울)
+- 다음: 68000 디스어셈블러 (GX · System 24용), 타이토 F3 (ES5505), 아이렘 M92 (V35 + GA20) (매피 계열, 6809 + 남코 WSG 15xx) · system86 (HD63701)
 - 그 다음 (8-8v): Z80 + YM2151 + OKIM6295 작은 보드 (tecmo16 · raizing mahou · bgaregga · banpresto dbz · dooyong …) — MAME 배치를 하나씩 확인해 `HootOpmBoard.Layout`에, atari system1 (6502), 그 뒤 새 칩
   - 남은 것 (8-8a): "소리 남" 기준이 처음 6초에 키온 하나라 몇 항목은 ADPCM 하나뿐 (driftout · liquidk · megablst 등 첫 곡이 짧은 효과음일 수 있음) — 귀로 확인, bshark (code0 · code1 둘), taito z 계열 다른 보드
 

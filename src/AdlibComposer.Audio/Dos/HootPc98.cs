@@ -47,6 +47,9 @@ public static class HootPc98
         return e.Titles.ToList();
     }
 
+    /// <summary>386 리얼 모드 CPU로 돌릴 항목: PC-9821용 (pc9821dos — 386을 확인하고 32비트 명령을 쓰는 드라이버).</summary>
+    public static bool Is386(HootArchive.Entry e) { return e.Driver.Equals("pc9821dos", StringComparison.OrdinalIgnoreCase); }
+
     public static bool IsPcAt(HootArchive.Entry e) { return e.Driver.Equals("pcatdos", StringComparison.OrdinalIgnoreCase); }
 
     /// <summary>DOS 없는 PC-98 항목 (hoot PC-98generic: pc98vx, 옛 방식 pc98).</summary>
@@ -239,6 +242,7 @@ public static class HootPc98
         DosMachine m;
         if (IsPcAt(e)) m = new PcAtMachine(fs, CardOf(e), Math.Max(1, e.Option("clockmul", 4)));
         else m = new Pc98Machine(fs, BoardOf(e), Math.Max(1, e.Option("clockmul", 8))) { Trace = TraceBoot };
+        m.Cpu.Is386 = Is386(e);
         var hm = (IHootMachine)m;
         hm.HootVector = e.Option("funcvect", 0x7F) & 0xFF;
         shells = new List<DosMachine.ShellResult>();
@@ -280,6 +284,7 @@ public static class HootPc98
                             if (m.HostReturned) r = (m.ReturnCode >> 8) == 3 ? DosMachine.ShellResult.Resident : DosMachine.ShellResult.Exited;
                         }
                         shells.Add(r);
+                        if (TraceBoot) Console.WriteLine("shell " + text + " → " + r + (m.HostReturned ? ", return code " + m.ReturnCode.ToString("X3") : ""));
                         if (m.HostReturned || r == DosMachine.ShellResult.NotFound || r == DosMachine.ShellResult.NoMemory) m.Idle();
                         break;
                     }

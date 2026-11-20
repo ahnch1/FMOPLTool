@@ -179,7 +179,7 @@ public sealed class Pc98Machine : DosMachine, IHootMachine
     private readonly byte[] opnRegs = new byte[0x200];
     private int timerA, timerB, timerCtl, timerFlags;
     private long nextTimerA = long.MaxValue, nextTimerB = long.MaxValue;
-    private int a460 = 0x40;
+    private int a460 = 0x40, a468, a46a;
 
     private long TimerAPeriod { get { return Math.Max(1, (long)(72.0 * (1024 - timerA) / OpnBaseClock * CpuHz)); } }
     private long TimerBPeriod { get { return Math.Max(1, (long)(1152.0 * (256 - timerB) / OpnBaseClock * CpuHz)); } }
@@ -464,6 +464,11 @@ public sealed class Pc98Machine : DosMachine, IHootMachine
                 case 0x18C: if (Sound == Board.Opna) return (byte)OpnStatus(true); break;
                 case 0x18E: if (Sound == Board.Opna) return (byte)OpnReadData(1, opnAddr1); break;
                 case 0xA460: if (Sound == Board.Opna) return (byte)a460; break;
+                // 86 PCM (소리는 아직 없음): A466h bit0 = 표본 클럭 깜빡임, A468h = FIFO 제어 (bit4 IRQ 깃발 = 늘 0), A46Ah 모드, A46Ch FIFO
+                case 0xA466: if (Sound == Board.Opna) return (byte)((Cpu.Cycles / 64) & 1); break;
+                case 0xA468: if (Sound == Board.Opna) return (byte)(a468 & ~0x10); break;
+                case 0xA46A: if (Sound == Board.Opna) return (byte)a46a; break;
+                case 0xA46C: if (Sound == Board.Opna) return 0; break;
             }
         }
         UnknownPortReads++; UnknownPorts.Add(port);
@@ -519,6 +524,10 @@ public sealed class Pc98Machine : DosMachine, IHootMachine
                 case 0x18C: if (Sound == Board.Opna) { opnAddr1 = v; return; } break;
                 case 0x18E: if (Sound == Board.Opna) { OpnWrite(1, opnAddr1, v); return; } break;
                 case 0xA460: if (Sound == Board.Opna) { a460 = 0x40 | (v & 3); return; } break;
+                case 0xA466: if (Sound == Board.Opna) return; break;
+                case 0xA468: if (Sound == Board.Opna) { a468 = v; return; } break;
+                case 0xA46A: if (Sound == Board.Opna) { a46a = v; return; } break;
+                case 0xA46C: if (Sound == Board.Opna) return; break;
             }
         }
         if (port >= 0x4A0 && port <= 0x4AF) return;   // EGC (그래픽)

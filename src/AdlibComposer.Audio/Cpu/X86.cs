@@ -16,13 +16,14 @@ public interface IX86Bus
 /// 286의 SMSW · LMSW). hoot의 PC-98 DOS 흉내(pc98dos = 80286 + MS-DOS)처럼 사운드 드라이버를 돌리기 위한 것이라 보호 모드는 없다.
 /// <para>주소 = 세그먼트 × 16 + 오프셋 (20비트, A20 꺼짐). PUSHF의 bit12~15 = 0 (286 리얼 모드). 0으로 나누기 = INT 0.
 /// <see cref="HostInterrupt"/>가 true를 돌려주면 INT n을 바깥(C#의 DOS · BIOS 흉내)이 처리한 것으로 본다.</para>
-/// <para><see cref="Cycles"/>는 명령마다 대략 값 (286 표에 가깝게 2~20). 386 명령(0x66 · 0x67 접두어 · 0F 확장)은 모르는 명령으로 세고 그 자리에서 멈춘다 (<see cref="Halted"/>).</para>
+/// <para><see cref="Cycles"/>는 명령마다 대략 값 (286 표에 가깝게 2~20). <see cref="Is386"/>가 꺼져 있으면 386 명령(0x66 · 0x67 접두어 · 0F 확장)은 모르는 명령으로 세고 그 자리에서 멈춘다 (<see cref="Halted"/>).
+/// 켜면 386 리얼 모드 (X86.386.cs): 32비트 레지스터 · FS · GS · 66h · 67h 접두어 · 0F 확장 명령.</para>
 /// </summary>
-public sealed class X86
+public sealed partial class X86
 {
     // 레지스터 (16비트 값으로 보관)
     public int AX, BX, CX, DX, SP, BP, SI, DI;
-    public int ES, CS, SS, DS;
+    public int ES, CS, SS, DS, FS, GS;
     public int IP;
     public int Flags = 0x0002;
     public bool Halted;
@@ -39,7 +40,7 @@ public sealed class X86
     public const int CF = 0x0001, PF = 0x0004, AF = 0x0010, ZF = 0x0040, SF = 0x0080, TF = 0x0100, IF = 0x0200, DF = 0x0400, OF = 0x0800;
 
     private readonly IX86Bus bus;
-    private int segOverride = -1;   // 0 ES 1 CS 2 SS 3 DS
+    private int segOverride = -1;   // 0 ES 1 CS 2 SS 3 DS 4 FS 5 GS
     private int rep;                // 0 없음, 1 REPNE, 2 REP/REPE
     private int opStartIp, opStartCs;
     private bool interruptShadow;   // MOV SS · POP SS 다음 한 명령은 인터럽트를 받지 않는다
@@ -57,7 +58,8 @@ public sealed class X86
     public void Reset()
     {
         AX = BX = CX = DX = SP = BP = SI = DI = 0;
-        ES = SS = DS = 0; CS = 0xFFFF; IP = 0;
+        ES = SS = DS = FS = GS = 0; CS = 0xFFFF; IP = 0;
+        Array.Clear(hi, 0, hi.Length);
         Flags = 0x0002; Halted = false; Cycles = 0; UnknownOps = 0;
     }
 
@@ -108,11 +110,11 @@ public sealed class X86
         switch (r) { case 0: AL = v; break; case 1: CL = v; break; case 2: DL = v; break; case 3: BL = v; break; case 4: AH = v; break; case 5: CH = v; break; case 6: DH = v; break; default: BH = v; break; }
     }
 
-    private int GetSeg(int s) { switch (s & 3) { case 0: return ES; case 1: return CS; case 2: return SS; default: return DS; } }
+    private int GetSeg(int s) { switch (s) { case 0: return ES; case 1: return CS; case 2: return SS; case 4: return FS; case 5: return GS; default: return DS; } }
     private void SetSeg(int s, int v)
     {
         v &= 0xFFFF;
-        switch (s & 3) { case 0: ES = v; break; case 1: CS = v; break; case 2: SS = v; interruptShadow = true; break; default: DS = v; break; }
+        switch (s) { case 0: ES = v; break; case 1: CS = v; break; case 2: SS = v; interruptShadow = true; break; case 4: FS = v; break; case 5: GS = v; break; default: DS = v; break; }
     }
 
     // ------------------------------------------------------------ ModR/M
@@ -124,6 +126,7 @@ public sealed class X86
         int b = Fetch8();
         mMod = b >> 6; mReg = (b >> 3) & 7; mRm = b & 7;
         if (mMod == 3) return;
+        if (addr32) { ModRm32(); return; }
         int disp = 0, ea;
         bool bp = false;
         switch (mRm)
@@ -279,7 +282,7 @@ public sealed class X86
     /// <summary>벡터 표로만 (바깥 처리 없이): FLAGS · CS · IP를 쌓고 IF · TF를 끈다.</summary>
     public void Vector(int n)
     {
-        Push((Flags & 0x0FFF) | 0x0002);
+        Push((Flags & (Is386 ? 0x7FFF : 0x0FFF)) | 0x0002);
         Push(CS); Push(IP);
         Flags &= ~(IF | TF);
         IP = Read16(0, n * 4);
@@ -299,7 +302,7 @@ public sealed class X86
     /// <summary>IRET (바깥 처리기에서 돌아갈 때 등).</summary>
     public void Iret()
     {
-        IP = Pop(); CS = Pop(); Flags = (Pop() & 0x0FD5) | 0x0002;
+        IP = Pop(); CS = Pop(); Flags = (Pop() & FlagMask) | 0x0002;
     }
 
     private void Unknown(int op)
@@ -318,12 +321,15 @@ public sealed class X86
     {
         if (Halted) { Cycles += 2; return; }
         interruptShadow = false;
-        segOverride = -1; rep = 0;
+        segOverride = -1; rep = 0; op32 = addr32 = false;
         opStartIp = IP; opStartCs = CS;
         int op = Fetch8();
-        for (int n = 0; n < 14; n++)   // 접두어 (세그먼트 · REP · LOCK)
+        for (int n = 0; n < 14; n++)   // 접두어 (세그먼트 · REP · LOCK, 386: FS · GS · 크기)
         {
             if (op == 0x26 || op == 0x2E || op == 0x36 || op == 0x3E) segOverride = (op >> 3) & 3;
+            else if (Is386 && (op == 0x64 || op == 0x65)) segOverride = op - 0x60;
+            else if (Is386 && op == 0x66) op32 = true;
+            else if (Is386 && op == 0x67) addr32 = true;
             else if (op == 0xF2) rep = 1;
             else if (op == 0xF3) rep = 2;
             else if (op != 0xF0) break;
@@ -335,6 +341,7 @@ public sealed class X86
 
     private void Execute(int op)
     {
+        if ((op32 || addr32) && Execute386(op)) return;
         bool word = (op & 1) != 0;
         if (op < 0x40 && (op & 7) < 6)
         {
@@ -439,17 +446,17 @@ public sealed class X86
             case 0x89: ModRm(); SetRm16(GetReg16(mReg)); return;
             case 0x8A: ModRm(); SetReg8(mReg, Rm8()); return;
             case 0x8B: ModRm(); SetReg16(mReg, Rm16()); return;
-            case 0x8C: ModRm(); SetRm16(GetSeg(mReg)); return;
+            case 0x8C: ModRm(); if (mReg > 5 || (mReg > 3 && !Is386)) { Unknown(op); return; } SetRm16(GetSeg(mReg)); return;
             case 0x8D: ModRm(); if (mMod != 3) SetReg16(mReg, mOff); return;
-            case 0x8E: ModRm(); SetSeg(mReg, Rm16()); return;
+            case 0x8E: ModRm(); if (mReg > 5 || mReg == 1 || (mReg > 3 && !Is386)) { Unknown(op); return; } SetSeg(mReg, Rm16()); return;
             case 0x8F: { int v = Pop(); ModRm(); SetRm16(v); return; }
             case 0x90: return;
             case 0x98: AX = (sbyte)(byte)AL & 0xFFFF; return;
             case 0x99: DX = (AX & 0x8000) != 0 ? 0xFFFF : 0; return;
             case 0x9A: { int ip = Fetch16(), cs = Fetch16(); Push(CS); Push(IP); CS = cs; IP = ip; Cycles += 13; return; }
             case 0x9B: return;
-            case 0x9C: Push(Flags & 0x0FFF | 0x0002); return;
-            case 0x9D: Flags = (Pop() & 0x0FD5) | 0x0002; return;
+            case 0x9C: Push(Flags & (Is386 ? 0x7FFF : 0x0FFF) | 0x0002); return;
+            case 0x9D: Flags = (Pop() & FlagMask) | 0x0002; return;
             case 0x9E: Flags = (Flags & 0xFF00) | (AH & 0xD5) | 0x02; return;
             case 0x9F: AH = (Flags & 0xD5) | 0x02; return;
             case 0xA0: AL = Read8(DataSeg, Fetch16()); return;
@@ -657,6 +664,7 @@ public sealed class X86
     private void Op0F()
     {
         int op = Fetch8();
+        if (Is386 && Op0F386(op)) return;
         if (op == 0x01)
         {
             ModRm();

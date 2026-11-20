@@ -150,5 +150,39 @@ public static class X86Tests
             0x72, 0xF4,                   // JB (ADD DL)
             0xF4));
         check("x86 integration: sieve of Eratosthenes below 1000 → 168 primes", c.DX == 168, "DX=" + c.DX + " unknown " + c.UnknownOps + " cycles " + c.Cycles);
+        Run386(check);
+    }
+
+    /// <summary>386 리얼 모드 (Is386): 판별 · 66h · 67h · 0F 확장.</summary>
+    private static void Run386(Action<string, bool, string> check)
+    {
+        Action<X86, Bus> on = (x, _) => x.Is386 = true;
+        // CPU 판별: POPF F000h → 286은 bit12~15가 0, 386은 bit12~14가 남음
+        int[] detect = C(0xB8, 0x00, 0xF0, 0x50, 0x9D, 0x9C, 0x58, 0x25, 0x00, 0xF0, 0xF4);
+        var (c, _) = Run(detect);
+        var (c3, _) = Run(detect, on);
+        check("x86 386: FLAGS bit12-14 settable only with Is386 (CPU detection)", c.AX == 0 && c3.AX == 0x7000, c.AX.ToString("X4") + " / " + c3.AX.ToString("X4"));
+        (c, _) = Run(C(0x66, 0xB8, 0x78, 0x56, 0x34, 0x12, 0xF4));
+        check("x86 286: 66h prefix stays an unknown op", c.UnknownOps == 1, "");
+
+        // MOV EAX,12345678h; ADD EAX,0F0000001h; SHL EAX,4; MOV AX,0BEEFh (위 16비트 그대로)
+        (c, _) = Run(C(0x66, 0xB8, 0x78, 0x56, 0x34, 0x12, 0x66, 0x05, 0x01, 0x00, 0x00, 0xF0, 0x66, 0xC1, 0xE0, 0x04, 0xB8, 0xEF, 0xBE, 0xF4), on);
+        check("x86 386: MOV/ADD/SHL EAX, 16-bit write keeps the upper half", c.EAX == 0x2345BEEFu && c.UnknownOps == 0, c.EAX.ToString("X8"));
+        // EAX = 10000h, EBX = 30000h: MUL EBX → EDX:EAX = 3:00000000, DIV EBX → 10000h
+        (c, _) = Run(C(0x66, 0xB8, 0x00, 0x00, 0x01, 0x00, 0x66, 0xBB, 0x00, 0x00, 0x03, 0x00, 0x66, 0xF7, 0xE3, 0x66, 0x89, 0xD6, 0x66, 0xF7, 0xF3, 0xF4), on);
+        check("x86 386: MUL/DIV EBX through EDX:EAX", c.GetReg32(6) == 3 && c.EAX == 0x10000 && c.EDX == 0, "ESI=" + c.GetReg32(6).ToString("X8") + " EAX=" + c.EAX.ToString("X8"));
+        // MOV BL,0F0h; MOVZX CX,BL; MOVSX EDX,BL; CMP CX,0F0h; SETE AL; JE near +1 (건너뜀: INC AH)
+        (c, _) = Run(C(0xB3, 0xF0, 0x0F, 0xB6, 0xCB, 0x66, 0x0F, 0xBE, 0xD3, 0x81, 0xF9, 0xF0, 0x00, 0x0F, 0x94, 0xC0, 0x0F, 0x84, 0x02, 0x00, 0xFE, 0xC4, 0xF4), on);
+        check("x86 386: MOVZX/MOVSX, SETE, near JE", c.CX == 0xF0 && c.EDX == 0xFFFFFFF0u && c.AL == 1 && c.AH == 0, "CX=" + c.CX.ToString("X4") + " EDX=" + c.EDX.ToString("X8") + " AX=" + c.AX.ToString("X4"));
+        // FS = 3000h (PUSH DS; POP FS), MOV AL,FS:[10h]; PUSHAD/POPAD round trip; BT AX,3 → CF
+        (c, _) = Run(C(0x1E, 0x0F, 0xA1, 0x64, 0xA0, 0x10, 0x00, 0x66, 0x60, 0x66, 0x31, 0xC9, 0x66, 0x61, 0x0F, 0xBA, 0xE0, 0x03, 0xF4),
+            (x, b) => { x.Is386 = true; b.Put(0x3000, 0x10, 0x0C); x.SetReg32(1, 0xCAFEBABE); });
+        check("x86 386: FS override, PUSHAD/POPAD, BT imm", c.FS == 0x3000 && c.AL == 0x0C && c.ECX == 0xCAFEBABE && c.GetFlag(X86.CF), "FS=" + c.FS.ToString("X4") + " AL=" + c.AL.ToString("X2") + " ECX=" + c.ECX.ToString("X8"));
+        // 67h: MOV AX,[EBX+ECX*4+2] (DS:0+3*4+2 = 0Eh)
+        (c, _) = Run(C(0x66, 0x31, 0xDB, 0x66, 0xB9, 0x03, 0x00, 0x00, 0x00, 0x67, 0x8B, 0x44, 0x8B, 0x02, 0xF4), (x, b) => { x.Is386 = true; b.Put(0x3000, 0x0E, 0x34, 0x12); });
+        check("x86 386: 67h SIB addressing [EBX+ECX*4+2]", c.AX == 0x1234 && c.UnknownOps == 0, c.AX.ToString("X4"));
+        // SHLD AX,BX,4: AX=1234, BX=ABCD → 234A
+        (c, _) = Run(C(0xB8, 0x34, 0x12, 0xBB, 0xCD, 0xAB, 0x0F, 0xA4, 0xD8, 0x04, 0xF4), on);
+        check("x86 386: SHLD AX,BX,4", c.AX == 0x234A, c.AX.ToString("X4"));
     }
 }

@@ -63,6 +63,9 @@ public static class HootPc98Tests
     public static void Run(Action<string, bool, string> check)
     {
         check("hoot pc9821dos: playable as PC-98 DOS (opn · opna · 86), MIDI out too", HootArchive.Playable("pc9821dos", "opn") && HootArchive.Playable("pc9821dos", "86") && !HootArchive.Playable("pc9821dos", "soundblaster16") && HootArchive.MidiPlayable("pc9821dos"), "");
+        var m86 = new Pc98Machine(new DosFileSystem(), Pc98Machine.Board.Opna, 8);
+        m86.Out(0xA468, 0xB5);
+        check("PC-98 86 board PCM ports: A468h latch (IRQ flag bit4 reads 0), A466h bit0 only", m86.In(0xA468) == 0xA5 && (m86.In(0xA466) & 0xFE) == 0 && HootPc98.Is386(new HootArchive.Entry { Driver = "pc9821dos" }), m86.In(0xA468).ToString("X2"));
         string root = Path.Combine(Path.GetTempPath(), "fmopl_hoot98_" + Guid.NewGuid().ToString("N").Substring(0, 8));
         string oldCache = ZipFolder.CacheBase;
         try
@@ -302,10 +305,11 @@ public static class HootPc98Tests
     private static int FirstCode(HootArchive.Entry e)
     {
         if (e.Titles.Count == 0) return 0;
+        if (int.TryParse(Environment.GetEnvironmentVariable("HOOT_TITLE"), out int ti)) return e.Titles[Math.Min(Math.Max(0, ti), e.Titles.Count - 1)].Code;   // 진단: 몇째 곡
         if (HootPc98.IsGeneric(e))
             foreach (var t in e.Titles)
                 if (e.Roms.Any(r => (r.Type == "bgm" || r.Type == "bgm2") && r.Offset == (t.Code & 0xFFFF))) return t.Code;
-        var music = e.Titles.FirstOrDefault(t => t.Title.IndexOf("stop", StringComparison.OrdinalIgnoreCase) < 0 && t.Title.IndexOf("停止", StringComparison.Ordinal) < 0);
+        var music = e.Titles.FirstOrDefault(t => t.Title.IndexOf("stop", StringComparison.OrdinalIgnoreCase) < 0 && t.Title.IndexOf("停止", StringComparison.Ordinal) < 0 && !t.Title.EndsWith(": INIT", StringComparison.Ordinal));
         return music.Title != null ? music.Code : e.Titles[0].Code;
     }
 

@@ -31,6 +31,7 @@
 | 2.0.4 | 8-6 (메가드라이브) | hoot megadrive generic_z80 · iyinc: `Audio/HootMegaDrive.cs` (Z80 사운드 쪽 · 카트리지의 Z80 드라이버를 RAM에, 요청 주소) |
 | 2.0.5 | 8-7 (X68000) | MC68000 `Audio/Cpu/M68000.cs` + hoot x68k generic: `Audio/HootX68k.cs` (OPM · ADPCM · DMA · MFP, E00010h = hoot가 대신 하는 IOCS · DOS) |
 | 2.0.6 | 8-7 (X68000 MIDI) | x68k MIDI 판: YM3802 MIDI 보드 (EAFA00h) → 살아 있는 MIDI 곡 (`HootX68k.LoadMidi`) |
+| 2.1.28 | 8-8r (테크모 YM3812 + MSM5205) | hoot tecmo rygar · gemini (Rygar · Silk Worm · Gemini Wing · Back Fire): `Audio/HootTecmoAdpcm.cs` |
 | 2.1.27 | 8-8q (테크모 Ninja Gaiden) | hoot tecmo gaiden (Shadow Warriors · 龍剣伝 · Tecmo Knight · Raiga Strato Fighter): `Audio/HootGaiden.cs` (Z80 + YM2203 × 2 + OKIM6295) |
 | 2.1.26 | 8-8e 더함 (테크모 16) | hoot tecmo tecmo16 (Final Star Force · Ganbare Ginkun · Riot): `HootOpmBoard.Tecmo16` 배치, `Layout.BootSeconds` |
 | 2.1.25 | 8-8p (UPL robokid) | hoot upl robokid (Psychic 5 · Ark Area · Mutant Night · Atomic Robo-kid · Omega Fighter): `Audio/HootUpl.cs` (Z80 + YM2203 × 2), VGM 재생기 듀얼 YM2203 (`VgmSong.Ym2203Clock2`, 명령 A5h) |
@@ -86,6 +87,7 @@
 | SNK68 (snk 3812) | 4 / 4, 146곡 모두 (키온 또는 uPD7759) | `--test hootsnk` (HOOT_SONGS=1, HOOT_SNKINIT=16진,… 부팅 명령 바꾸기, HOOT_SNKSCAN=곡 = 부팅 명령 00h~FFh 훑기, HOOT_PC · HOOT_PCQ=주소,…) |
 | 토아플랜 1 · Twin Cobra (generic) | 9 / 9, 125곡 모두 (키온) | `--test hoottoaplan` (HOOT_SONGS=1 = 곡마다, HOOT_PROBE=1 = I/O 포트 · 68000 쪽 RAM 후보) |
 | 타이토 YM2151 보드 (fullt) | 9 / 9, 147곡 모두 (FM 키온 또는 MSM 바이트) | `--test hoottaitoopm` (HOOT_SONGS=1 = 곡마다, HOOT_REGS · HOOT_PC · HOOT_PCQ · HOOT_RAM · HOOT_MSMLOG) |
+| 테크모 YM3812 + MSM5205 (rygar · gemini) | 4 / 4, 122곡 모두 (MSM5205 23곡) | `--test hoottecmo` (HOOT_SONGS=1) |
 | 테크모 Ninja Gaiden (gaiden) | 4 / 4, 231 / 300 (곡은 모두 — 무음 = Strato Fighter 효과음 · 목소리 65, 龍剣伝 Round Clear 3 · 4, 코드 모름 1) | `--test hoottecmo` (HOOT_SONGS=1) |
 | 테크모 16 (tecmo16, HootOpmBoard) | 3 / 3, 112곡 모두 (8곡 = OKI 효과음 하나) | `--test hootopm` (HOOT_SONGS=1, HOOT_PCQ=주소,… · HOOT_PCR=시작,끝 — PCR은 부팅부터 셈) |
 | CPS-1 · Double Dragon 2 · 3 (YM2151 + OKIM6295) | 39 / 39 (FM 키온 16개 또는 OKI 2번 이상, 처음 6곡까지) | `--hootopmsurvey roms 200 6` |
@@ -296,7 +298,11 @@
   - IRQ = YM2203 #1 타이머만. 처음엔 두 칩의 OR로 했다가 드라이버가 #2의 플래그를 안 지워 IRQ가 끝없이 → 스택이 FFxxh까지 내려가 PC가 85xxh로 (Round 4 · 5 곡이 중간에 멈춤)
   - SSG 레지스터 (00h~0Ch)는 바뀔 때만 VGM에 (틱마다 다시 써서 8초에 6만 개 넘음, 0Dh는 쓰면 엔벌로프가 다시 시작이라 늘)
   - VGM = 듀얼 YM2203 (v2.1.25) + OKIM6295
-- 다음 (8-8r): Z80 + YM2151 + OKIM6295 작은 보드 (tecmo16 · raizing mahou · bgaregga · banpresto dbz · dooyong …) — MAME 배치를 하나씩 확인해 `HootOpmBoard.Layout`에, atari system1 (6502), 그 뒤 새 칩
+- **8-8r. 테크모 YM3812 + MSM5205 (rygar · gemini) — ✅ v2.1.28 (4 / 4)** — `Audio/HootTecmoAdpcm.cs`
+  - 배치 (MAME tecmo rygar_sound_map · tecmo_sound_map, ROM 스캔으로 확인): Rygar = ROM ~3FFFh (파일 8KB), RAM 4000h (SP 4800h), YM3812 8000h, C000h 명령 읽기 · ADPCM 시작 쓰기, D000h 끝, E000h 볼륨, F000h NMI 확인. Silk Worm · Gemini Wing = ROM ~7FFFh, RAM 8000h (SP 8800h), YM3812 A000h, C000h / C400h / C800h / CC00h. Back Fire = Silk Worm 배치 + RAM 2000h~27FFh (부팅 때 ROM 0103h~의 루틴을 2000h~로 베껴 부름 — 처음엔 쓰기가 막혀 0028h에서 멈춤, hoot 형식이 같아 이름으로 고름)
+  - Z80 · YM3812 4MHz, 명령 = NMI, YM3812 타이머 = IRQ
+  - MSM5205 400kHz ÷ 48: 하드웨어가 시작 × 100h ~ (끝 + 1) × 100h 앞까지 ADPCM ROM 바이트를 위 니블 먼저 (MAME adpcm_int) → VGM OKIM6258 (4.2667MHz ÷ 512, 12비트), 바이트 니블 바꿔서. 부팅 때 드라이버가 조용한 샘플을 한 번 시작함 (starts 1 · 바이트 0은 이것)
+- 다음 (8-8s): Z80 + YM2151 + OKIM6295 작은 보드 (tecmo16 · raizing mahou · bgaregga · banpresto dbz · dooyong …) — MAME 배치를 하나씩 확인해 `HootOpmBoard.Layout`에, atari system1 (6502), 그 뒤 새 칩
   - 남은 것 (8-8a): "소리 남" 기준이 처음 6초에 키온 하나라 몇 항목은 ADPCM 하나뿐 (driftout · liquidk · megablst 등 첫 곡이 짧은 효과음일 수 있음) — 귀로 확인, bshark (code0 · code1 둘), taito z 계열 다른 보드
 
 ### 남은 문제 (단계와 따로)

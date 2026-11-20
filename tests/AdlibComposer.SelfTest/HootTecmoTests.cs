@@ -11,14 +11,16 @@ namespace AdlibComposer.SelfTest;
 public static class HootTecmoTests
 {
     public static readonly string[] Gaiden = { "shadoww", "ryukendn", "wildfang", "stratof" };
+    public static readonly string[] Adpcm = { "rygar", "silkworm", "gemini", "backfirt" };
 
     public static void Run(Action<string, bool, string> check)
     {
-        check("hoot tecmo gaiden: playable, own board", HootArchive.Playable("tecmo", "gaiden") && HootGaiden.Handles("Tecmo", "GAIDEN") && !HootGaiden.Handles("tecmo", "tecmo16"), "");
+        check("hoot tecmo gaiden: playable, own board", HootArchive.Playable("tecmo", "gaiden") && HootGaiden.Handles("Tecmo", "GAIDEN") && HootTecmoAdpcm.LayoutOf("tecmo", "Rygar") == HootTecmoAdpcm.Rygar && !HootGaiden.Handles("tecmo", "tecmo16"), "");
 
         string root = SopTests.FindDir("_incoming");
         string folder = root == null ? null : Path.Combine(root, "Hootarchive", "roms");
         if (folder == null || !Directory.Exists(folder)) { Console.WriteLine("SKIP  hoot tecmo real files (_incoming/Hootarchive/roms not found)"); return; }
+        RealAdpcm(check, folder);
         bool all = Environment.GetEnvironmentVariable("HOOT_SONGS") != null;
         foreach (var arc in Gaiden)
         {
@@ -45,6 +47,41 @@ public static class HootTecmoTests
                 check("hoot tecmo shadoww: audible through VGM (YM2203 ×2 + OKIM6295)", peak > 0.02 && vgm.ChipSummary.Contains("YM2203 ×2"), "peak " + peak.ToString("0.000") + ", " + vgm.ChipSummary);
             }
         }
+    }
+
+    private static void RealAdpcm(Action<string, bool, string> check, string folder)
+    {
+        bool all = Environment.GetEnvironmentVariable("HOOT_SONGS") != null;
+        foreach (var arc in Adpcm)
+        {
+            string zip = Path.Combine(folder, arc + ".zip");
+            if (!File.Exists(zip)) { Console.WriteLine("SKIP  hoot tecmo " + arc + " (zip not found)"); continue; }
+            string dir = ZipFolder.Extract(zip);
+            var hoot = Directory.GetFiles(dir, "*" + HootArchive.Extension).Select(HootArchive.Load).FirstOrDefault(x => HootTecmoAdpcm.Handles(x.Driver, x.Type));
+            if (hoot == null) { check("hoot tecmo " + arc + ": .hoot entry", false, "none"); continue; }
+            if (all)
+            {
+                foreach (var t in hoot.Titles) Console.WriteLine("  " + arc + " 0x" + t.Code.ToString("X2") + " " + MeasureAdpcm(hoot, dir, t.Code, 8).note + " | " + t.Title);
+                continue;
+            }
+            var r = (sound: false, note: "");
+            int code = 0;
+            foreach (var t in hoot.Titles.Take(4)) { code = t.Code; r = MeasureAdpcm(hoot, dir, code, 8); if (r.sound) break; }
+            check("hoot tecmo " + arc + " (" + hoot.Type + "): song 0x" + code.ToString("X2") + " makes sound in 8 s", r.sound, r.note);
+        }
+    }
+
+    public static (bool sound, string note) MeasureAdpcm(HootArchive.Entry e, string dir, int code, double seconds)
+    {
+        var m = HootTecmoAdpcm.Boot(e, name => { string f = HootArchive.FindFile(dir, name); return f != null ? File.ReadAllBytes(f) : null; });
+        m.Play(code);
+        m.RunSeconds(seconds);
+        int keyOn = m.Log.Count(x => x.t > 0 && x.chip == 0 && ((x.reg >= 0xB0 && x.reg <= 0xB8 && (x.val & 0x20) != 0) || (x.reg == 0xBD && (x.val & 0x1F) != 0)));
+        int msm = m.Log.Count(x => x.chip == 1 && x.reg == 1);
+        string note = "opl " + keyOn + " msm bytes " + msm + " starts " + m.MsmStarts + ", writes " + m.Log.Count + ", nmi " + m.Nmis + " irq " + m.Irqs + " latch " + m.LatchReads + ", PC " + m.Cpu.PC.ToString("X4")
+            + (m.OtherWrites.Count > 0 ? ", other " + string.Join(" ", m.OtherWrites.OrderByDescending(x => x.Value).Take(5).Select(x => x.Key.ToString("X4") + ":" + x.Value)) : "")
+            + (m.Missing.Count > 0 ? ", missing " + string.Join(" ", m.Missing) : "") + (m.Unsupported.Count > 0 ? ", unsupported " + string.Join(" ", m.Unsupported) : "");
+        return (keyOn > 0 || msm > 0, note);
     }
 
     public static (bool sound, string note) Measure(HootArchive.Entry e, string dir, int code, double seconds)

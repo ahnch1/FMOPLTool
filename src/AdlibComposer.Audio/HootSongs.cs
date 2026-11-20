@@ -128,6 +128,12 @@ public static class HootSongs
             v = HootOpmBoard.Render(e, dir, code);
             what = HootOpmBoard.LayoutOf(driver, e.Type).Name + " 사운드 보드 · 명령 0x" + code.ToString("X2");
         }
+        else if (HootTecmoAdpcm.Handles(driver, e.Type))
+        {
+            // hoot 테크모 Rygar · Gemini Wing 계열: 사운드 보드 (Z80 + YM3812 + MSM5205)에서 사운드 ROM을 돌려 미리 렌더
+            v = HootTecmoAdpcm.Render(e, dir, code);
+            what = HootTecmoAdpcm.LayoutOf(driver, e.Type).Name + " 사운드 보드 · 명령 0x" + code.ToString("X2");
+        }
         else if (HootGaiden.Handles(driver, e.Type))
         {
             // hoot 테크모 Ninja Gaiden: 사운드 보드 (Z80 + YM2203 × 2 + OKIM6295)에서 사운드 ROM을 돌려 미리 렌더

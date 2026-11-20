@@ -1,4 +1,4 @@
-# FMOPLTool 할 일 (2026-11-20, v2.1.27 기준)
+# FMOPLTool 할 일 (2026-11-20, v2.1.28 기준)
 
 - 이 파일 = **해야 할 일**과 **남겨 둔 일**(보류)을 체크박스로. 끝난 일의 자세한 내용 · 진단 명령 · 원인 분석은 [`hoot-status.md`](hoot-status.md), 사용법 · 구조는 [`../README.md`](../README.md).
 - 옛 할 일 기록(v1.x ~ v2.0 진행 일지)은 `_incoming/Todo.md`(git에 안 들어감)에 그대로 둔다.
@@ -12,8 +12,8 @@
 |---|---:|---:|
 | 목록 전체 | 9,489 | 221,712 |
 | 아카이브 zip이 있는 항목 | 8,432 | — |
-| **재생 규칙에 든 항목 (zip 있음)** | **7,430 (88.1%)** | **196,534** (그 형식 전체) |
-| 아직 재생 못 하는 항목 (zip 있음) | 1,002 | 약 25,180 (그 형식 전체) |
+| **재생 규칙에 든 항목 (zip 있음)** | **7,434 (88.2%)** | **196,656** (그 형식 전체) |
+| 아직 재생 못 하는 항목 (zip 있음) | 998 | 약 25,060 (그 형식 전체) |
 | zip이 없는 항목 | 1,057 | — |
 
 곡 수는 zip 유무와 상관없이 그 형식의 titlelist 전체. "재생 규칙에 듦" = 트리에서 두 번 클릭하면 기계 흉내로 곡을 만든다는 뜻. 그 안에서도 무음인 항목이 있다 (아래 2장 "소리 남" · 4장).
@@ -76,7 +76,8 @@
 - [ ] UPL ninjakid2 1 (Ninja-kun: 아수라) — Z80 MC-8123 암호 (rom key) + YM2203 × 2 + PCM
 - [x] 테크모 tecmo16 3 · 112곡 — v2.1.26: `HootOpmBoard.Tecmo16` 배치 (FC00h OKI · FC04h YM2151 · FC08h 명령 NMI), 부팅 3초 (3 / 3, 112곡 모두 — 8곡은 OKI 효과음 하나)
 - [x] 테크모 gaiden 4 · 300곡 — v2.1.27: `HootGaiden` (Z80 + YM2203 × 2 + OKI, 명령 FC20h NMI, IRQ = YM2203 #1만) — 곡 모두, 무음 69 = Strato Fighter 효과음 · 목소리 65 + 龍剣伝 Round Clear 3 · 4 + 코드 모름 1
-- [ ] 테크모 gemini · rygar 4 (YM3812 + MSM5205) · tbowl (YM3812 × 2 + MSM5205 × 2) · spbactn (YM3812 + OKI) · wc90 (YM2608) · solomon (AY × 3)
+- [x] 테크모 gemini 3 · rygar 1 · 122곡 — v2.1.28: `HootTecmoAdpcm` (Z80 + YM3812 + MSM5205 → VGM OKIM6258, 배치 Rygar · Silk Worm · Back Fire) (4 / 4, 122곡 모두, MSM 23곡)
+- [ ] 테크모 tbowl (YM3812 × 2 + MSM5205 × 2) · spbactn (YM3812 + OKI) · wc90 (YM2608) · solomon (AY × 3)
 - [ ] 세이부 raiden 4 (YM3812 + OKI, Z80 암호화일 수 있음) · raiden2 2
 - [ ] 세가 System 24 4 — 68000 + YM2151 (MC68000 있음)
 - [ ] 세가 SG-1000 7 — Z80 + SN76489

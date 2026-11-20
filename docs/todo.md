@@ -110,7 +110,8 @@
 - [x] 코나미 battlantis 2 · 29곡 — v2.1.56 YM3812 × 2 → YMF262, 모두
 - [ ] 코나미 gx400 5 (VLM5030 · K005289)
 - [x] SNK 3526_8950 6 · 3526x2 2 · 312곡 — v2.1.57 `HootSnkOpl` (OPL × 2 → YMF262), 235곡 (무음 = Y8950 ADPCM 목소리)
-- [ ] Y8950 ADPCM (SNK 목소리 77항목) · SNK fitegolf 2 · mainsnk 2
+- [x] SNK fitegolf 2 · 60곡 — v2.1.58, 모두
+- [ ] Y8950 ADPCM (SNK 목소리 77항목) · SNK mainsnk 2
 - [ ] 세가 model2 4 · system_multi 4 (315-5560 = MultiPCM)
 - [ ] 코나미 hornet 8 · gticlub 4 — RF5C400 (CPU 68000)
 

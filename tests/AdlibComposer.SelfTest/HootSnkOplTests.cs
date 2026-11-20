@@ -9,11 +9,11 @@ namespace AdlibComposer.SelfTest;
 /// <summary>hoot SNK Z80 + OPL × 2 (HootSnkOpl, type 3526_8950 · 3526x2): 실제 zip, 진단 (HOOT_SONGS = 곡마다).</summary>
 public static class HootSnkOplTests
 {
-    public static readonly string[] Archives = { "victroad", "psychos", "psychosj", "bermudat", "tdfever", "gwar", "athena", "ikari" };
+    public static readonly string[] Archives = { "victroad", "psychos", "psychosj", "bermudat", "tdfever", "gwar", "athena", "ikari", "fitegolf", "countryc" };
 
     public static void Run(Action<string, bool, string> check)
     {
-        check("hoot snk 3526_8950 · 3526x2: playable, own board", HootArchive.Playable("snk", "3526_8950") && HootArchive.Playable("SNK", "3526x2") && !HootSnkOpl.Handles("snk", "3812"), "");
+        check("hoot snk 3526_8950 · 3526x2: playable, own board", HootArchive.Playable("snk", "3526_8950") && HootArchive.Playable("SNK", "3526x2") && HootArchive.Playable("snk", "fitegolf") && !HootSnkOpl.Handles("snk", "3812"), "");
 
 
         string root = SopTests.FindDir("_incoming");

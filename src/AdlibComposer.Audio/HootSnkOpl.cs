@@ -9,7 +9,7 @@ namespace AdlibComposer.Audio;
 
 /// <summary>
 /// hoot SNK Z80 + OPL 둘 보드 (driver snk, type 3526_8950: Victory Road · Psycho Soldier · Bermuda Triangle · TouchDown Fever · Guerrilla War,
-/// type 3526x2: Athena · Ikari Warriors): 사운드 CPU를 흉내 낸다.
+/// type 3526x2: Athena · Ikari Warriors, type fitegolf: Fighting Golf · Country Club — YM3812 하나 (MAME YM3812_sound_map), VGM YM3812 그대로): 사운드 CPU를 흉내 낸다.
 /// <para>기계 (MAME snk.cpp YM3526_YM3526_sound_map · YM3526_Y8950_sound_map): Z80 4MHz, 0000h~BFFFh ROM, C000h~CFFFh RAM, E000h = 명령,
 /// E800h 상태 · 주소 / EC00h 자료 = YM3526 #1, F000h · F400h = YM #2 (YM3526 또는 Y8950), F800h = 사운드 상태 (bit0 = YM1 IRQ, bit1 = YM2 IRQ, bit2 = 바쁨, bit3 = 명령 IRQ;
 /// 쓰기 bit4 · 5 · 6 · 7이 0이면 각각 지움). IRQ 줄 = 상태 &amp; 0Bh (레벨).</para>
@@ -25,7 +25,7 @@ public static class HootSnkOpl
     {
         if (!string.Equals((driver ?? "").Trim(), "snk", StringComparison.OrdinalIgnoreCase)) return false;
         string t = (type ?? "").Trim().ToLowerInvariant();
-        return t == "3526_8950" || t == "3526x2";
+        return t == "3526_8950" || t == "3526x2" || t == "fitegolf";
     }
 
     public static VgmSong Render(HootArchive.Entry e, string dir, int code, double seconds = DefaultSeconds, double fade = DefaultFade)
@@ -53,7 +53,7 @@ public static class HootSnkOpl
             any = true;
         }
         if (!any) missing.Add("(code)");
-        var m = new Machine(rom);
+        var m = new Machine(rom) { Single3812 = (e.Type ?? "").Trim().ToLowerInvariant() == "fitegolf" };
         m.Missing.AddRange(missing);
         foreach (var u in unsupported) m.Unsupported.Add(u);
         m.RunSeconds(1);
@@ -79,6 +79,8 @@ public static class HootSnkOpl
         /// <summary>OPL 쓰기: chip 0 = YM #1 (E800h), 1 = YM #2 (F000h).</summary>
         public readonly List<(double t, int chip, int reg, int val)> Log = new List<(double, int, int, int)>();
         public int Irqs, LatchReads;
+        /// <summary>fitegolf: YM3812 하나 (YM #2 없음) → VGM YM3812 (5Ah) 그대로.</summary>
+        public bool Single3812;
         /// <summary>진단: 타이머 상태.</summary>
         public string TimerState { get { return string.Join(" ", ym.Select((y, i) => "ym" + (i + 1) + " ctl " + y.Ctl.ToString("X2") + " t1 " + y.T1.ToString("X2") + " t2 " + y.T2.ToString("X2") + " fl " + y.Flags.ToString("X2"))) + " st " + status.ToString("X2") + " c100 " + Ram[0x100].ToString("X2") + " c002 " + Ram[2].ToString("X2"); } }
         public readonly Dictionary<int, int> OtherWrites = new Dictionary<int, int>(), OtherReads = new Dictionary<int, int>();
@@ -206,7 +208,7 @@ public static class HootSnkOpl
                         return;
                     }
             }
-            if (reg < 0x20 && reg != 0x08) return;   // 시험 · Y8950 ADPCM · 키보드 · I/O
+            if (reg < 0x20 && reg != 0x08 && !(Single3812 && reg == 0x01)) return;   // 시험 · Y8950 ADPCM · 키보드 · I/O (YM3812 하나면 01h 파형 허락은 남김)
             bool keep = (reg >= 0xB0 && reg <= 0xB8) || reg == 0xBD;
             if (!keep) { if (last[c, reg] == v) return; last[c, reg] = v; }
             if (playStart < 0) playStart = Cpu.Cycles;
@@ -215,6 +217,7 @@ public static class HootSnkOpl
 
         public VgmSong ToVgm(double seconds, double fade)
         {
+            if (Single3812) return ToVgm3812(seconds, fade);
             var w = new VgmWriter { System = "SNK OPL × 2 (hoot)", Notes = "hoot snk" };
             w.SetClock(VgmWriter.ClockYmf262, OplClock * 4);
             w.Write(0x5F, 0x05, 0x01);   // NEW = 1
@@ -233,6 +236,25 @@ public static class HootSnkOpl
                 if (r >= 0xC0 && r <= 0xC8) v = (v & 0x0F) | 0x30;
                 if (bank == 1 && (r == 0xBD || r == 0x08)) continue;
                 w.Write((byte)(bank == 0 ? 0x5E : 0x5F), r, v);
+            }
+            if ((long)total > at) w.Wait((long)total - at);
+            var song = VgmFormat.Read(w.ToArray());
+            song.FadeSeconds = Math.Max(0, Math.Min(fade, seconds / 2));
+            if (Log.Count == 0) song.UnsupportedChips.Add("(칩 쓰기 없음)");
+            return song;
+        }
+
+        private VgmSong ToVgm3812(double seconds, double fade)
+        {
+            var w = new VgmWriter { System = "SNK YM3812 (hoot)", Notes = "hoot snk fitegolf" };
+            w.SetClock(VgmWriter.ClockYm3812, OplClock);
+            double total = seconds * VgmSong.Rate;
+            long at = 0;
+            foreach (var x in Log.Where(x => x.chip == 0).OrderBy(x => x.t))
+            {
+                long ts = (long)Math.Min(total, Math.Max(0, x.t));
+                if (ts > at) { w.Wait(ts - at); at = ts; }
+                w.Write(0x5A, x.reg, x.val);
             }
             if ((long)total > at) w.Wait((long)total - at);
             var song = VgmFormat.Read(w.ToArray());

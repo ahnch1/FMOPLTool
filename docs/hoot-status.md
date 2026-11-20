@@ -31,6 +31,7 @@
 | 2.0.4 | 8-6 (메가드라이브) | hoot megadrive generic_z80 · iyinc: `Audio/HootMegaDrive.cs` (Z80 사운드 쪽 · 카트리지의 Z80 드라이버를 RAM에, 요청 주소) |
 | 2.0.5 | 8-7 (X68000) | MC68000 `Audio/Cpu/M68000.cs` + hoot x68k generic: `Audio/HootX68k.cs` (OPM · ADPCM · DMA · MFP, E00010h = hoot가 대신 하는 IOCS · DOS) |
 | 2.0.6 | 8-7 (X68000 MIDI) | x68k MIDI 판: YM3802 MIDI 보드 (EAFA00h) → 살아 있는 MIDI 곡 (`HootX68k.LoadMidi`) |
+| 2.1.69 | 캡콤 Exed Exes | hoot capcom exedexes: `Audio/HootCapcomPsg.cs` (Z80 + AY-3-8910 + SN76489 × 2, MAME exedexes) |
 | 2.1.68 | 캡콤 Bionic Commando | hoot capcom bionicc: `HootOpmBoard.BionicCommando` (MAME bionicc: 8000h YM2151 상태 폴링, A000h 명령 NMI, RAM C000h, OKI 없음) |
 | 2.1.67 | 캡콤 YM2203 × 2 더함 (Commando) | hoot capcom commando: `HootCapcomOpn` 배치에 RAM 자리 (Commando = 4000h — 처음엔 C000h 고정이라 스택이 안 써져 다시 부팅) |
 | 2.1.66 | 캡콤 YM2203 × 2 더함 | hoot capcom sidearms (Side Arms) · blktiger (Black Tiger): `HootCapcomOpn` 배치 둘 더 |
@@ -153,6 +154,7 @@
 | 테크모 Ninja Gaiden (gaiden) | 4 / 4, 231 / 300 (곡은 모두 — 무음 = Strato Fighter 효과음 · 목소리 65, 龍剣伝 Round Clear 3 · 4, 코드 모름 1) | `--test hoottecmo` (HOOT_SONGS=1) |
 | 테크모 16 (tecmo16, HootOpmBoard) | 3 / 3, 112곡 모두 (8곡 = OKI 효과음 하나) | `--test hootopm` (HOOT_SONGS=1, HOOT_PCQ=주소,… · HOOT_PCR=시작,끝 — PCR은 부팅부터 셈) |
 | 캡콤 Bionic Commando (bionicc, HootOpmBoard) | 1 / 1, 14곡 모두 | `--test hootopm` (HOOT_SONGS=1) |
+| 캡콤 Exed Exes (exedexes) | 1 / 1, 39곡 중 38 (무음 = 정지 명령) | `--test hootexed` (HOOT_SONGS=1) |
 | CPS-1 · Double Dragon 2 · 3 (YM2151 + OKIM6295) | 39 / 39 (FM 키온 16개 또는 OKI 2번 이상, 처음 6곡까지) | `--hootopmsurvey roms 200 6` |
 | 세가 System 1 · 아이렘 M72 계열 | 52 / 52 — system1 29/29 · m72 23/23 | `--hootarcadesurvey roms 200 6` (HOOT_ONLY=zip이름,…) |
 | 데이터 이스트 HuC6280 보드 | 41 / 43 — 빠진 2: wizdfire (zip에 사운드 ROM 없음), hangzo (시제품, 곡 목록이 틀뿐) | `--hootdecosurvey roms 300 6` |

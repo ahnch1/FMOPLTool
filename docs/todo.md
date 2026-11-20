@@ -87,7 +87,7 @@
 - [x] 캡콤 sidearms 1 · blktiger 1 · 72곡 — v2.1.66 `HootCapcomOpn` (MAME sidearms: D000h 명령 · F000h YM × 2 4MHz; blktiger: C800h · E000h 3.58MHz; IRQ = YM #1), 모두
 - [x] 캡콤 commando 1 · 36곡 — v2.1.67 (RAM 4000h), 35곡
 - [x] 캡콤 bionicc 1 · 14곡 — v2.1.68 `HootOpmBoard` 배치, 모두
-- [ ] 캡콤 exedexes (AY + SN × 2)
+- [x] 캡콤 exedexes 1 · 39곡 — v2.1.69 `HootCapcomPsg` (RAM 4000h, 6000h 명령, 8000h AY 1.5MHz, 8002h · 8003h SN76489 × 2 3MHz, IRQ 240Hz), 38곡
 - [ ] 세가 System 24 4 — 68000 + YM2151 (MC68000 있음)
 - [ ] 세가 SG-1000 7 — Z80 + SN76489
 - [x] 아타리 System 1 4 · 275곡 — v2.1.30: `HootAtariSys1` (6502 + YM2151, 1820h bit7 = 자가 시험 끔), 179 / 275곡 (v2.1.31 POKEY), 무음 96 = TMS5220 음성 (4장), Road Blasters는 곡 목록 없음

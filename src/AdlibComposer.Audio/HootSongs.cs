@@ -140,6 +140,12 @@ public static class HootSongs
             v = HootGaiden.Render(e, dir, code);
             what = "Ninja Gaiden 사운드 보드 · 명령 0x" + code.ToString("X2");
         }
+        else if (HootCapcomPsg.Handles(driver, e.Type))
+        {
+            // hoot 캡콤 exedexes: 사운드 CPU (Z80 + AY + SN76489 × 2)에서 ROM을 돌려 미리 렌더
+            v = HootCapcomPsg.Render(e, dir, code);
+            what = "Capcom Exed Exes 사운드 보드 · 명령 0x" + code.ToString("X2");
+        }
         else if (HootYunsung.Handles(driver, e.Type))
         {
             // hoot 윤성 nmg5 · pclubys: 사운드 CPU (Z80 + YM3812 + OKIM6295)에서 ROM을 돌려 미리 렌더

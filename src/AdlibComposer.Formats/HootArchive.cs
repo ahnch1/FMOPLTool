@@ -52,7 +52,7 @@ public static class HootArchive
                 || t == "m62";                                                                             // M6803 + AY-3-8910 × 2 (HootIremM62)
             case "capcom": return t == "cps1" || t == "cps2" || t == "cps1qs" || t == "zn"              // Z80 + YM2151 + OKIM6295 / Z80 + QSound (cps1qs = Kabuki 암호, zn = 래치 + NMI)
                 || t == "opn2" || t == "rushcrsh" || t == "tigerroad" || t == "commando" || t == "sidearms" || t == "blktiger"
-                || t == "bionicc";                                                                         // Z80 + YM2151 (HootOpmBoard.BionicCommando)                                     // Z80 + YM2203 × 2 (HootCapcomOpn)
+                || t == "bionicc" || t == "exedexes";                                                                         // Z80 + YM2151 (HootOpmBoard.BionicCommando)                                     // Z80 + YM2203 × 2 (HootCapcomOpn)
             case "technos": return t == "ddragon2" || t == "ddragon3" || t == "ctribe";
             case "tecmo": return t == "tecmo16"                                                           // Z80 + YM2151 + OKIM6295 (HootOpmBoard.Tecmo16)
                 || t == "gaiden"                                                                           // Z80 + YM2203 × 2 + OKIM6295 (HootGaiden)

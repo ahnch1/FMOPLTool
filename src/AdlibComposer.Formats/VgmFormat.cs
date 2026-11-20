@@ -54,6 +54,8 @@ public sealed class VgmSong
     public double Sn76489Clock2;
     /// <summary>둘째 OKIM6295 클럭 (VGM 클럭 bit30, 레지스터 bit7, ROM 블록 크기 bit31). 메모리 속 곡은 첫째와 다른 클럭일 수 있다 (hoot Data East: 1MHz + 2MHz).</summary>
     public double Okim6295Clock2;
+    /// <summary>둘째 YM2203 (머리말 0x44 클럭 bit30, 명령 A5h). 0 = 하나.</summary>
+    public double Ym2203Clock2;
     /// <summary>uPD7759 클럭 (VGM 8Ch, 명령 B6h). 슬레이브 모드만 (bit31 마스터 모드 = 자기 ROM은 아직).</summary>
     public double Upd7759Clock;
     /// <summary>QSound 클럭 (VGM B4h, 명령 C4h, ROM 블록 8Fh) — DSP 없는 HLE로 낸다.</summary>
@@ -131,7 +133,7 @@ public sealed class VgmSong
             if (Ym2413Clock > 0) l.Add(Vrc7 ? "VRC7" : "YM2413");
             if (Ym2612Clock > 0) l.Add("YM2612");
             if (Ym2151Clock > 0) l.Add("YM2151");
-            if (Ym2203Clock > 0) l.Add("YM2203");
+            if (Ym2203Clock > 0) l.Add(Ym2203Clock2 > 0 ? "YM2203 ×2" : "YM2203");
             if (Ym2608Clock > 0) l.Add("YM2608");
             if (Ym2610Clock > 0) l.Add(Ym2610B ? "YM2610B" : "YM2610");
             if (Okim6295Clock > 0) l.Add(Okim6295Clock2 > 0 ? "OKIM6295 ×2" : "OKIM6295");
@@ -242,6 +244,7 @@ public static class VgmFormat
         s.Ym2612Clock = hz(0x2C);
         s.Ym2151Clock = hz(0x30);
         s.Ym2203Clock = hz(0x44);
+        if (s.Ym2203Clock > 0 && (clock(0x44) & 0x40000000) != 0) s.Ym2203Clock2 = s.Ym2203Clock;
         s.Ym2608Clock = hz(0x48);
         s.Ym2610Clock = hz(0x4C);
         s.Ym2610B = s.Ym2610Clock > 0 && (clock(0x4C) & 0x80000000) != 0;

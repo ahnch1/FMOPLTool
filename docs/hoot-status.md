@@ -31,6 +31,7 @@
 | 2.0.4 | 8-6 (메가드라이브) | hoot megadrive generic_z80 · iyinc: `Audio/HootMegaDrive.cs` (Z80 사운드 쪽 · 카트리지의 Z80 드라이버를 RAM에, 요청 주소) |
 | 2.0.5 | 8-7 (X68000) | MC68000 `Audio/Cpu/M68000.cs` + hoot x68k generic: `Audio/HootX68k.cs` (OPM · ADPCM · DMA · MFP, E00010h = hoot가 대신 하는 IOCS · DOS) |
 | 2.0.6 | 8-7 (X68000 MIDI) | x68k MIDI 판: YM3802 MIDI 보드 (EAFA00h) → 살아 있는 MIDI 곡 (`HootX68k.LoadMidi`) |
+| 2.1.25 | 8-8p (UPL robokid) | hoot upl robokid (Psychic 5 · Ark Area · Mutant Night · Atomic Robo-kid · Omega Fighter): `Audio/HootUpl.cs` (Z80 + YM2203 × 2), VGM 재생기 듀얼 YM2203 (`VgmSong.Ym2203Clock2`, 명령 A5h) |
 | 2.1.24 | 8-8o (알파 68k2) | hoot alpha 68k2 (Sky Adventure · Gang Wars · Super Champion Baseball · Time Soldiers · Sky Soldiers · Gold Medalist): `Audio/HootAlpha68k.cs` (Z80 + YM2203 + YM2413 + DAC, 주기 NMI) |
 | 2.1.23 | 8-8n (니치부츠) | hoot nichibutsu terracre · terraf: `Audio/HootNichibutsu.cs` (Z80 + YM3526/YM3812 + DAC → VGM YM2612 DAC, 주기 IRQ, 명령 (코드 << 1) | 1) |
 | 2.1.22 | 8-8m (SNK68) | hoot snk 3812 (P.O.W. · SAR · Street Smart · Ikari III): `Audio/HootSnk68.cs` (Z80 + YM3812 + uPD7759, 명령 0Dh × 2 = 음악 켬) |
@@ -77,6 +78,7 @@
 | 네오지오 | 137 / 146 (음악일 만한 코드 10h 이상 3곡까지) | `--hootneosurvey roms 200 6` |
 | 타이토 YM2610 보드 (f2 · b · dual68 · x · fx1a · sonicb) | 67 / 67 (첫 곡이 조용하면 다음 곡 3개까지) | `--hoottaitosurvey roms 200 6` |
 | 데이터 이스트 6502 (cobracom · drgninja · karnov · triothep · lastmisn · makyosen) | 20 / 20, 곡 283 / 285 (무음 2 = cobracom SE 12 · ghostb 효과음 하나) | `--test hootdeco65` (HOOT_SONGS=1 = 곡마다) |
+| UPL robokid | 5 / 5, 108 / 109곡 (남은 하나 = 정지 명령) | `--test hootupl` (HOOT_SONGS=1) |
 | 알파 68k2 | 6 / 6, 83곡 모두 (YM2413 키온) | `--test hootalpha` (HOOT_SONGS=1) |
 | 니치부츠 (terracre · terraf) | 10 / 10, 곡 161 / 161 (terracre 0x00 = 목록의 구분 줄) | `--test hootnichi` (HOOT_SONGS=1) |
 | SNK68 (snk 3812) | 4 / 4, 146곡 모두 (키온 또는 uPD7759) | `--test hootsnk` (HOOT_SONGS=1, HOOT_SNKINIT=16진,… 부팅 명령 바꾸기, HOOT_SNKSCAN=곡 = 부팅 명령 00h~FFh 훑기, HOOT_PC · HOOT_PCQ=주소,…) |
@@ -280,7 +282,11 @@
   - 인터럽트 = 7614Hz 주기 **NMI** (0066h: II 판 = 바로 처리기, V 판 = JP 0100h → JP 처리기 — 다시 시작이 아님, 처음에 잘못 읽어 IRQ로 바꿨다가 되돌림). 처리기가 DAC 샘플을 내고 틱을 세어 8004h · 8003h를 세우면 DI인 주 루프가 RST 38h · RST 30h로 음악 틱
   - 명령: 주 루프가 00h를 두 번 읽어 같으면 받는다 (NMI · IRQ 없음 — 처음엔 명령 NMI로 해서 0066h가 틱으로 한 번만 돌고 조용했음)
   - 곡은 모두 YM2413만 (YM2203 · DAC는 목록 곡에서 안 씀 — 효과음 · 목소리일 듯). DAC는 VGM YM2612 DAC로 내도록 해 둠
-- 다음 (8-8p): Z80 + YM2151 + OKIM6295 작은 보드 (tecmo16 · raizing mahou · bgaregga · banpresto dbz · dooyong …) — MAME 배치를 하나씩 확인해 `HootOpmBoard.Layout`에, atari system1 (6502), 그 뒤 새 칩
+- **8-8p. UPL robokid — ✅ v2.1.25 (5 / 5)** — `Audio/HootUpl.cs`
+  - 배치 (MAME ninjakd2 · psychic5): Z80 5MHz, ROM ~BFFFh, RAM C000h~, 명령 E000h (폴링), I/O 00h · 01h YM2203 #1 · 80h · 81h YM2203 #2 (각 1.5MHz), YM2203 #1 타이머 = IRQ (A = 72 × (1024 − TA), B = 1152 × (256 − TB) 클럭). 다섯 게임이 같은 드라이버 (ROM 스캔: 포트 · E000h · 벡터 같음)
+  - VGM 재생기에 듀얼 YM2203을 더함: 머리말 0x44 클럭 bit30 → `Ym2203Clock2`, 명령 A5h = 둘째 칩 (SN76489 · OKIM6295 둘과 같은 방식). 시험 = A5h로만 키온해서 소리
+  - ninjakid2 (Ninja-kun 아수라)는 사운드 Z80이 MC-8123 암호 (rom key 파일) — 따로
+- 다음 (8-8q): Z80 + YM2151 + OKIM6295 작은 보드 (tecmo16 · raizing mahou · bgaregga · banpresto dbz · dooyong …) — MAME 배치를 하나씩 확인해 `HootOpmBoard.Layout`에, atari system1 (6502), 그 뒤 새 칩
   - 남은 것 (8-8a): "소리 남" 기준이 처음 6초에 키온 하나라 몇 항목은 ADPCM 하나뿐 (driftout · liquidk · megablst 등 첫 곡이 짧은 효과음일 수 있음) — 귀로 확인, bshark (code0 · code1 둘), taito z 계열 다른 보드
 
 ### 남은 문제 (단계와 따로)

@@ -45,7 +45,7 @@ public sealed class VgmPlayer
     }
 
     private readonly List<ExtraChip> extras = new List<ExtraChip>();
-    private ExtraChip xSn2, xOki2, xUpd, xQs, xSpcm;
+    private ExtraChip xSn2, xOki2, xUpd, xQs, xSpcm, xOpn2203b;
     private ExtraChip xSn, xOpll, xOpn2, xOpm, xOpn, xOpna, xOpnb, xOki, xNes, xPce, xNsfx, xMsm, xSaa, xGb;
     /// <summary>YM2612 PCM 데이터 뱅크 (블록 0x00) · 읽는 위치.</summary>
     private byte[] pcmBank = new byte[0];
@@ -93,6 +93,7 @@ public sealed class VgmPlayer
         if (s.Ym2612Clock > 0) l.Add(new OpnChip(OpnChip.Variant.Ym2612, s.Ym2612Clock));
         if (s.Ym2151Clock > 0) l.Add(new Ym2151(s.Ym2151Clock));
         if (s.Ym2203Clock > 0) l.Add(new OpnChip(OpnChip.Variant.Ym2203, s.Ym2203Clock));
+        if (s.Ym2203Clock > 0 && s.Ym2203Clock2 > 0) l.Add(new OpnChip(OpnChip.Variant.Ym2203, s.Ym2203Clock2));   // 둘째 YM2203 (명령 A5h)
         if (s.Ym2608Clock > 0) l.Add(new OpnChip(OpnChip.Variant.Ym2608, s.Ym2608Clock));
         if (s.Ym2610Clock > 0) l.Add(new OpnChip(s.Ym2610B ? OpnChip.Variant.Ym2610B : OpnChip.Variant.Ym2610, s.Ym2610Clock));
         if (s.Okim6295Clock > 0) l.Add(new Okim6295(s.Okim6295Clock, s.OkiPin7, Rate));
@@ -248,7 +249,7 @@ public sealed class VgmPlayer
         }
 
         extras.Clear();
-        xSn2 = null; xOki2 = null; xUpd = null; xQs = null; xSpcm = null;
+        xSn2 = null; xOki2 = null; xUpd = null; xQs = null; xSpcm = null; xOpn2203b = null;
         xSn = xOpll = xOpn2 = xOpm = xOpn = xOpna = xOpnb = xOki = xNes = xPce = xNsfx = xMsm = xSaa = xGb = null;
         foreach (var chip in CreateOtherChips(s))
         {
@@ -268,7 +269,7 @@ public sealed class VgmPlayer
             else if (chip is Msm6258) xMsm = x;
             else if (chip is Saa1099) xSaa = x;
             else if (chip is GbApu) xGb = x;
-            else if (chip is OpnChip o) { if (o.Type == OpnChip.Variant.Ym2612) xOpn2 = x; else if (o.Type == OpnChip.Variant.Ym2203) xOpn = x; else if (o.Type == OpnChip.Variant.Ym2608) xOpna = x; else xOpnb = x; }
+            else if (chip is OpnChip o) { if (o.Type == OpnChip.Variant.Ym2612) xOpn2 = x; else if (o.Type == OpnChip.Variant.Ym2203) { if (xOpn == null) xOpn = x; else xOpn2203b = x; } else if (o.Type == OpnChip.Variant.Ym2608) xOpna = x; else xOpnb = x; }
         }
         pcmLen = 0; pcmPos = 0;
         banks.Clear(); streams.Clear(); anyStream = false;
@@ -420,6 +421,7 @@ public sealed class VgmPlayer
             case 0x53: Other(xOpn2, 1, d[pos + 1], d[pos + 2]); break;
             case 0x54: Other(xOpm, 0, d[pos + 1], d[pos + 2]); break;
             case 0x55: Other(xOpn, 0, d[pos + 1], d[pos + 2]); break;
+            case 0xA5: Other(xOpn2203b, 0, d[pos + 1], d[pos + 2]); break;   // 둘째 YM2203
             case 0x56: Other(xOpna, 0, d[pos + 1], d[pos + 2]); break;
             case 0x57: Other(xOpna, 1, d[pos + 1], d[pos + 2]); break;
             case 0x58: Other(xOpnb, 0, d[pos + 1], d[pos + 2]); break;

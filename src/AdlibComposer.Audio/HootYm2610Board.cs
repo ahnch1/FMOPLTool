@@ -32,12 +32,16 @@ public static class HootYm2610Board
 
     public static readonly Layout Turbofrc = new Layout { Name = "Video System (Turbo Force)", CpuClock = 5000000, Ym = 0x18, BankPort = 0x00, BankShift = 0, Latch = 0x14, RamStart = 0x7800, RamEnd = 0x8000, WindowStart = 0x8000, WindowOffset = 0, BankBase = 0x10000 };
     public static readonly Layout Aerofgt = new Layout { Name = "Video System (Aero Fighters)", CpuClock = 5000000, Ym = 0x00, BankPort = 0x04, BankShift = 0, Latch = 0x0C, RamStart = 0x7800, RamEnd = 0x8000, WindowStart = 0x8000, WindowOffset = 0 };
+    // MAME welltris (Welltris · Quiz 18-Kin): YM 08h, 뱅크 00h (ROM 처음부터), 명령 10h
+    public static readonly Layout Welltris = new Layout { Name = "Video System (Welltris)", CpuClock = 5000000, Ym = 0x08, BankPort = 0x00, BankShift = 0, Latch = 0x10, RamStart = 0x7800, RamEnd = 0x8000, WindowStart = 0x8000, WindowOffset = 0 };
+    // MAME fromanc2 (Taisen Idol-Mahjong Final Romance 2 · R): Z80 8MHz, ROM 0000h~DFFFh, RAM E000h~FFFFh, 명령 00h, YM 08h, ADPCM ROM 하나를 A · B가 같이
+    public static readonly Layout Fromanc2 = new Layout { Name = "Video System (Final Romance 2)", CpuClock = 8000000, Ym = 0x08, BankPort = 0x100, BankShift = 0, Latch = 0x00, RamStart = 0xE000, RamEnd = 0x10000, WindowStart = 0x10000, WindowOffset = 0 };
     public static readonly Layout Gunbird = new Layout { Name = "Psikyo (Gunbird)", CpuClock = 4000000, Ym = 0x04, BankPort = 0x00, BankShift = 4, Latch = 0x08, RamStart = 0x8000, RamEnd = 0x8200, WindowStart = 0x8200, WindowOffset = 0x200 };
 
     public static Layout LayoutOf(string driver, string type)
     {
         string d = (driver ?? "").Trim().ToLowerInvariant(), t = (type ?? "").Trim().ToLowerInvariant();
-        if (d == "videosystem") return t == "turbofrc" ? Turbofrc : t == "aerofgt" ? Aerofgt : null;
+        if (d == "videosystem") return t == "turbofrc" ? Turbofrc : t == "aerofgt" ? Aerofgt : t == "welltris" ? Welltris : t == "fromanc2" ? Fromanc2 : null;
         if (d == "psikyo") return t == "gunbird" ? Gunbird : null;
         return null;
     }
@@ -63,6 +67,7 @@ public static class HootYm2610Board
         foreach (var (type, off, text) in e.Roms)
         {
             var list = type == "code" ? code : type == "adpcma" || type == "adpcm" ? a : type == "adpcmb" ? b : null;
+            if (type == "adpcm" && layout == Fromanc2) { var dd = file(text); if (dd == null) missing.Add(text); else if (off >= 0) { a.Add((off, dd)); b.Add((off, dd)); } continue; }   // A · B 같은 ROM
             if (list == null) { unsupported.Add(type); continue; }
             var d = file(text);
             if (d == null) { missing.Add(text); continue; }
@@ -90,7 +95,7 @@ public static class HootYm2610Board
     {
         public readonly Layout L;
         public readonly byte[] Rom, AdpcmA, AdpcmB;
-        public readonly byte[] Ram = new byte[0x800];
+        public readonly byte[] Ram = new byte[0x2000];
         public readonly Z80 Cpu;
         public readonly List<string> Missing = new List<string>();
         public readonly HashSet<string> Unsupported = new HashSet<string>();

@@ -31,6 +31,7 @@
 | 2.0.4 | 8-6 (메가드라이브) | hoot megadrive generic_z80 · iyinc: `Audio/HootMegaDrive.cs` (Z80 사운드 쪽 · 카트리지의 Z80 드라이버를 RAM에, 요청 주소) |
 | 2.0.5 | 8-7 (X68000) | MC68000 `Audio/Cpu/M68000.cs` + hoot x68k generic: `Audio/HootX68k.cs` (OPM · ADPCM · DMA · MFP, E00010h = hoot가 대신 하는 IOCS · DOS) |
 | 2.0.6 | 8-7 (X68000 MIDI) | x68k MIDI 판: YM3802 MIDI 보드 (EAFA00h) → 살아 있는 MIDI 곡 (`HootX68k.LoadMidi`) |
+| 2.1.65 | 8-9h 더함 (비디오시스템 welltris · fromanc2) | hoot videosystem welltris (Welltris · Quiz 18-Kin) · fromanc2 (Final Romance 2 · R): `HootYm2610Board` 배치 둘 더 |
 | 2.1.64 | 8-9n (윤성) | hoot yunsung nmg5 · pclubys (Multi 5 · Search Eye · Wonder Stick · Puzzle Club · Garogun Seroyang · 7 Ordi): `Audio/HootYunsung.cs` (Z80 + YM3812 + OKIM6295) |
 | 2.1.63 | 8-9m 더함 (세이부 raiden2) | hoot seibu raiden2 (Raiden II · Raiden DX): `HootSeibu` YM2151 + OKIM6295 × 2 변형 |
 | 2.1.62 | 8-9m (세이부 사운드 시스템) | hoot seibu raiden (Raiden · Toki no Mahjong Paradise · Heated Barrel · Seibu Cup Soccer): `Audio/HootSeibu.cs` (Z80 + YM3812 + OKIM6295) |
@@ -123,7 +124,7 @@
 | SNK68 (snk 3812) | 4 / 4, 146곡 모두 (키온 또는 uPD7759) | `--test hootsnk` (HOOT_SONGS=1, HOOT_SNKINIT=16진,… 부팅 명령 바꾸기, HOOT_SNKSCAN=곡 = 부팅 명령 00h~FFh 훑기, HOOT_PC · HOOT_PCQ=주소,…) |
 | 토아플랜 1 · Twin Cobra (generic) | 9 / 9, 125곡 모두 (키온) | `--test hoottoaplan` (HOOT_SONGS=1 = 곡마다, HOOT_PROBE=1 = I/O 포트 · 68000 쪽 RAM 후보) |
 | 타이토 YM2151 보드 (fullt) · 타이토 B YM2203 (masterw · viofight) | 15 / 15, 241곡 모두 (FM 키온 또는 MSM 바이트) | `--test hoottaitoopm` (HOOT_SONGS=1 = 곡마다, HOOT_REGS · HOOT_PC · HOOT_PCQ · HOOT_RAM · HOOT_MSMLOG) |
-| 비디오시스템 · 사이쿄 YM2610 | 9 / 9, 169곡 모두 | `--test hoot2610` (HOOT_SONGS=1) |
+| 비디오시스템 · 사이쿄 YM2610 | 13 / 13, 275곡 모두 (welltris · fromanc2 106곡 더함) | `--test hoot2610` (HOOT_SONGS=1) |
 | 코나미 K007232 (scontra · thundercross · salamander · hcastle · crimfght · twin16 · battlantis) | 21 / 21, 431곡 중 424 (무음 = 00h 머리 · 정지 항목 6 · Thunder Cross 8Fh) | `--test hootk7232` (HOOT_SONGS=1) |
 | 코나미 System GX (systemgx) | 17 / 17, 489곡 모두 | `--test hootgx` (HOOT_SONGS=1) |
 | 세가 System 18 · 32 (system18 · system32) | 15 / 15, 388 / 397곡 (남은 9 = 정지 명령) | `--test hoots18` (RF5C68 합성 포함, HOOT_SONGS=1) |
@@ -442,6 +443,7 @@
   - VGM 둘째 YM2612 (`Ym2612Clock2`, A2h · A3h). Shadow Dancer의 xml 이름 "mpr-12715.b4b4" → `FindFile` 앞부분 맞춤
   - v2.1.46 System 32 (MAME segas32): Z80 · YM3438 8.05MHz, RF5C68 12.5MHz, 명령 = 공유 RAM E000h~E008h 큐 (빈 칸 80h 또는 00h — 판마다, 드라이버가 한 틱에 하나씩 밀어냄), 박자 = YM 타이머 A 폴링 (인터럽트 안 씀), 뱅크 = 포트 A0h (아래 6비트) · B0h (bit2 → 6, bit0~1 → 7~8) → 사운드 영역 100000h + 뱅크 × 2000h (100000h~ = 코드 롬 거울, 200000h + hoot 오프셋 = PCM 롬, 1MB 칸 거울)
 - **8-9h. 비디오시스템 · 사이쿄 Z80 + YM2610 — ✅ v2.1.49 (9 / 9, 169곡)** — `Audio/HootYm2610Board.cs`
+  - v2.1.65 welltris (MAME welltris: YM 08h, 뱅크 00h — ROM 처음부터, 명령 10h, RAM 7800h) · fromanc2 (MAME fromanc2: Z80 8MHz, ROM ~DFFFh, RAM E000h~FFFFh, 명령 00h, YM 08h, rom adpcm 하나를 ADPCM-A · B가 같이). f1gp는 아직 (f1gp 11곡 중 6 무음, f1gp2는 IRQ가 쉬지 않음 — 타이머 A 확인 필요)
   - 같은 드라이버 계열 (NMI 처리기가 래치를 7801h 링에, IRQ = YM2610 타이머), 포트만 다름: turbofrc = YM 18h · 래치 14h · 뱅크 00h (값 & 3, **영역 10000h부터** — 처음 0부터로 해 Spinal Breakers · Power Spikes 곡 절반이 무음), aerofgt = YM 00h · 뱅크 04h · 래치 0Ch, gunbird = YM 04h · 뱅크 00h ((값 >> 4) & 3, 창은 8200h · 뱅크의 200h부터) · 래치 08h · RAM 8000h
 - **8-9i. 코나미 Z80 + YM2151 + K007232 — ✅ v2.1.50 (6 / 6, 84 / 89곡)** — `Audio/HootKonamiK007232.cs`, 새 칩 `Audio/Chips/K007232.cs`
   - MAME thunderx scontra_sound_map: Z80 3.58MHz, RAM 8000h, A000h 래치 (IRQ hold), B000h~B00Dh K007232 (12 = 바깥 포트 → 음량 위 니블 채널 0 · 아래 채널 1), C000h · C001h YM2151 (타이머 폴링), F000h 뱅크 (채널마다 2비트, 128KB 단위)

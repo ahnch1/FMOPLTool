@@ -77,7 +77,7 @@ public static class HootArchive
                 || t == "053260"                                                                           // Z80 + YM2151 + K053260 (HootKonami53260)
                 || t == "054539" || t == "054539x2"                                                        // Z80 + (YM2151) + K054539 × 1~2 (HootKonami54539)
                 || t == "systemgx";                                                                        // 68000 + K054539 × 2 (HootKonamiGx)
-            case "videosystem": return t == "turbofrc" || t == "aerofgt";                                 // Z80 + YM2610 (HootYm2610Board)
+            case "videosystem": return t == "turbofrc" || t == "aerofgt" || t == "welltris" || t == "fromanc2";                                 // Z80 + YM2610 (HootYm2610Board)
             case "psikyo": return t == "gunbird";                                                         // Z80 + YM2610 (HootYm2610Board)
             case "atari": return t == "system1";                                                         // 6502 + YM2151 + POKEY (HootAtariSys1, TMS5220 없음)
             case "megadrive": return t == "generic_z80" || t == "iyinc" || t == "1c00" || t == "koei";

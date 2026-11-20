@@ -9,7 +9,7 @@ namespace AdlibComposer.SelfTest;
 /// <summary>hoot 비디오시스템 · 사이쿄 Z80 + YM2610 (HootYm2610Board): 실제 zip, 진단 (HOOT_SONGS = 곡마다).</summary>
 public static class HootYm2610BoardTests
 {
-    public static readonly string[] Archives = { "spinlbrk", "pspikes", "karatblz", "turbofrc", "aerofgt", "gstriker", "gunbird", "btlkroad", "s1945jn" };
+    public static readonly string[] Archives = { "spinlbrk", "pspikes", "karatblz", "turbofrc", "aerofgt", "gstriker", "gunbird", "btlkroad", "s1945jn", "welltris", "quiz18k", "fromanc2", "fromancr" };
 
     public static void Run(Action<string, bool, string> check)
     {

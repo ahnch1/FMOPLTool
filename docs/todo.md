@@ -82,6 +82,8 @@
 - [x] 세이부 raiden 4 · 68곡 — v2.1.62 `HootSeibu` (hoot ROM은 암호 풀림), 61곡
 - [x] 세이부 raiden2 2 · 31곡 — v2.1.63, 29곡
 - [x] 윤성 nmg5 3 · pclubys 3 · 64곡 — v2.1.64 `HootYunsung`, 모두
+- [x] 비디오시스템 welltris 2 · fromanc2 2 · 106곡 — v2.1.65 `HootYm2610Board`, 모두
+- [ ] 비디오시스템 f1gp 2 (f1gp 6 / 11 무음, f1gp2 IRQ 폭주)
 - [ ] 세가 System 24 4 — 68000 + YM2151 (MC68000 있음)
 - [ ] 세가 SG-1000 7 — Z80 + SN76489
 - [x] 아타리 System 1 4 · 275곡 — v2.1.30: `HootAtariSys1` (6502 + YM2151, 1820h bit7 = 자가 시험 끔), 179 / 275곡 (v2.1.31 POKEY), 무음 96 = TMS5220 음성 (4장), Road Blasters는 곡 목록 없음

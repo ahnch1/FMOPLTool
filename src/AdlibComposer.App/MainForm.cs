@@ -112,7 +112,7 @@ internal sealed class MainForm : Form
         jukebox.PreferencesRequested += ShowPreferences;
         player = jukebox;
         hootBrowser = new HootBrowser(delegate { return settings; }) { Dock = DockStyle.Fill, Visible = false };
-        hootJukebox = new JukeboxView(ws, delegate { return settings; }, TryOpenAudio, hootBrowser) { Dock = DockStyle.Fill, Visible = false };
+        hootJukebox = new JukeboxView(ws, delegate { return settings; }, TryOpenAudio, hootBrowser, hootLayout: true) { Dock = DockStyle.Fill, Visible = false };
         hootJukebox.PreferencesRequested += ShowPreferences;
         hootBrowser.PreferencesRequested += ShowPreferences;
         hootBrowser.SongActivated += p => { if (page == AppPage.Hoot) hootJukebox.Play(p); };

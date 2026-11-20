@@ -146,6 +146,8 @@ internal sealed class PlayerDisplay : DeckControl
     /// <summary>아래 표시 방식 (맨 아래 단추 줄: Implay · Ocplay · 노래방). 단추를 누르면 ViewModeRequested.</summary>
     public JukeboxViewMode ViewMode = JukeboxViewMode.Implay;
     public event Action<JukeboxViewMode> ViewModeRequested;
+    /// <summary>false = 맨 아래 표시 방식 단추 줄을 그리지 않음 (Hoot 페이지: 가사가 없어 고를 것이 없다).</summary>
+    public bool ShowModes = true;
     private static readonly string[] ModeNames = { "Implay", "Ocplay", "노래방", "노래방(Cyberfunk)" };
     private static readonly string[] ModeTips = { "Implay: 가사 + 채널 믹서", "Ocplay: 가사 + 작은 악보 · 세로 음량 막대", "노래방: 곡 폴더의 그림 + 가사",
         "노래방(Cyberfunk): 흐르는 별 · 우주 유영 · 튕기는 도형 + 가사 (오른쪽 위 체크박스로 켜고 끄기)" };
@@ -221,7 +223,8 @@ internal sealed class PlayerDisplay : DeckControl
         }
         else
             DeckTheme.InsetText(g, new Rectangle(pad, y, lw, rowH), "왼쪽 목록에서 곡을 두 번 클릭하면 재생합니다", DeckTheme.Mono, DeckTheme.Muted, left);
-        ModeRow(g, new Rectangle(pad, Height - pad - rowH, lw, rowH));
+        if (ShowModes) ModeRow(g, new Rectangle(pad, Height - pad - rowH, lw, rowH));
+        else for (int i = 0; i < modeRects.Length; i++) modeRects[i] = Rectangle.Empty;
     }
 
     /// <summary>상태 줄: 한 칸 안에 왼쪽 시간 (초록 LCD), 가운데 템포 · 속도 · 키 · 볼륨, 오른쪽 상태 · 모드.</summary>

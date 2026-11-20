@@ -103,8 +103,10 @@ internal sealed class JukeboxView : UserControl, IShellPage
     private InstrumentBank defaultBank;
     private string defaultBankPath;
 
-    public JukeboxView(Workspace ws, Func<AppSettings> settings, Func<bool> openAudio, ISongList browser)
+    /// <param name="hootLayout">Hoot 페이지: 가사가 없으므로 표시 방식 단추 · 가사 상자를 빼고, 믹서 (Implay)와 작은 악보 (Ocplay)를 좌우로 함께 보인다.</param>
+    public JukeboxView(Workspace ws, Func<AppSettings> settings, Func<bool> openAudio, ISongList browser, bool hootLayout = false)
     {
+        this.hootLayout = hootLayout;
         this.ws = ws;
         this.browser = browser;
         this.settings = settings;
@@ -197,6 +199,10 @@ internal sealed class JukeboxView : UserControl, IShellPage
     private readonly KaraokeView karaoke = new KaraokeView { Dock = DockStyle.Fill, Visible = false };
     private readonly CyberView cyber = new CyberView { Dock = DockStyle.Fill, Visible = false };
     private JukeboxViewMode viewMode = JukeboxViewMode.Implay;
+    /// <summary>Hoot 페이지 배치 (생성자 hootLayout): 믹서 | 작은 악보 좌우, 가사 · 표시 방식 없음.</summary>
+    private readonly bool hootLayout;
+    /// <summary>Hoot 배치에서 믹서와 작은 악보 사이 틈.</summary>
+    private readonly Panel sideGap = new Panel { Dock = DockStyle.Left, Width = 8, BackColor = DeckTheme.Back, Visible = false };
     private readonly FlowLayoutPanel trackRow = new FlowLayoutPanel();
     private readonly Label trackLabel = new Label();
     /// <summary>지금 곡이 든 파일의 곡 목록 (곡이 하나뿐인 파일이면 null).</summary>
@@ -515,8 +521,9 @@ internal sealed class JukeboxView : UserControl, IShellPage
         mixer.MuteToggled += v => SetMute(v, !options.VoiceMute[v]);
         mixer.SoloRequested += Solo;
         mixer.PitchStep += (v, d) => SetVoicePitch(v, options.VoiceTranspose[v] + d);
-        stage.Controls.Add(mixer);
         stage.Controls.Add(ocView);
+        if (hootLayout) { stage.Controls.Add(sideGap); stage.Controls.Add(mixer); }   // 독은 뒤에 넣은 것부터: 믹서 (왼쪽) · 틈 · 악보 (나머지)
+        else stage.Controls.Add(mixer);
         stage.Controls.Add(karaoke);
         stage.Controls.Add(cyber);
         stage.Controls.Add(lyricGap);
@@ -530,11 +537,13 @@ internal sealed class JukeboxView : UserControl, IShellPage
         karaoke.ChooseFolderRequested += ChooseKaraokeFolder;
         cyber.LayerText = settings().CyberLayers;
         cyber.LayersChanged += delegate { settings().CyberLayers = cyber.LayerText; SaveSettings(); };
-        string saved = settings().JukeboxView ?? "";
+        string saved = hootLayout ? "implay" : settings().JukeboxView ?? "";
+        display.ShowModes = !hootLayout;
         ApplyViewMode(saved == "ocplay" ? JukeboxViewMode.Ocplay : saved == "karaoke" ? JukeboxViewMode.Karaoke : saved == "cyber" ? JukeboxViewMode.Cyber : JukeboxViewMode.Implay);
         // 가사는 176px까지, 자리가 모자라면 믹서(4줄 이상)를 먼저 두고 줄인다
         stage.SizeChanged += delegate
         {
+            if (hootLayout) { int mw = Math.Max(120, (stage.ClientSize.Width - sideGap.Width) / 2); if (mixer.Width != mw) mixer.Width = mw; return; }
             int h = Math.Max(56, Math.Min(88, stage.Height - lyricGap.Height - 4 * 35 - 16));   // 가사는 88px까지 (아래 믹서 · 악보를 크게)
             if (lyrics.Height != h) lyrics.Height = h;
         };
@@ -594,7 +603,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
     /// <summary>곡 정보 상자의 단추로 표시 방식을 바꾸고 설정에 남긴다.</summary>
     private void SetViewMode(JukeboxViewMode m)
     {
-        if (m == viewMode) return;
+        if (m == viewMode || hootLayout) return;
         ApplyViewMode(m);
         settings().JukeboxView = m == JukeboxViewMode.Ocplay ? "ocplay" : m == JukeboxViewMode.Karaoke ? "karaoke" : m == JukeboxViewMode.Cyber ? "cyber" : "implay";
         SaveSettings();
@@ -604,6 +613,20 @@ internal sealed class JukeboxView : UserControl, IShellPage
     {
         viewMode = m;
         stage.SuspendLayout();
+        if (hootLayout)
+        {
+            // Hoot: 믹서 (왼쪽 절반) | 작은 악보 (오른쪽), 가사 · 노래방 없음
+            mixer.Dock = DockStyle.Left;
+            mixer.Width = Math.Max(120, (stage.ClientSize.Width - sideGap.Width) / 2);
+            mixer.Visible = ocView.Visible = sideGap.Visible = true;
+            karaoke.Visible = cyber.Visible = lyrics.Visible = lyricGap.Visible = false;
+            stage.ResumeLayout();
+            display.ViewMode = m;
+            display.Invalidate();
+            ocView.Clear();
+            RefreshMixer();
+            return;
+        }
         mixer.Visible = m == JukeboxViewMode.Implay;
         ocView.Visible = m == JukeboxViewMode.Ocplay;
         karaoke.Visible = m == JukeboxViewMode.Karaoke;

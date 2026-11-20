@@ -9,7 +9,7 @@ namespace AdlibComposer.SelfTest;
 /// <summary>hoot 타이토 Bubble Bobble (HootTaitoBubble, type bubblebobble): 실제 zip, 진단 (HOOT_SONGS = 곡마다).</summary>
 public static class HootTaitoBubbleTests
 {
-    public static readonly string[] Archives = { "bublbobl", "tokio" };
+    public static readonly string[] Archives = { "bublbobl", "tokio", "bublboblp" };
 
     public static void Run(Action<string, bool, string> check)
     {

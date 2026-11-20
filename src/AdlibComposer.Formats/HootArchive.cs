@@ -60,7 +60,7 @@ public static class HootArchive
             case "taito": return t == "f2system" || t == "bsystem" || t == "dual68" || t == "xsystem" || t == "fx1a" || t == "sonicb"   // Z80 + YM2610 + TC0140SYT
                 || t == "fullt"    // Z80 + YM2151 + MSM5205 + TC0140SYT (HootTaitoOpm)
                 || t == "masterw" || t == "viofight"   // 타이토 B: Z80 + YM2203 (+ OKIM6295) + TC0140SYT (HootTaitoOpm)
-                || t == "bubblebobble"                 // Z80 + YM2203 + YM3526 (HootTaitoBubble)
+                || t == "bubblebobble" || t == "tokio" // Z80 + YM2203 + YM3526 (HootTaitoBubble)
                 || t == "taitosj"; // Z80 + AY × 3 + DAC (HootTaitoSj)
             case "seibu": return t == "raiden" || t == "raiden2";
             case "yunsung": return t == "nmg5" || t == "pclubys";                                          // Z80 + YM3812 + OKIM6295 (HootYunsung)                                                          // Z80 + YM3812 + OKIM6295 (HootSeibu)

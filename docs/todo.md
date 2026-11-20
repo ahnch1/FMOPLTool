@@ -123,6 +123,7 @@
 - [ ] SNK mainsnk 2 · Victory Road 목소리 D2h~DBh
 - [x] 타이토 masterw 3 · viofight 3 · 94곡 — v2.1.60 `HootTaitoOpm` YM2203 변형, 모두
 - [x] 타이토 bubblebobble 2 · 28곡 — v2.1.61 `HootTaitoBubble`, 26곡
+- [x] 타이토 tokio 2 · 52곡 — v2.1.70 같은 보드 tokio 배치, 51곡
 - [ ] 세가 model2 4 · system_multi 4 (315-5560 = MultiPCM)
 - [ ] 코나미 hornet 8 · gticlub 4 — RF5C400 (CPU 68000)
 

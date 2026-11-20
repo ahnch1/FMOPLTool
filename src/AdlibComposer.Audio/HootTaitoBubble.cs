@@ -11,6 +11,7 @@ namespace AdlibComposer.Audio;
 /// hoot 타이토 Bubble Bobble 보드 (driver taito, type bubblebobble: Bubble Bobble · Tokio (hoot가 고친 ROM = 같은 배치)): 사운드 CPU를 흉내 낸다.
 /// <para>기계 (MAME bublbobl sound_map + 디스어셈블): Z80 3MHz, 0000h~7FFFh ROM, 8000h~8FFFh RAM, 9000h · 9001h = YM2203 (3MHz), A000h · A001h = YM3526 (3MHz),
 /// B000h 읽기 = 명령 (오면 대기 → NMI 켜져 있으면 NMI), B001h 쓰기 = NMI 켬, B002h = NMI 끔, E000h~ ROM (없으면 FFh). IRQ = 두 YM의 타이머 (레벨).</para>
+/// <para>type tokio (Tokio 원래 ROM · Bubble Bobble 시제품, MAME tokio_sound_map): 9000h = 명령 (쓰기 = 답), 9800h = 답 상태, A000h = NMI 끔 · A800h = 켬, B000h · B001h = YM2203, YM3526 없음.</para>
 /// <para>곡: rom code = Z80 ROM. 부팅 1초 뒤 명령, 180초를 YM2203 + YM3526 VGM으로.</para>
 /// </summary>
 public static class HootTaitoBubble
@@ -21,7 +22,8 @@ public static class HootTaitoBubble
     public static bool Handles(string driver, string type)
     {
         if (!string.Equals((driver ?? "").Trim(), "taito", StringComparison.OrdinalIgnoreCase)) return false;
-        return (type ?? "").Trim().ToLowerInvariant() == "bubblebobble";
+        string t = (type ?? "").Trim().ToLowerInvariant();
+        return t == "bubblebobble" || t == "tokio";
     }
 
     public static VgmSong Render(HootArchive.Entry e, string dir, int code, double seconds = DefaultSeconds, double fade = DefaultFade)
@@ -48,7 +50,7 @@ public static class HootTaitoBubble
             any = true;
         }
         if (!any) missing.Add("(code)");
-        var m = new Machine(rom);
+        var m = new Machine(rom) { TokioMap = (e.Type ?? "").Trim().ToLowerInvariant() == "tokio" };
         if (Environment.GetEnvironmentVariable("HOOT_DEBUG") != null) m.PcCount = new Dictionary<int, int>();
         m.Missing.AddRange(missing);
         foreach (var u in unsupported) m.Unsupported.Add(u);
@@ -69,6 +71,8 @@ public static class HootTaitoBubble
         /// <summary>칩 쓰기: chip 0 = YM2203, 1 = YM3526.</summary>
         public readonly List<(double t, int chip, int reg, int val)> Log = new List<(double, int, int, int)>();
         public int Irqs, Nmis, LatchReads;
+        /// <summary>Tokio 원래 배치 (9000h 명령, A000h · A800h NMI, B000h YM2203).</summary>
+        public bool TokioMap;
         public readonly Dictionary<int, int> OtherWrites = new Dictionary<int, int>(), OtherReads = new Dictionary<int, int>();
 
         private int latch, opnAddr, oplAddr;
@@ -177,6 +181,18 @@ public static class HootTaitoBubble
             a &= 0xFFFF;
             if (a < 0x8000 || a >= 0xE000) return Rom[a];
             if (a < 0x9000) return Ram[a - 0x8000];
+            if (TokioMap)
+            {
+                switch (a)
+                {
+                    case 0x9000: LatchReads++; pending = false; UpdateNmi(); return (byte)latch;
+                    case 0x9800: return 0;
+                    case 0xB000: return (byte)tflags;
+                    case 0xB001: return opnAddr < 0x10 ? ssg[opnAddr] : (byte)0;
+                }
+                OtherReads.TryGetValue(a, out int c0); OtherReads[a] = c0 + 1;
+                return 0xFF;
+            }
             if (a == 0x9000) return (byte)tflags;
             if (a == 0x9001) return opnAddr < 0x10 ? ssg[opnAddr] : (byte)0;   // SSG 레지스터 되읽기 (부팅 때 7h = 3Fh를 확인, 아니면 RST 0)
             if (a == 0xA000 || a == 0xA001) return (byte)oflags;
@@ -191,6 +207,19 @@ public static class HootTaitoBubble
             a &= 0xFFFF;
             if (a >= 0x8000 && a < 0x9000) { Ram[a - 0x8000] = v; return; }
             if (a < 0x8000 || a >= 0xE000) return;
+            if (TokioMap)
+            {
+                switch (a)
+                {
+                    case 0x9000: return;
+                    case 0xA000: nmiEnabled = false; UpdateNmi(); return;
+                    case 0xA800: nmiEnabled = true; UpdateNmi(); return;
+                    case 0xB000: opnAddr = v; return;
+                    case 0xB001: OpnWrite(opnAddr, v); return;
+                }
+                OtherWrites.TryGetValue(a, out int c0); OtherWrites[a] = c0 + 1;
+                return;
+            }
             switch (a)
             {
                 case 0x9000: opnAddr = v; return;

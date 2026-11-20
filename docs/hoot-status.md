@@ -31,6 +31,7 @@
 | 2.0.4 | 8-6 (메가드라이브) | hoot megadrive generic_z80 · iyinc: `Audio/HootMegaDrive.cs` (Z80 사운드 쪽 · 카트리지의 Z80 드라이버를 RAM에, 요청 주소) |
 | 2.0.5 | 8-7 (X68000) | MC68000 `Audio/Cpu/M68000.cs` + hoot x68k generic: `Audio/HootX68k.cs` (OPM · ADPCM · DMA · MFP, E00010h = hoot가 대신 하는 IOCS · DOS) |
 | 2.0.6 | 8-7 (X68000 MIDI) | x68k MIDI 판: YM3802 MIDI 보드 (EAFA00h) → 살아 있는 MIDI 곡 (`HootX68k.LoadMidi`) |
+| 2.1.70 | 8-9l 더함 (타이토 tokio) | hoot taito tokio (Tokio 원래 ROM · Bubble Bobble 시제품): `HootTaitoBubble` tokio 배치 (9000h 명령, A000h · A800h NMI, B000h YM2203) |
 | 2.1.69 | 캡콤 Exed Exes | hoot capcom exedexes: `Audio/HootCapcomPsg.cs` (Z80 + AY-3-8910 + SN76489 × 2, MAME exedexes) |
 | 2.1.68 | 캡콤 Bionic Commando | hoot capcom bionicc: `HootOpmBoard.BionicCommando` (MAME bionicc: 8000h YM2151 상태 폴링, A000h 명령 NMI, RAM C000h, OKI 없음) |
 | 2.1.67 | 캡콤 YM2203 × 2 더함 (Commando) | hoot capcom commando: `HootCapcomOpn` 배치에 RAM 자리 (Commando = 4000h — 처음엔 C000h 고정이라 스택이 안 써져 다시 부팅) |
@@ -139,7 +140,7 @@
 | 코나미 Z80 + AY (scramble · timeplt · pooyan · frogger) | 15 / 15, 139 / 200 (pooyan 18 / 18, frogger 34 / 40) — 무음 41 = 한 곡을 채널마다 나눈 ch2 · ch3 파트와 일부 BGM (혼자 보내면 AY 쓰기 없음) | `--test hootkonay` (HOOT_SONGS=1) |
 | 코나미 Z80 + YM2203 (ironhors) | 2 / 2, 40곡 모두 | `--test hootih` (HOOT_SONGS=1) |
 | SNK OPL (3526_8950 · 3526x2 · fitegolf) | 10 / 10, 372곡 중 347 (무음 25 = 머리 줄 · Victory Road 목소리 D2h~DBh) (무음 77 = Y8950 ADPCM 목소리 · 머리 줄) | `--test hootsnkopl` (HOOT_SONGS=1) |
-| 타이토 Bubble Bobble (bubblebobble) | 2 / 2, 28곡 중 26 (무음 = 머리 줄 · SSG-OFF) | `--test hootbub` (HOOT_SONGS=1, HOOT_DEBUG=1 = PC 표) |
+| 타이토 Bubble Bobble (bubblebobble · tokio) | 4 / 4, 80곡 중 77 (무음 = 머리 줄 · SSG-OFF · 시제품 1Ch) | `--test hootbub` (HOOT_SONGS=1, HOOT_DEBUG=1 = PC 표) |
 | 세이부 사운드 시스템 (raiden · raiden2) | 6 / 6, 99곡 중 90 (무음 = Raiden 북 파트 · Cup Soccer 홀수 번호 · raiden2 둘) | `--test hootseibu` (HOOT_SONGS=1) |
 | 윤성 (nmg5 · pclubys) | 6 / 6, 64곡 모두 | `--test hootys` (HOOT_SONGS=1) |
 | 아이렘 M62 / M52 (m62) | 15 / 15, 137 / 145 (남은 8 = Traverse USA 효과음 — MSM #2로 보임) | `--test hootm62` (HOOT_SONGS=1) |
@@ -468,6 +469,7 @@
   - v2.1.59 Y8950 ADPCM (MAME ymdeltat): 07h 제어 (bit7 시작 · bit4 되풀이 · bit0 리셋), 09h~0Ch 시작 · 끝 × 32바이트, 10h · 11h 델타-N (속도 = 4MHz ÷ 72 × N ÷ 65536), 12h 음량 → 칩 `Y8950Adpcm`, 이 프로그램 안 명령 DCh rr vv 00, ROM = rom pcm. Victory Road 목소리 D2h~DBh는 아직 무음 (리셋 줄 뒤 항목 — 앞 명령이 필요할 수 있음)
 - **8-9l. 타이토 Bubble Bobble — ✅ v2.1.61 (2 / 2, 26 / 28곡)** — `Audio/HootTaitoBubble.cs`
   - MAME bublbobl sound_map: Z80 3MHz, RAM 8000h~8FFFh, 9000h YM2203 · A000h YM3526 (둘 다 3MHz, 타이머 = IRQ), B000h 명령 (대기 → NMI, B001h 켬 · B002h 끔). Tokio는 hoot가 고친 ROM이라 같은 배치 (YM3526 없음, 9800h 읽기 = 응답 래치 상태 → 0)
+  - v2.1.70 type tokio (MAME tokio_sound_map, 고치지 않은 ROM): 9000h 명령 (쓰기 = 답), 9800h 답 상태 (0), A000h NMI 끔 · A800h 켬, B000h · B001h YM2203. Bubble Bobble 시제품 (bublboblp) 41곡 중 40
   - 부팅 때 YM2203 SSG 7h에 3Fh를 써서 되읽음 (9001h) — 다르면 RST 0으로 다시 부팅. 소리 켬 = 명령 EFh (8FAAh 깃발, EEh = 끔) — 부팅 뒤 먼저 보냄
 - **8-9m. 세이부 사운드 시스템 — ✅ v2.1.62 (4 / 4, 61 / 68곡)** — `Audio/HootSeibu.cs`
   - MAME seibusound.cpp: Z80 3.58MHz, ROM 0000h~7FFFh (hoot ROM은 SEI80BU 암호를 푼 것) + 8000h~FFFFh = 뒤 32KB, RAM 2000h~27FFh, 4008h · 4009h YM3812, 4010h · 4011h 명령 낱말, 4012h 답 대기 (0), 6000h OKIM6295 1MHz 핀7 높음

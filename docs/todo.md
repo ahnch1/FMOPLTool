@@ -95,11 +95,10 @@
 - [ ] 타이토 F3 (f3system) 36 · 739곡 — 68000 + **ES5505** (+ ES5510 DSP는 빼고) + MC68681 DUART 타이머
 - [x] 코나미 K053260 11 · 616곡 — v2.1.43 `HootKonami53260` + K053260 칩, 606곡
 - [x] 코나미 K054539 Z80 판 (054539 4 · 054539x2 6) · 267곡 — v2.1.44 `HootKonami54539` + K054539 칩, 266곡
-- [ ] 코나미 System GX 17 (68000 사운드 + K054539 × 2)
 - [ ] 아이렘 M92 (m92) 16 — V35 (x86 계열) + YM2151 + **GA20**
 - [x] 세가 System 18 6 · 251곡 — v2.1.45 `HootSegaSystem18` + RF5C68 칩 + VGM 둘째 YM2612, 246곡
 - [x] 세가 System 32 9 · 146곡 — v2.1.46 (`HootSegaSystem18` System 32 배치), 정지 명령 빼고 모두
-- [ ] 코나미 System GX 17 — 시도함 (68000 부팅이 기다리는 것 모름, hoot-status 참고)
+- [x] 코나미 System GX 17 · 489곡 — v2.1.47 `HootKonamiGx` (68000 + K054539 × 2 at 200000h), 모두
 - [ ] 코나미 twin16 5 (K007232 + uPD7759) 등 K007232 보드 (aliens · scontra · gradius3 …)
 - [ ] 세가 model2 4 · system_multi 4 (315-5560 = MultiPCM)
 - [ ] 코나미 hornet 8 · gticlub 4 — RF5C400 (CPU 68000)

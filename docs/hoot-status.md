@@ -31,6 +31,7 @@
 | 2.0.4 | 8-6 (메가드라이브) | hoot megadrive generic_z80 · iyinc: `Audio/HootMegaDrive.cs` (Z80 사운드 쪽 · 카트리지의 Z80 드라이버를 RAM에, 요청 주소) |
 | 2.0.5 | 8-7 (X68000) | MC68000 `Audio/Cpu/M68000.cs` + hoot x68k generic: `Audio/HootX68k.cs` (OPM · ADPCM · DMA · MFP, E00010h = hoot가 대신 하는 IOCS · DOS) |
 | 2.0.6 | 8-7 (X68000 MIDI) | x68k MIDI 판: YM3802 MIDI 보드 (EAFA00h) → 살아 있는 MIDI 곡 (`HootX68k.LoadMidi`) |
+| 2.1.47 | 8-9g (코나미 System GX) | hoot konami systemgx (17항목: Fantastic Journey · Lethal Enforcers II · Golfing Greats 2 · Puzzle Dama · Racin' Force · Soccer Superstars · Dragoon Might · Taisen Puzzle-dama · Tokimeki Memorial · Daisu-Kiss · Run and Gun 2 · Rushing Heroes · Salamander 2 · Sexy Parodius · Tokkae · Versus Net Soccer · Winning Spike): `Audio/HootKonamiGx.cs` (68000 + K054539 × 2) |
 | 2.1.46 | 8-9f 더함 (세가 System 32) | hoot sega system32 (Air Rescue · Spider-Man · Arabian Fight · Burning Rival · Golden Axe RoG · Holosseum · Dark Edge · F1 Super Lap · F1 Exhaust Note): `HootSegaSystem18` System 32 배치 |
 | 2.1.45 | 8-9f (세가 System 18) | 새 칩 RF5C68: `Audio/Chips/Rf5c68.cs`, VGM 둘째 YM2612 · RF5C68, hoot sega system18 (Shadow Dancer · Alien Storm · Bloxeed · Moonwalker · Clutch Hitter · Pontoon): `Audio/HootSegaSystem18.cs`; `FindFile` 앞부분 맞춤 대안 |
 | 2.1.44 | 8-9e (코나미 K054539, Z80 판) | 새 칩 K054539: `Audio/Chips/K054539.cs` (VGM A0h · D3h · 8Ch, 둘), hoot konami 054539 · 054539x2 (Xexex · Bucky O'Hare · Moo Mesa · X-Men · Poly-Net Warriors · Run and Gun · Metamorphic Force · Martial Champion · Mystic Warriors · Violent Storm): `Audio/HootKonami54539.cs` |
@@ -105,6 +106,7 @@
 | SNK68 (snk 3812) | 4 / 4, 146곡 모두 (키온 또는 uPD7759) | `--test hootsnk` (HOOT_SONGS=1, HOOT_SNKINIT=16진,… 부팅 명령 바꾸기, HOOT_SNKSCAN=곡 = 부팅 명령 00h~FFh 훑기, HOOT_PC · HOOT_PCQ=주소,…) |
 | 토아플랜 1 · Twin Cobra (generic) | 9 / 9, 125곡 모두 (키온) | `--test hoottoaplan` (HOOT_SONGS=1 = 곡마다, HOOT_PROBE=1 = I/O 포트 · 68000 쪽 RAM 후보) |
 | 타이토 YM2151 보드 (fullt) | 9 / 9, 147곡 모두 (FM 키온 또는 MSM 바이트) | `--test hoottaitoopm` (HOOT_SONGS=1 = 곡마다, HOOT_REGS · HOOT_PC · HOOT_PCQ · HOOT_RAM · HOOT_MSMLOG) |
+| 코나미 System GX (systemgx) | 17 / 17, 489곡 모두 | `--test hootgx` (HOOT_SONGS=1) |
 | 세가 System 18 · 32 (system18 · system32) | 15 / 15, 388 / 397곡 (남은 9 = 정지 명령) | `--test hoots18` (RF5C68 합성 포함, HOOT_SONGS=1) |
 | 코나미 K054539 (054539 · 054539x2) | 10 / 10, 266 / 267곡 | `--test hootk54` (K054539 합성 포함, HOOT_SONGS=1, HOOT_DEBUG=1 = YM2151 타이머) |
 | 코나미 K053260 (053260) | 11 / 11, 606 / 616곡 (남은 10 = 정지 명령 7 · 효과음 3) | `--test hootk53` (K053260 합성 포함, HOOT_SONGS=1) |
@@ -403,7 +405,11 @@
   - MAME xexex · xmen · mystwarr: Z80 8MHz, ROM 0000h~7FFFh, 뱅크 8000h~BFFFh (F800h 아래 4비트 × 16KB), RAM C000h~DFFFh, K054539 #1 E000h~E22Fh · #2 E400h~E62Fh (사이는 RAM), YM2151 E800h (EC00h 거울), K054321 F000h~F003h (F002h = 명령, F003h = 음량)
   - IRQ = 명령 (K054321 — 메인이 쓰면, hold; Xexex는 EI … DI 창에서만 받고 박자는 YM2151 타이머 B 상태를 폴링) 또는 YM2151 타이머 (Bucky · Moo Mesa · X-Men), NMI = K054539 #1 타이머 (227h: 38 × (255 − 값) / 18.432MHz마다 바뀜, 22Fh bit5 켬 — 054539x2 판)
   - K054539 칩 (MAME): 채널 8, 피치 24비트 16.16 걸음, 8비트 (끝 80h) · 16비트 (끝 8000h) · 4비트 DPCM (끝 88h, 표 0 1 4 9 16 25 36 49 −64 …), 반복 (200h+ch×2 +1 bit0), 역재생 (+0 bit5), 감쇠 −36dB/40h, 팬 √, 22Ch = 재생 비트, 22Dh = ROM 읽기 포트, 22Fh bit0 = 켬, 48kHz. 잔향 없음. 같은 값 다시 쓰기 버림
-- **코나미 System GX — 보류 (시도)**: 68000 사운드 롬은 두 파일 바이트 엇갈림 (짝수 = 첫 파일 → SSP 00103E00h · PC 1400h), MAME gxsndmap (K054539 180000h · 182000h 짝수 바이트, K056800 400000h: 사운드 쪽 읽기 오프셋 8~15 = 메인 레지스터, IRQ 1 = 명령, IRQ 2 = 480Hz 주기, TMS57002 상태 500001h = 07h로 준비)까지 넣었지만 칩 초기화 쓰기가 한 번도 없음 — 68000 디스어셈블러로 부팅이 기다리는 것을 봐야 함 (작업본은 저장소에 안 넣음)
+- **8-9g. 코나미 System GX — ✅ v2.1.47 (17 / 17, 489곡)** — `Audio/HootKonamiGx.cs` (스크래치 68000 디스어셈블러로 확인)
+  - 68000 8MHz, 사운드 롬 두 파일 바이트 엇갈림 (짝수 = 첫 파일 → SSP 00103E00h · PC 1400h), RAM 100000h~10FFFFh
+  - **K054539 둘 = 200000h~2004FFh** (레지스터 = (주소 − 200000h) ÷ 2, 짝수 바이트 = #1 · 홀수 = #2 — 처음 MAME 새 맵을 기억해 180000h로 넣어 칩 쓰기가 하나도 안 보였음), TMS57002 = 300000h · 500000h (없음, 상태 500001h = 07h)
+  - K056800 400000h~: 사운드 쪽 읽기 400011h~17h (오프셋 8~11) = 메인 레지스터 0~3, IRQ 1 처리기가 네 바이트를 큐 (103C80h~)에. 레지스터 0 = 소리 번호, 1 = 묶음 (아래 3비트) → hoot 코드 = 묶음 << 8 | 번호
+  - IRQ 2 = K054539 #1 타이머 (227h = 6Dh, 22Fh = 21h → 올라가는 끝마다), 처리기가 틱을 셈 (2틱마다 음악 한 걸음)
 - **8-9f. 세가 System 18 — ✅ v2.1.45 (6 / 6, 246 / 251)** — `Audio/HootSegaSystem18.cs`, `Audio/Chips/Rf5c68.cs`
   - MAME segas18: Z80 8MHz, ROM 0~9FFFh, 뱅크 A000h~BFFFh = PCM 롬 8KB 단위 (포트 A0h bit6~7 = 롬 번호, 아래 6비트 = 뱅크 — hoot pcm 파일 차례대로), RF5C68 레지스터 C000h~ · 메모리 창 D000h~DFFFh (뱅크 = 레지스터 7), RAM E000h~, YM3438 #1 · #2 = 포트 80h · 90h (8MHz), 명령 = 포트 C0h + NMI
   - RF5C68 (MAME): 8채널, 부호-크기 8비트, FFh = 반복 표시, 걸음 11비트 소수, 팬 아래 니블 = 왼쪽, 클럭 10MHz ÷ 384. VGM: 요청 때 RAM 그림을 블록 C0h로, 그 뒤 메모리 쓰기는 C1h (바뀐 바이트만)

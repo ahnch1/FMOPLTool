@@ -113,6 +113,7 @@
 - [x] SNK fitegolf 2 · 60곡 — v2.1.58, 모두
 - [x] Y8950 ADPCM — v2.1.59 `Y8950Adpcm` 칩, SNK 347 / 372곡
 - [ ] SNK mainsnk 2 · Victory Road 목소리 D2h~DBh
+- [x] 타이토 masterw 3 · viofight 3 · 94곡 — v2.1.60 `HootTaitoOpm` YM2203 변형, 모두
 - [ ] 세가 model2 4 · system_multi 4 (315-5560 = MultiPCM)
 - [ ] 코나미 hornet 8 · gticlub 4 — RF5C400 (CPU 68000)
 

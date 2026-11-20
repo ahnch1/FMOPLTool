@@ -10,7 +10,7 @@ namespace AdlibComposer.SelfTest;
 /// <summary>hoot 타이토 YM2151 보드 (HootTaitoOpm, type fullt): 만든 Z80 프로그램으로 명령 · MSM5205 시작 / 멈춤 시험, 실제 zip 9개.</summary>
 public static class HootTaitoOpmTests
 {
-    public static readonly string[] Archives = { "rastan", "topspeed", "asuka", "mofflott", "cadash", "exzisus", "galmedes", "earthjkr", "eto" };
+    public static readonly string[] Archives = { "rastan", "topspeed", "asuka", "mofflott", "cadash", "exzisus", "galmedes", "earthjkr", "eto", "masterw", "tetrista", "champwr", "viofight", "hitice", "cameltrya" };
 
     public static void Run(Action<string, bool, string> check)
     {
@@ -82,7 +82,7 @@ public static class HootTaitoOpmTests
         m.Play(code);
         m.RunSeconds(seconds);
         if (m.PortLog != null) foreach (var x in m.PortLog.Where(x => x.a != 0xB800).Take(60)) Console.WriteLine("    " + (x.cyc / HootTaitoOpm.CpuClock).ToString("0.0000") + " " + x.a.ToString("X4") + " <- " + x.v.ToString("X2"));
-        int keyOn = m.Log.Count(x => x.chip == 0 && x.reg == 0x08 && (x.val & 0x78) != 0);
+        int keyOn = m.Log.Count(x => x.chip == 0 && (m.Opn ? (x.reg == 0x28 && (x.val & 0xF0) != 0) || (x.reg >= 8 && x.reg <= 10 && (x.val & 0x1F) != 0) : x.reg == 0x08 && (x.val & 0x78) != 0)) + m.Log.Count(x => x.chip == 2 && (x.val & 0x80) != 0);
         int msm = m.Log.Count(x => x.chip == 1 && x.reg == 1);
         string note = (m.SoundOn ? "EF " : "") + "key-on " + keyOn + " msm bytes " + msm + " starts " + m.MsmStarts + ", writes " + m.Log.Count + ", nmi " + m.Nmis + " irq " + m.Irqs + " read " + m.Polls + ", PC " + m.Cpu.PC.ToString("X4")
             + (m.OtherWrites.Count > 0 ? ", other " + string.Join(" ", m.OtherWrites.OrderByDescending(x => x.Value).Take(6).Select(x => x.Key.ToString("X4") + ":" + x.Value)) : "")

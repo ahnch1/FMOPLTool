@@ -31,6 +31,7 @@
 | 2.0.4 | 8-6 (메가드라이브) | hoot megadrive generic_z80 · iyinc: `Audio/HootMegaDrive.cs` (Z80 사운드 쪽 · 카트리지의 Z80 드라이버를 RAM에, 요청 주소) |
 | 2.0.5 | 8-7 (X68000) | MC68000 `Audio/Cpu/M68000.cs` + hoot x68k generic: `Audio/HootX68k.cs` (OPM · ADPCM · DMA · MFP, E00010h = hoot가 대신 하는 IOCS · DOS) |
 | 2.0.6 | 8-7 (X68000 MIDI) | x68k MIDI 판: YM3802 MIDI 보드 (EAFA00h) → 살아 있는 MIDI 곡 (`HootX68k.LoadMidi`) |
+| 2.1.60 | 8-8j 더함 (타이토 B YM2203) | hoot taito masterw (Master of Weapon · Tetris · Champion Wrestler) · viofight (Violence Fight · Hit the Ice · Camel Try): `HootTaitoOpm` YM2203 (+ OKIM6295) 변형 |
 | 2.1.59 | 8-9k 더함 (Y8950 ADPCM) | 새 칩 Y8950 ADPCM (`Audio/Chips/Y8950Adpcm.cs`, delta-T, 이 프로그램 안 명령 DCh) — hoot snk 3526_8950 목소리 항목 |
 | 2.1.58 | 8-9k 더함 (SNK fitegolf) | hoot snk fitegolf (Fighting Golf · Country Club): `HootSnkOpl` YM3812 하나 (VGM 5Ah 그대로) |
 | 2.1.57 | 8-9k (SNK OPL × 2) | hoot snk 3526_8950 · 3526x2 (Victory Road · Psycho Soldier · Bermuda Triangle · TouchDown Fever · Guerrilla War · Athena · Ikari Warriors): `Audio/HootSnkOpl.cs` — YM3526 + Y8950 / YM3526 × 2를 YMF262 하나로 |
@@ -117,7 +118,7 @@
 | 니치부츠 (terracre · terraf) | 10 / 10, 곡 161 / 161 (terracre 0x00 = 목록의 구분 줄) | `--test hootnichi` (HOOT_SONGS=1) |
 | SNK68 (snk 3812) | 4 / 4, 146곡 모두 (키온 또는 uPD7759) | `--test hootsnk` (HOOT_SONGS=1, HOOT_SNKINIT=16진,… 부팅 명령 바꾸기, HOOT_SNKSCAN=곡 = 부팅 명령 00h~FFh 훑기, HOOT_PC · HOOT_PCQ=주소,…) |
 | 토아플랜 1 · Twin Cobra (generic) | 9 / 9, 125곡 모두 (키온) | `--test hoottoaplan` (HOOT_SONGS=1 = 곡마다, HOOT_PROBE=1 = I/O 포트 · 68000 쪽 RAM 후보) |
-| 타이토 YM2151 보드 (fullt) | 9 / 9, 147곡 모두 (FM 키온 또는 MSM 바이트) | `--test hoottaitoopm` (HOOT_SONGS=1 = 곡마다, HOOT_REGS · HOOT_PC · HOOT_PCQ · HOOT_RAM · HOOT_MSMLOG) |
+| 타이토 YM2151 보드 (fullt) · 타이토 B YM2203 (masterw · viofight) | 15 / 15, 241곡 모두 (FM 키온 또는 MSM 바이트) | `--test hoottaitoopm` (HOOT_SONGS=1 = 곡마다, HOOT_REGS · HOOT_PC · HOOT_PCQ · HOOT_RAM · HOOT_MSMLOG) |
 | 비디오시스템 · 사이쿄 YM2610 | 9 / 9, 169곡 모두 | `--test hoot2610` (HOOT_SONGS=1) |
 | 코나미 K007232 (scontra · thundercross · salamander · hcastle · crimfght · twin16 · battlantis) | 21 / 21, 431곡 중 424 (무음 = 00h 머리 · 정지 항목 6 · Thunder Cross 8Fh) | `--test hootk7232` (HOOT_SONGS=1) |
 | 코나미 System GX (systemgx) | 17 / 17, 489곡 모두 | `--test hootgx` (HOOT_SONGS=1) |
@@ -299,6 +300,7 @@
   - 곡마다 확인 (`HOOT_SONGS=5`): 곡 코드마다 쓰기 수가 다름 = 정말 곡을 고름. "Credit" 코드는 짧은 효과음 (키온 80~90), tgmj 0xFF04 · 0xFF05 (모노 · 스테레오 전환)는 소리 없는 명령
   - Z80 ROM이 없어 못 하는 ZN: 타이토 ZN (Ray Storm · G Darius · Fighters' Impact = ZSG2, archive 없음)
 - **8-8j. 타이토 YM2151 보드 (fullt) — ✅ v2.1.17 (9 / 9, 147곡 모두)** — `Audio/HootTaitoOpm.cs`
+  - v2.1.60 타이토 B masterw · viofight (MAME taito_b masterw · viofight_sound_map): 같은 Z80 · TC0140SYT 배치, 9000h = YM2203 3MHz (IRQ = 타이머, 포트 A 0Eh = 뱅크 아래 2비트), viofight B000h · B001h = OKIM6295 1.056MHz 핀7 높음 (ROM = pcm). 처음 EFh (소리 켬)도 같음
   - 배치 (MAME rastan · taito_asuka · topspeed · exzisus): Z80 4MHz, ROM 0000h~3FFFh + 뱅크 4000h~7FFFh (YM2151 1Bh의 CT1 · CT2 = bit6~7 → ROM n × 4000h, 32KB ROM은 뱅크 없음), RAM 8000h~8FFFh, YM2151 9000h · 9001h (타이머 = IRQ), TC0140SYT (PC060HA) A000h 모드 · A001h 통신 — 니블 · NMI는 `HootTaito`와 같음
   - YM2610 드라이버처럼 처음엔 소리 꺼짐 — 명령 EFh = 소리 켬 (Rastan 0368h: EEh → 8F26h = 0, EFh → 1, 곡 시작 02FEh가 8F26h = 0이면 그냥 돌아감). 처리 코드 `FE EF C0 3E`가 있으면 부팅 뒤 EFh (9개 모두)
   - 드라이버가 주 루프에서 1Bh (뱅크)를 쉴 새 없이 씀 (8초에 약 6만 번) → VGM에는 LFO 파형 (bit0~1)이 바뀔 때만

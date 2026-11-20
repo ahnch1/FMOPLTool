@@ -15,20 +15,23 @@ namespace AdlibComposer.Audio;
 /// <para>MSM5205 (384kHz ÷ 48 = 8kHz): 하드웨어가 VCK마다 ADPCM ROM에서 니블을 넣는다 (바이트의 위 니블 먼저).
 /// Rastan · Asuka 배치 = B000h 쓰기 → 시작 주소 위 바이트, C000h = 시작, D000h = 멈춤 (주소 아래 바이트 0).
 /// Top Speed = B000h~BFFFh 칩 1 · C000h~CFFFh 칩 2, 주소 bit10~11: 0 = 주소 위 바이트, 1 (B400h) = 시작, 2 (B800h) = 멈춤 (드라이버가 쉴 때 틱마다 씀), D000h~D600h = 볼륨 (안 씀).</para>
+/// <para>type masterw (Master of Weapon · Tetris · Champion Wrestler) · viofight (Violence Fight · Hit the Ice · Camel Try) = 타이토 B 시스템 (MAME taito_b masterw · viofight_sound_map): 같은 배치에 9000h = YM2203 3MHz (IRQ = 타이머, 포트 A (0Eh) = 사운드 ROM 뱅크 아래 2비트),
+/// viofight는 B000h = OKIM6295 (1.056MHz, 핀7 높음, ROM = pcm). MSM5205 없음.</para>
 /// <para>곡: rom code = Z80 ROM, pcm = ADPCM ROM. 부팅 1초 뒤 곡 코드를 68000 명령처럼 포트 0 · 1에, 180초를 YM2151 + OKIM6258 (MSM5205 대신, 같은 4비트 ADPCM 풀기 · 4.096MHz ÷ 512 = 8kHz) VGM으로.
 /// Top Speed의 둘째 MSM5205는 VGM에 하나뿐이라 첫째가 쉬는 동안만 낸다.</para>
 /// </summary>
 public static class HootTaitoOpm
 {
-    public const double CpuClock = 4000000, YmClock = 4000000, MsmRate = 384000.0 / 48;
+    public const double CpuClock = 4000000, YmClock = 4000000, MsmRate = 384000.0 / 48, OpnClock = 3000000, OkiClock = 1056000;
     public const double DefaultSeconds = 180, DefaultFade = 4;
     /// <summary>VGM에서 MSM5205 대신 쓰는 OKIM6258 클럭 (÷ 512 = 8kHz).</summary>
     public const uint VgmMsmClock = 4096000;
 
     public static bool Handles(string driver, string type)
     {
-        return string.Equals((driver ?? "").Trim(), "taito", StringComparison.OrdinalIgnoreCase)
-            && string.Equals((type ?? "").Trim(), "fullt", StringComparison.OrdinalIgnoreCase);
+        if (!string.Equals((driver ?? "").Trim(), "taito", StringComparison.OrdinalIgnoreCase)) return false;
+        string t = (type ?? "").Trim().ToLowerInvariant();
+        return t == "fullt" || t == "masterw" || t == "viofight";
     }
 
     public static VgmSong Render(HootArchive.Entry e, string dir, int code, double seconds = DefaultSeconds, double fade = DefaultFade)
@@ -62,7 +65,8 @@ public static class HootTaitoOpm
             foreach (var (off, d) in parts) Array.Copy(d, 0, r, off, d.Length);
             return r;
         }
-        var m = new Machine(Join(code, 0x8000), Join(pcm, 0), (e.Name ?? "").IndexOf("Top Speed", StringComparison.OrdinalIgnoreCase) >= 0);
+        string ty = (e.Type ?? "").Trim().ToLowerInvariant();
+        var m = new Machine(Join(code, 0x8000), Join(pcm, 0), (e.Name ?? "").IndexOf("Top Speed", StringComparison.OrdinalIgnoreCase) >= 0) { Opn = ty == "masterw" || ty == "viofight", Oki = ty == "viofight" };
         m.Missing.AddRange(missing);
         foreach (var u in unsupported) m.Unsupported.Add(u);
         m.RunSeconds(1);
@@ -86,6 +90,8 @@ public static class HootTaitoOpm
     {
         public readonly byte[] Rom, Pcm;
         public readonly bool TopSpeed;
+        /// <summary>타이토 B: YM2203 (chip 0 = YM2203), Oki = B000h OKIM6295 (chip 2).</summary>
+        public bool Opn, Oki;
         public readonly byte[] Ram = new byte[0x1000];
         public readonly Z80 Cpu;
         public readonly List<string> Missing = new List<string>();
@@ -169,9 +175,9 @@ public static class HootTaitoOpm
             Write(Cpu.SP, (byte)v); Write((Cpu.SP + 1) & 0xFFFF, (byte)(v >> 8));
         }
 
-        // YM2151 타이머: A = 64 × (1024 − TA) / 클럭, B = 1024 × (256 − TB) / 클럭
-        private long TimerAPeriod { get { return Math.Max(1, (long)(64.0 * (1024 - timerA) / YmClock * CpuClock)); } }
-        private long TimerBPeriod { get { return Math.Max(1, (long)(1024.0 * (256 - timerB) / YmClock * CpuClock)); } }
+        // YM2151 타이머: A = 64 × (1024 − TA) / 클럭, B = 1024 × (256 − TB) / 클럭. YM2203 (3MHz): A = 72 × (1024 − TA), B = 1152 × (256 − TB)
+        private long TimerAPeriod { get { return Math.Max(1, Opn ? (long)(72.0 * (1024 - timerA) / OpnClock * CpuClock) : (long)(64.0 * (1024 - timerA) / YmClock * CpuClock)); } }
+        private long TimerBPeriod { get { return Math.Max(1, Opn ? (long)(1152.0 * (256 - timerB) / OpnClock * CpuClock) : (long)(1024.0 * (256 - timerB) / YmClock * CpuClock)); } }
 
         public void RunSeconds(double s) { Run((long)(CpuClock * s)); }
 
@@ -183,7 +189,7 @@ public static class HootTaitoOpm
                 long now = Cpu.Cycles;
                 if (now >= nextTimerA) { nextTimerA += TimerAPeriod; if ((timerCtl & 4) != 0) timerFlags |= 1; }
                 if (now >= nextTimerB) { nextTimerB += TimerBPeriod; if ((timerCtl & 8) != 0) timerFlags |= 2; }
-                if (now >= nextVck) { nextVck += vckCycles; Vck(); }
+                if (now >= nextVck) { nextVck += vckCycles; if (!Opn) Vck(); }
                 if (timerFlags != 0 && Cpu.Iff1)
                 {
                     Irqs++;
@@ -244,7 +250,8 @@ public static class HootTaitoOpm
             if (a < 0x4000) return a < Rom.Length ? Rom[a] : (byte)0xFF;
             if (a < 0x8000) return Rom.Length <= 0x8000 ? Rom[a % Rom.Length] : Rom[((long)bank * 0x4000 + (a - 0x4000)) % Rom.Length];
             if (a < 0x9000) return Ram[a - 0x8000];
-            if (a == 0x9000 || a == 0x9001) return (byte)(timerFlags & 3);   // YM2151 상태 (바쁨 없음)
+            if (a == 0x9000 || a == 0x9001) return (byte)(timerFlags & 3);   // YM2151 · YM2203 상태 (바쁨 없음)
+            if (Oki && (a == 0xB000 || a == 0xB001)) return 0;   // OKIM6295 상태: 모두 쉼
             if (a == 0xA001) return CommRead();
             return 0;
         }
@@ -256,11 +263,15 @@ public static class HootTaitoOpm
             switch (a)
             {
                 case 0x9000: ymAddr = v; return;
-                case 0x9001: YmWrite(ymAddr, v); return;
+                case 0x9001: if (Opn) OpnWrite(ymAddr, v); else YmWrite(ymAddr, v); return;
                 case 0xA000: subMode = v & 15; return;
                 case 0xA001: CommWrite(v & 15); return;
             }
-            if (TopSpeed && a >= 0xB000 && a < 0xD000)
+            if (Opn)
+            {
+                if (Oki && (a == 0xB000 || a == 0xB001)) { Emit(2, 0, v); return; }   // OKIM6295 (B001h 거울)
+            }
+            else if (TopSpeed && a >= 0xB000 && a < 0xD000)
             {
                 PortLog?.Add((Cpu.Cycles, a, v));
                 int chip = (a >> 12) & 1 ^ 1;   // B000h = 칩 0, C000h = 칩 1
@@ -343,11 +354,40 @@ public static class HootTaitoOpm
             Emit(0, reg, v);
         }
 
+        private readonly int[] opnLast = Enumerable.Repeat(-1, 0x100).ToArray();
+
+        private void OpnWrite(int reg, int v)
+        {
+            switch (reg)
+            {
+                case 0x0E: bank = v & 3; return;   // 포트 A = 뱅크
+                case 0x0F: return;
+                case 0x24: timerA = (timerA & 3) | (v << 2); return;
+                case 0x25: timerA = (timerA & 0x3FC) | (v & 3); return;
+                case 0x26: timerB = v; return;
+                case 0x27:
+                    {
+                        int old = timerCtl;
+                        timerCtl = v;
+                        if ((v & 0x10) != 0) timerFlags &= ~1;
+                        if ((v & 0x20) != 0) timerFlags &= ~2;
+                        if ((v & 1) != 0 && (old & 1) == 0) nextTimerA = Cpu.Cycles + TimerAPeriod; else if ((v & 1) == 0) nextTimerA = long.MaxValue;
+                        if ((v & 2) != 0 && (old & 2) == 0) nextTimerB = Cpu.Cycles + TimerBPeriod; else if ((v & 2) == 0) nextTimerB = long.MaxValue;
+                        v &= 0xC0;
+                        break;
+                    }
+            }
+            bool keep = reg == 0x28 || reg == 0x0D || reg == 0x27 || (reg >= 0xA0 && reg <= 0xAE);
+            if (!keep) { if (opnLast[reg] == v) return; opnLast[reg] = v; }
+            Emit(0, reg, v);
+        }
+
         public byte In(int port) { return 0xFF; }
         public void Out(int port, byte v) { }
 
         public VgmSong ToVgm(double seconds, double fade)
         {
+            if (Opn) return ToVgmOpn(seconds, fade);
             var w = new VgmWriter { System = "Taito YM2151 (hoot)", Notes = "hoot taito fullt" };
             w.SetClock(VgmWriter.ClockYm2151, YmClock);
             bool msm = Log.Any(x => x.chip == 1 && x.reg == 1);
@@ -361,6 +401,41 @@ public static class HootTaitoOpm
                 if (ts > at) { w.Wait(ts - at); at = ts; }
                 if (x.chip == 0) w.Write(0x54, (byte)x.reg, (byte)x.val);
                 else w.Write(0xB7, (byte)x.reg, (byte)x.val);
+            }
+            if ((long)total > at) w.Wait((long)total - at);
+            var v = VgmFormat.Read(w.ToArray());
+            v.FadeSeconds = Math.Max(0, Math.Min(fade, seconds / 2));
+            if (Log.Count == 0) v.UnsupportedChips.Add("(칩 쓰기 없음)");
+            return v;
+        }
+
+        private VgmSong ToVgmOpn(double seconds, double fade)
+        {
+            var w = new VgmWriter { System = "Taito B YM2203 (hoot)", Notes = "hoot taito b" };
+            w.SetClock(VgmWriter.ClockYm2203, OpnClock);
+            bool oki = Oki && Pcm.Length > 0 && Log.Any(x => x.chip == 2);
+            if (oki)
+            {
+                w.SetClock(VgmWriter.ClockOkim6295, OkiClock, 0x80000000u);   // 핀7 높음
+                var cmd = new byte[7 + 8 + Pcm.Length];
+                cmd[0] = 0x67; cmd[1] = 0x66; cmd[2] = 0x8B;
+                int size = 8 + Pcm.Length;
+                cmd[3] = (byte)size; cmd[4] = (byte)(size >> 8); cmd[5] = (byte)(size >> 16); cmd[6] = (byte)(size >> 24);
+                int len = Pcm.Length;
+                cmd[7] = (byte)len; cmd[8] = (byte)(len >> 8); cmd[9] = (byte)(len >> 16); cmd[10] = (byte)(len >> 24);
+                Array.Copy(Pcm, 0, cmd, 15, Pcm.Length);
+                w.Write(cmd);
+            }
+            double total = seconds * VgmSong.Rate;
+            long at = 0;
+            foreach (var x in Log.OrderBy(x => x.t))
+            {
+                if (x.chip == 2 && !oki) continue;
+                if (x.chip == 1) continue;
+                long ts = (long)Math.Min(total, Math.Max(0, x.t));
+                if (ts > at) { w.Wait(ts - at); at = ts; }
+                if (x.chip == 0) w.Write(0x55, (byte)x.reg, (byte)x.val);
+                else w.Write((byte)0xB8, 0, x.val);
             }
             if ((long)total > at) w.Wait((long)total - at);
             var v = VgmFormat.Read(w.ToArray());

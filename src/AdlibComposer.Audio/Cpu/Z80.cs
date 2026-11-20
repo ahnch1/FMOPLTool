@@ -25,6 +25,11 @@ public sealed class Z80
     public int Im;
     /// <summary>지금까지 지난 대략의 T-state.</summary>
     public long Cycles;
+    /// <summary>
+    /// 명령 바이트(M1: 첫 바이트 · DD/FD/CB/ED 접두어 뒤 명령 바이트) 읽기를 따로 (암호화된 ROM: 명령과 자료가 다르게 풀린다 — 캡콤 Kabuki · 세가).
+    /// null이면 보통 읽기. 피연산자(즉시값 · 변위 · DDCB의 명령 바이트)는 보통 읽기.
+    /// </summary>
+    public Func<int, int> OpcodeRead;
 
     private readonly IZ80Bus bus;
     // 0 = HL, 1 = IX, 2 = IY (DD · FD 접두어)
@@ -89,6 +94,7 @@ public sealed class Z80
     private int Rd(int a) { return bus.Read(a & 0xFFFF); }
     private void Wr(int a, int v) { bus.Write(a & 0xFFFF, (byte)v); }
     private int Fetch() { int v = Rd(PC); PC = (PC + 1) & 0xFFFF; return v; }
+    private int FetchOp() { int v = OpcodeRead != null ? OpcodeRead(PC & 0xFFFF) & 0xFF : Rd(PC); PC = (PC + 1) & 0xFFFF; return v; }
     private int Fetch16() { int lo = Fetch(); return lo | (Fetch() << 8); }
     private int Rd16(int a) { return Rd(a) | (Rd(a + 1) << 8); }
     private void Wr16(int a, int v) { Wr(a, v & 0xFF); Wr(a + 1, (v >> 8) & 0xFF); }
@@ -250,13 +256,13 @@ public sealed class Z80
     {
         if (Halted) { Cycles += 4; return 4; }
         idx = 0; dispRead = false;
-        int op = Fetch();
+        int op = FetchOp();
         R = (R & 0x80) | ((R + 1) & 0x7F);
         int t = 4;
         while (op == 0xDD || op == 0xFD)
         {
             idx = op == 0xDD ? 1 : 2;
-            op = Fetch();
+            op = FetchOp();
             t += 4;
         }
         if (op == 0xCB) t += ExecCb();
@@ -373,7 +379,7 @@ public sealed class Z80
     {
         int addr = 0;
         if (idx != 0) { disp = (sbyte)Fetch(); dispRead = true; addr = (XHL + disp) & 0xFFFF; }
-        int op = Fetch();
+        int op = idx != 0 ? Fetch() : FetchOp();
         int x = op >> 6, y = (op >> 3) & 7, z = op & 7;
         bool mem = idx != 0 || z == 6;
         if (mem && idx == 0) addr = HL;
@@ -398,7 +404,7 @@ public sealed class Z80
 
     private int ExecEd()
     {
-        int op = Fetch();
+        int op = FetchOp();
         R = (R & 0x80) | ((R + 1) & 0x7F);
         int x = op >> 6, y = (op >> 3) & 7, z = op & 7, p = y >> 1, q = y & 1;
         if (x == 1)

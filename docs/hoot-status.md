@@ -31,6 +31,8 @@
 | 2.0.4 | 8-6 (메가드라이브) | hoot megadrive generic_z80 · iyinc: `Audio/HootMegaDrive.cs` (Z80 사운드 쪽 · 카트리지의 Z80 드라이버를 RAM에, 요청 주소) |
 | 2.0.5 | 8-7 (X68000) | MC68000 `Audio/Cpu/M68000.cs` + hoot x68k generic: `Audio/HootX68k.cs` (OPM · ADPCM · DMA · MFP, E00010h = hoot가 대신 하는 IOCS · DOS) |
 | 2.0.6 | 8-7 (X68000 MIDI) | x68k MIDI 판: YM3802 MIDI 보드 (EAFA00h) → 살아 있는 MIDI 곡 (`HootX68k.LoadMidi`) |
+| 2.1.15 | 8-8i (CPS-1 QSound · ZN) | hoot capcom cps1qs · zn: `Audio/HootCps2.cs` (Kabuki 풀기 · 래치 + NMI), Z80 `OpcodeRead` (명령 바이트 따로 읽기) |
+| 2.1.14 | — (도구) | hoot 목록의 없는 zip 목록 · 폴더 구성 CSV: `Formats/HootMissing.cs` (트리 오른쪽 클릭, `--hootmissing`) |
 | 2.1.13 | 8-8h (세가 PCM 보드 · 새 칩 SegaPCM) | hoot sega outrun · X · Y · hangon 계열: `Audio/HootSegaPcmBoard.cs`, 새 칩 `Audio/Chips/SegaPcm.cs` (VGM C0h) |
 | 2.1.12 | 8-8g (CPS-2 · 새 칩 QSound) | hoot capcom cps2: `Audio/HootCps2.cs`, 새 칩 `Audio/Chips/QSound.cs` (DSP 없는 HLE, VGM C4h) |
 | 2.1.11 | 8-8f (System 16 · 새 칩 uPD7759) | hoot sega system16a · 16b: `Audio/HootSegaSystem16.cs`, 새 칩 `Audio/Chips/Upd7759.cs` (슬레이브 모드, VGM B6h) |
@@ -210,7 +212,14 @@
   - 세가 PCM: 끝 레지스터 (ch × 8 + 6) + 1 = 주소 위 바이트 (256바이트 단위)에서 멈춤 · 되풀이, 86h bit0 = 멈춤 (칩이 씀), 뱅크 = (86h &amp; 마스크) &lt;&lt; 자리 — Out Run · X · Hang-On = BANK_512 (64KB), Y 보드 = BANK_12M · 마스크 F8h. Out Run의 32KB PCM ROM은 MAME처럼 64KB 뱅크마다 하나 (거울)
   - 클럭: Out Run · X · Y = 4MHz (31.25kHz), Hang-On 계열 8MHz — 이 둘은 MAME 기억이고 ROM으로 확인 못 함 (음높이가 이상하면 여기부터)
   - 무음 4: endurob2 (eropnx2 = YM2203 둘 해적판 보드, 7F35h에서 멈춤), outrunb (해적판 보드), smgp (Super Monaco GP — X 보드인데 사운드 배치가 다름)
-- 다음 (8-8i): Z80 + YM2151 + OKIM6295 작은 보드 (tecmo16 · raizing mahou · bgaregga · banpresto dbz · dooyong …) — MAME 배치를 하나씩 확인해 `HootOpmBoard.Layout`에, atari system1 (6502), 그 뒤 새 칩
+- **8-8i. 캡콤 CPS-1 QSound · ZN — ✅ v2.1.15 (14 / 14)** — CPS-2 길 (`HootCps2`)에 보드 종류 `Board`를 더함
+  - CPS-1 QSound (wof · dino · punisher · slammast): Z80 배치 · 명령 묶음은 CPS-2와 같다. Z80 ROM 0000h~7FFFh가 **Kabuki** 암호 (MAME kabuki.cpp) — 명령 바이트 select = 주소 + addr_key, 자료 바이트 select = (주소 ^ 1FC0h) + addr_key + 1. 뱅크 쪽은 암호 없음
+  - 열쇠 4개 (MAME *_decode) 중 풀린 명령이 F3 ED 56 31 (DI · IM 1 · LD SP)로 시작하는 것을 고른다 → 이름(클론)에 기대지 않음. 네 게임 모두 맞음 (자료 쪽도 FF FF · 00 F0 … = ZN 드라이버 시작과 같은 모양)
+  - Z80에 `OpcodeRead` 추가: M1 읽기 (첫 바이트 · DD/FD/CB/ED 뒤 명령 바이트)만 따로, 즉시값 · 변위 · DDCB 명령 바이트는 보통 읽기
+  - ZN (ZN-1 · ZN-2, sfex · sfex2 · sfex2p · starglad · plsmaswd · rvschool · strider2 · techromn · tgmj · ts2): Z80 ROM 암호 없음, C000h~CFFFh = 그냥 RAM. 명령 = 포트 00h 래치 + NMI, 바이트 하나에 NMI 하나 — 드라이버가 둘씩 묶는다 (sfex: F100h + F015h에 쌓고 F017h로 셈). 곡 코드 16비트 (tgmj 0x409, techromn 0x8020)를 **위 바이트 먼저** (거꾸로면 16비트 코드 게임 4개 무음) · 1ms 사이
+  - 곡마다 확인 (`HOOT_SONGS=5`): 곡 코드마다 쓰기 수가 다름 = 정말 곡을 고름. "Credit" 코드는 짧은 효과음 (키온 80~90), tgmj 0xFF04 · 0xFF05 (모노 · 스테레오 전환)는 소리 없는 명령
+  - Z80 ROM이 없어 못 하는 ZN: 타이토 ZN (Ray Storm · G Darius · Fighters' Impact = ZSG2, archive 없음)
+- 다음 (8-8j): Z80 + YM2151 + OKIM6295 작은 보드 (tecmo16 · raizing mahou · bgaregga · banpresto dbz · dooyong …) — MAME 배치를 하나씩 확인해 `HootOpmBoard.Layout`에, atari system1 (6502), 그 뒤 새 칩
   - 남은 것 (8-8a): "소리 남" 기준이 처음 6초에 키온 하나라 몇 항목은 ADPCM 하나뿐 (driftout · liquidk · megablst 등 첫 곡이 짧은 효과음일 수 있음) — 귀로 확인, bshark (code0 · code1 둘), taito z 계열 다른 보드
 
 ### 남은 문제 (단계와 따로)

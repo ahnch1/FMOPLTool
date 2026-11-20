@@ -1,4 +1,4 @@
-# FMOPLTool 할 일 (2026-11-20, v2.1.13 기준)
+# FMOPLTool 할 일 (2026-11-20, v2.1.15 기준)
 
 - 이 파일 = **해야 할 일**과 **남겨 둔 일**(보류)을 체크박스로. 끝난 일의 자세한 내용 · 진단 명령 · 원인 분석은 [`hoot-status.md`](hoot-status.md), 사용법 · 구조는 [`../README.md`](../README.md).
 - 옛 할 일 기록(v1.x ~ v2.0 진행 일지)은 `_incoming/Todo.md`(git에 안 들어감)에 그대로 둔다.
@@ -12,8 +12,8 @@
 |---|---:|---:|
 | 목록 전체 | 9,489 | 221,712 |
 | 아카이브 zip이 있는 항목 | 8,432 | — |
-| **재생 규칙에 든 항목 (zip 있음)** | **7,326 (86.9%)** | **193,615** (그 형식 전체) |
-| 아직 재생 못 하는 항목 (zip 있음) | 1,106 | 약 28,100 (그 형식 전체) |
+| **재생 규칙에 든 항목 (zip 있음)** | **7,340 (87.0%)** | **194,653** (그 형식 전체) |
+| 아직 재생 못 하는 항목 (zip 있음) | 1,092 | 약 27,060 (그 형식 전체) |
 | zip이 없는 항목 | 1,057 | — |
 
 곡 수는 zip 유무와 상관없이 그 형식의 titlelist 전체. "재생 규칙에 듦" = 트리에서 두 번 클릭하면 기계 흉내로 곡을 만든다는 뜻. 그 안에서도 무음인 항목이 있다 (아래 2장 "소리 남" · 4장).
@@ -47,6 +47,7 @@
 | 잘레코 Mega System 1 | megasys1 16 | 391 | `HootMegaSys1` (v2.1.10) | 16 / 16 |
 | 세가 System 16 | system16b 28 · system16a 10 | 약 1,000 | `HootSegaSystem16` + uPD7759 (v2.1.11) | 37 / 38 |
 | 캡콤 CPS-2 | cps2 38 | 약 2,700 | `HootCps2` + QSound HLE (v2.1.12) | 38 / 38 |
+| 캡콤 CPS-1 QSound · ZN | zn 10 · cps1qs 4 | 1,038 | `HootCps2` + Kabuki 풀기 · 래치 NMI (v2.1.15) | 14 / 14 |
 | 세가 PCM 보드 | toutrun 7 · gforce 4 · aburner 3 · shangon 2 · eropnx2 2 · pdrift · outrun · hangon · sharrier · spmonaco · bootleg outrun | 약 600 | `HootSegaPcmBoard` + SegaPCM (v2.1.13) | 20 / 24 |
 
 ---
@@ -56,8 +57,8 @@
 > 칸: 항목(zip 있음) · 곡 · 필요한 것. "있음" = CPU · 칩이 이미 있어 보드 배치만 맞추면 됨. 순서 = 들이는 품 대비 곡 수.
 
 ### 3.1 CPU · 칩이 다 있음 — 보드 배치만 (먼저)
-- [ ] 캡콤 ZN (capcom zn) 10 · 341곡 — Z80 + **QSound (이미 있음)**, CPS-2와 같은 사운드 드라이버일 가능성
-- [ ] 캡콤 CPS-1 QSound (capcom cps1qs) 4 · 697곡 — Z80 + QSound, CPS-2 길 다시 쓰기
+- [x] 캡콤 ZN (capcom zn) 10 · 341곡 — v2.1.15, 래치 포트 00h + NMI, 16비트 코드 위 바이트 먼저 (14 / 14)
+- [x] 캡콤 CPS-1 QSound (capcom cps1qs) 4 · 697곡 — v2.1.15, Z80 ROM Kabuki 풀기 (열쇠는 ROM으로 고름)
 - [ ] 메가드라이브 Koei (megadrive koei) 14 · 330곡, 1c00 5 · 66곡 — `HootMegaDrive`의 요청 방식 변형
 - [ ] 타이토 fullt 9 · 147곡 — Z80 + YM2151 + MSM5205 (모두 있음)
 - [ ] 토아플랜 generic 9 · 125곡 — Z80 + YM3526 (OPL)
@@ -120,6 +121,7 @@
 
 ## 5. 해야 할 일 — 형식 · 기능 · 코드
 
+- [x] hoot 목록의 없는 zip 목록 · 폴더 구성 CSV (v2.1.14, `HootMissing` · 트리 오른쪽 클릭 · `SelfTest --hootmissing`) — xml_new 기준 없음 678 / 6,570
 - [ ] `SelfTest --hootcensus <hoot 폴더>`: 이 파일 1 · 3장 숫자를 다시 만드는 진단 (지금은 스크래치 파이썬)
 - [ ] 트리: 장비 이름 정리 (PC-98 / PC-9801 / PC-9821, Genesis / Mega Drive …), 제작사 표시 이름, zip은 있지만 .kss가 없는 KSS 71항목 미리 빨강
 - [ ] 트리: 기계 흉내 항목의 무음 · 확인 안 됨 표시 (조사 결과를 색으로)

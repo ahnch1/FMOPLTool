@@ -15,6 +15,7 @@ namespace AdlibComposer.Audio;
 /// <item>salamander (Salamander · Life Force): 같은 배치, 뱅크 없음, D000h~F000h VLM5030 (빼고) (MAME nemesis salamand)</item>
 /// <item>hcastle (Haunted Castle · City Bomber · Kitten Kaboodle): 9800h SCC (K051649), A000h YM3812 (IRQ → NMI), B000h K007232, C000h 뱅크, D000h 명령 (MAME hcastle)</item>
 /// <item>twin16 (Devil World · Vulcan Venture · Final Round · Cue Brick · M.I.A.): scontra 배치 + uPD7759 마스터 모드 (9000h bit1 = /RESET, D000h = 번호, E000h bit0 = START, F000h 읽기 = 쉬는 중; ROM = pcm2) (MAME twin16)</item>
+/// <item>battlantis (Battlantis · Rack 'em Up): K007232 없음, A000h · C000h = YM3812 × 2 (VGM에는 둘째 YM3812가 없어 YMF262 하나로 — #1 = 뱅크 0, #2 = 뱅크 1), E000h 명령 (MAME battlnts)</item>
 /// <item>crimfght (Crime Fighters · Aliens): A000h YM2151 (CT 핀 = 뱅크), C000h 명령, E000h K007232, 음량 아래 니블 = 채널 0 (MAME crimfght · aliens)</item>
 /// </list>
 /// <para>공통: Z80 3.58MHz, 0000h~7FFFh ROM, 8000h~ RAM, 명령 = 래치 + IRQ (hold). K007232 바깥 포트 (reg 12) = 두 채널 음량 니블, 뱅크 = 채널마다 128KB.</para>
@@ -28,7 +29,7 @@ public static class HootKonamiK007232
     /// <summary>보드 배치. -1 = 없음. VolHi0 = 바깥 포트 위 니블이 채널 0 음량, BankCt = YM2151 CT 핀 (1Bh bit7 → 채널 0, bit6 → 1)이 뱅크, OplNmi = YM3812 IRQ가 NMI.</summary>
     public sealed class Layout
     {
-        public int RamEnd = 0x8800, Latch = 0xA000, K = 0xB000, Opm = 0xC000, Opl = -1, Scc = -1, Bank = -1, VlmBusy = -1, Upd = -1;
+        public int RamEnd = 0x8800, Latch = 0xA000, K = 0xB000, Opm = 0xC000, Opl = -1, Scc = -1, Bank = -1, VlmBusy = -1, Upd = -1, Opl2 = -1;
         public bool VolHi0 = true, BankCt, OplNmi;
     }
 
@@ -39,6 +40,7 @@ public static class HootKonamiK007232
         ["salamander"] = new Layout { RamEnd = 0x9000, VlmBusy = 0xE000 },
         ["hcastle"] = new Layout { Opm = -1, Opl = 0xA000, Scc = 0x9800, Bank = 0xC000, Latch = 0xD000, OplNmi = true },
         ["twin16"] = new Layout { RamEnd = 0x9000, Upd = 0x9000 },
+        ["battlantis"] = new Layout { K = -0x100, Opm = -1, Opl = 0xA000, Opl2 = 0xC000, Latch = 0xE000 },
         ["crimfght"] = new Layout { Opm = 0xA000, Latch = 0xC000, K = 0xE000, VolHi0 = false, BankCt = true },
     };
 
@@ -108,7 +110,7 @@ public static class HootKonamiK007232
         private long updLast;
         public readonly Dictionary<int, int> OtherWrites = new Dictionary<int, int>(), OtherReads = new Dictionary<int, int>();
 
-        private int latch, ymAddr;
+        private int latch, ymAddr, ym2Addr;
         private bool irqLine, nmiPending;
         private long playStart = -1;
         private int timerA, timerB, timerCtl, timerFlags;
@@ -208,6 +210,7 @@ public static class HootKonamiK007232
             if (a < L.RamEnd) return Ram[a - 0x8000];
             if (a == L.Latch) { LatchReads++; return (byte)latch; }
             if ((L.Opm >= 0 && (a == L.Opm || a == L.Opm + 1)) || (Opl && (a == L.Opl || a == L.Opl + 1))) return (byte)timerFlags;
+            if (L.Opl2 >= 0 && (a == L.Opl2 || a == L.Opl2 + 1)) return 0;
             if (a >= L.K && a < L.K + 0x0E) { int r = a - L.K; if (r == 5 || r == 11) KWrite(r, kreg[r]); return 0; }   // 읽기 5 · 11 = 다시 시작
             if (L.Scc >= 0 && a >= L.Scc && a < L.Scc + 0x100) return 0xFF;
             if (a == L.VlmBusy) return 0;   // VLM5030 바쁨 아님
@@ -225,6 +228,8 @@ public static class HootKonamiK007232
             if (L.Opm >= 0 && a == L.Opm + 1) { OpmWrite(ymAddr, v); return; }
             if (Opl && a == L.Opl) { ymAddr = v; return; }
             if (Opl && a == L.Opl + 1) { OplWrite(ymAddr, v); return; }
+            if (L.Opl2 >= 0 && a == L.Opl2) { ym2Addr = v; return; }
+            if (L.Opl2 >= 0 && a == L.Opl2 + 1) { if (ym2Addr < 2 || ym2Addr > 4) { UsedOpl = true; Emit(5, ym2Addr, v); } return; }
             if (a >= L.K && a < L.K + 0x0E) { KWrite(a - L.K, v); return; }
             if (a == L.Bank) { Emit(1, 0x14, v & 3); Emit(1, 0x15, (v >> 2) & 3); return; }   // 뱅크
             if (L.Scc >= 0 && a >= L.Scc && a < L.Scc + 0x100) { SccWrite(a - L.Scc, v); return; }
@@ -322,7 +327,10 @@ public static class HootKonamiK007232
         {
             var w = new VgmWriter { System = "Konami K007232 (hoot)", Notes = "hoot konami k007232" };
             if (L.Opm >= 0) w.SetClock(VgmWriter.ClockYm2151, OpmClock);
-            if (UsedOpl) w.SetClock(VgmWriter.ClockYm3812, OpmClock);
+            bool opl3 = UsedOpl && L.Opl2 >= 0;
+            if (UsedOpl && !opl3) w.SetClock(VgmWriter.ClockYm3812, OpmClock);
+            if (opl3) { w.SetClock(VgmWriter.ClockYmf262, OpmClock * 4); w.Write(0x5F, 0x05, 0x01); }   // NEW = 1
+            var wse = new bool[2];
             if (UsedScc) w.SetClock(VgmWriter.ClockK051649, SccClock);
             bool upd = UsedUpd && UpdRom.Length > 0;
             if (upd)
@@ -347,6 +355,16 @@ public static class HootKonamiK007232
                 long ts = (long)Math.Min(total, Math.Max(0, x.t));
                 if (ts > at) { w.Wait(ts - at); at = ts; }
                 if (x.chip == 0) w.Write(0x54, x.reg, x.val);
+                else if ((x.chip == 2 || x.chip == 5) && opl3)
+                {
+                    // YM3812 → YMF262 뱅크: 01h bit5 = 파형 고름 허락 (OPL3에는 없음 → E0h~F5h를 가림), C0h~C8h에 왼 · 오 출력 bit
+                    int c = x.chip == 2 ? 0 : 1, r = x.reg, ov = x.val;
+                    if (r == 0x01) { wse[c] = (ov & 0x20) != 0; continue; }
+                    if (r >= 0xE0 && r <= 0xF5) ov = wse[c] ? ov & 3 : 0;
+                    if (r >= 0xC0 && r <= 0xC8) ov = (ov & 0x0F) | 0x30;
+                    if (c == 1 && (r == 0xBD || r == 0x08)) continue;
+                    w.Write((byte)(c == 0 ? 0x5E : 0x5F), r, ov);
+                }
                 else if (x.chip == 2) w.Write(0x5A, x.reg, x.val);
                 else if (x.chip == 3) w.Write(new byte[] { 0xD2, (byte)(x.reg >> 8), (byte)x.reg, (byte)x.val });
                 else if (x.chip == 4) w.Write(0xB6, x.reg, x.val);

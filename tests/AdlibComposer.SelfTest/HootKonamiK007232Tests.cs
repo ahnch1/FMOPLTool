@@ -9,11 +9,11 @@ namespace AdlibComposer.SelfTest;
 /// <summary>hoot 코나미 Z80 + YM2151 + K007232 (HootKonamiK007232, type scontra · thundercross): 실제 zip, 진단 (HOOT_SONGS = 곡마다).</summary>
 public static class HootKonamiK007232Tests
 {
-    public static readonly string[] Archives = { "scontra", "garuka", "crazycop", "thunderx", "thunderxa", "blockhl", "lifefrce", "salamand", "lifefrcej", "hcastle", "citybomb", "kittenk", "crimfght", "aliens", "devilw", "vulcan", "fround", "cuebrickj", "mia" };
+    public static readonly string[] Archives = { "scontra", "garuka", "crazycop", "thunderx", "thunderxa", "blockhl", "lifefrce", "salamand", "lifefrcej", "hcastle", "citybomb", "kittenk", "crimfght", "aliens", "devilw", "vulcan", "fround", "cuebrickj", "mia", "battlnts", "rackemup" };
 
     public static void Run(Action<string, bool, string> check)
     {
-        check("hoot konami scontra · thundercross · salamander · hcastle · crimfght: playable, own board", HootArchive.Playable("konami", "scontra") && HootArchive.Playable("Konami", "ThunderCross") && HootArchive.Playable("konami", "salamander") && HootArchive.Playable("konami", "hcastle") && HootArchive.Playable("konami", "crimfght") && HootArchive.Playable("konami", "twin16") && !HootKonamiK007232.Handles("konami", "gx400"), "");
+        check("hoot konami scontra · thundercross · salamander · hcastle · crimfght: playable, own board", HootArchive.Playable("konami", "scontra") && HootArchive.Playable("Konami", "ThunderCross") && HootArchive.Playable("konami", "salamander") && HootArchive.Playable("konami", "hcastle") && HootArchive.Playable("konami", "crimfght") && HootArchive.Playable("konami", "twin16") && HootArchive.Playable("konami", "battlantis") && !HootKonamiK007232.Handles("konami", "gx400"), "");
 
         {
             // uPD7759 마스터 모드: 머리 표 (0 = 마지막 번호, 5 · 6 = 주소 ÷ 2) → 블록 40h (256니블) → 00h 끝
@@ -60,7 +60,7 @@ public static class HootKonamiK007232Tests
         var m = HootKonamiK007232.Boot(e, name => { string f = HootArchive.FindFile(dir, name); return f != null ? File.ReadAllBytes(f) : null; });
         m.Play(code);
         m.RunSeconds(seconds);
-        int keyOn = m.Log.Count(x => x.t > 0 && ((x.chip == 0 && x.reg == 0x08 && (x.val & 0x78) != 0) || (x.chip == 2 && x.reg >= 0xB0 && x.reg <= 0xB8 && (x.val & 0x20) != 0)
+        int keyOn = m.Log.Count(x => x.t > 0 && ((x.chip == 0 && x.reg == 0x08 && (x.val & 0x78) != 0) || ((x.chip == 2 || x.chip == 5) && x.reg >= 0xB0 && x.reg <= 0xB8 && (x.val & 0x20) != 0)
             || (x.chip == 3 && x.reg == 0x300 && x.val != 0) || (x.chip == 4 && x.reg == 1 && x.val != 0)));
         int pcm = m.Log.Count(x => x.t > 0 && x.chip == 1 && (x.reg == 5 || x.reg == 0x0B));
         string note = "opm " + keyOn + " pcm " + pcm + (m.UsedUpd ? " upd " + m.Log.Count(x => x.chip == 4 && x.reg == 1 && x.val != 0) : "") + ", writes " + m.Log.Count + ", irq " + m.Irqs + " nmi " + m.Nmis + " latch " + m.LatchReads + ", PC " + m.Cpu.PC.ToString("X4")

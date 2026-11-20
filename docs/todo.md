@@ -84,6 +84,7 @@
 - [ ] 세가 SG-1000 7 — Z80 + SN76489
 - [x] 아타리 System 1 4 · 275곡 — v2.1.30: `HootAtariSys1` (6502 + YM2151, 1820h bit7 = 자가 시험 끔), 179 / 275곡 (v2.1.31 POKEY), 무음 96 = TMS5220 음성 (4장), Road Blasters는 곡 목록 없음
 - [ ] 남코 wsgz80 4 — Z80 + 남코 WSG (칩 있음)
+- [x] 비디오시스템 turbofrc · aerofgt 6 · 사이쿄 gunbird 3 · 169곡 — v2.1.49 `HootYm2610Board`, 모두
 - [x] 코나미 pooyan 3 · 44곡 — v2.1.48 (Pooyan 모두, Loco-Motion · Tactician은 파트 2 · 3 무음)
 - [x] 코나미 scramble 8 · timeplt 4 · 116곡 — v2.1.39 `HootKonamiAy`, 75곡 (무음 = ch2 · ch3 파트 등)
 - [x] 타이토 taitosj 12 · 285곡 — v2.1.40 `HootTaitoSj` (AY × 3 — 셋째는 안 명령 D9h, DAC → YM2612 DAC), 모두

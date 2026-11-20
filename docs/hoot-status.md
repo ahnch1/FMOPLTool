@@ -31,6 +31,7 @@
 | 2.0.4 | 8-6 (메가드라이브) | hoot megadrive generic_z80 · iyinc: `Audio/HootMegaDrive.cs` (Z80 사운드 쪽 · 카트리지의 Z80 드라이버를 RAM에, 요청 주소) |
 | 2.0.5 | 8-7 (X68000) | MC68000 `Audio/Cpu/M68000.cs` + hoot x68k generic: `Audio/HootX68k.cs` (OPM · ADPCM · DMA · MFP, E00010h = hoot가 대신 하는 IOCS · DOS) |
 | 2.0.6 | 8-7 (X68000 MIDI) | x68k MIDI 판: YM3802 MIDI 보드 (EAFA00h) → 살아 있는 MIDI 곡 (`HootX68k.LoadMidi`) |
+| 2.2.2 | FM-7 · FM77AV | hoot fm7 · fm77av generic: `Audio/HootFm7.cs` (6809 + 타이머 IRQ · PSG · OPN · WHG, hoot FD58h~FD5Ch), 29 / 29항목 · 곡 279 / 308 |
 | 2.2.1 | PC-98 벡터 · 곡 핸들 | 사용자 벡터 40h~7Fh를 0060:xxxx 함정으로 (NEC MS-DOS — MUSIC.COM "ＦＭ音源ドライバー"는 INT 48h 세그먼트가 0060h가 아니면 이미 상주로 보고 풀어 버림), 곡 요청 때 닫힌 곡 핸들 다시 열기 (FUGA OPNDRV가 상주 전에 핸들 0~31을 닫음) → pc98dos 300 표본 271 → 283 / 303, PC/AT 그대로 |
 | 2.2.0 | 판 올림 | 2.1.x 정리: 아케이드 보드 70여 가지 · 386 리얼 모드 · DOS 로더 · Game Blaster / Tandy · Hoot 페이지 화면 — docs/todo.md 현황 다시 잼 |
 | 2.1.76 | Hoot 페이지 화면 | 가사가 없으니 표시 방식 단추 · 가사 상자를 빼고 믹서 (Implay) | 작은 악보 (Ocplay)를 좌우로 (`JukeboxView` hootLayout) |
@@ -129,6 +130,7 @@
 | MIDI 판 PC-98 | 360 / 641 | `--hootmidisurvey pc98 1709 20` |
 | MSX generic (PSG · OPLL · SCC · SCC+ · MSX-AUDIO) | 481 / 498 (첫 곡이 조용하면 다음 곡 5개까지) | `--hootmsxsurvey msx 1000 8` |
 | PC-88 (opn · opna) | 487 / 527 — opn 357/385 · opna 130/142 | `--hoot88survey pc88 1000 6` |
+| FM-7 · FM77AV (generic) | 29 / 29, 곡 279 / 308 | `--test hootfm7` (HOOT_SONGS=1) |
 | X1 (psg · opm) | 143 / 152 — opm 65/71 · psg 78/81 | `--hootx1survey x1 1000 8` |
 | 네오지오 | 137 / 146 (음악일 만한 코드 10h 이상 3곡까지) | `--hootneosurvey roms 200 6` |
 | 타이토 YM2610 보드 (f2 · b · dual68 · x · fx1a · sonicb) | 67 / 67 (첫 곡이 조용하면 다음 곡 3개까지) | `--hoottaitosurvey roms 200 6` |

@@ -36,6 +36,7 @@
 | MSX | generic 498 · kss 230 | 13,334 | MSX 기계 (`HootMsx`) · KSS | 481 / 498 (KSS 71항목은 zip에 .kss 없음) |
 | PC-88 | opn 389 · opna 142 | 13,623 | `HootPc88` | 487 / 527 |
 | X1 | psg 83 · opm 71 | 3,430 | `HootX1` | 143 / 152 |
+| FM-7 · FM77AV | generic 44 (zip 29) | 약 400 | `HootFm7` (6809, v2.2.2) | 29 / 29, 곡 279 / 308 |
 | X68000 | generic 553 | 12,814 | MC68000 + X68000 (`HootX68k`) | 499 / 553 |
 | X68000 MIDI 판 | generic 166 | 4,098 | YM3802 | 141 / 166 |
 | 슈퍼 패미컴 | spc 531 | 15,139 | SPC700 + S-DSP | 파일 있음 |
@@ -72,7 +73,7 @@
 - [x] 데이터 이스트 midres 1 · 12곡 — v2.1.21: `HootDeco`에 midres 배치 (YM3812 108000h 타이머 = IRQ2 · YM2203 118000h · OKI 130000h · 명령 138000h), 12곡 모두 소리
 - [x] 데이터 이스트 brkthru 2 (Break Thru · Darwin 4078) · exprraid 1 · 19곡 — v2.1.32: 새 CPU 6809 (`Cpu6809`) + `HootDeco6809` (6809 + YM2203 + YM3526), 19곡 모두
 - [x] SNK68 (snk 3812) 4 · 146곡 — v2.1.22: Z80 + YM3812 + uPD7759 (마스터 모드 → 보드가 ROM 바이트를 넣는 슬레이브 스트림), 부팅 뒤 명령 0Dh 두 번 = 음악 · 효과음 켬 (146곡 모두 소리, uPD7759 59곡)
-- [ ] SNK 3526_8950 6 (+ 3526x2 2 · chopper (Y8950 × 2) · fitegolf 2 · aso) — Z80 + YM3526 + Y8950: **VGM 재생기에 OPL 둘** (지금은 하나만 — 3526 + 8950이면 8950만 남)과 **Y8950 ADPCM** (델타-T, ROM 블록 88h)이 먼저 필요, 명령 = snk.cpp 사운드 상태 레지스터 (F800h, IRQ 원인 비트)
+- [x] SNK 3526_8950 6 (v2.1.57~59 `HootSnkOpl` — OPL × 2 → YMF262, Y8950 ADPCM in-app DCh) (+ 3526x2 2 · chopper (Y8950 × 2) · fitegolf 2 · aso) — Z80 + YM3526 + Y8950: **VGM 재생기에 OPL 둘** (지금은 하나만 — 3526 + 8950이면 8950만 남)과 **Y8950 ADPCM** (델타-T, ROM 블록 88h)이 먼저 필요, 명령 = snk.cpp 사운드 상태 레지스터 (F800h, IRQ 원인 비트)
 - [x] 니치부츠 terracre 6 · terraf 4 · 164곡 — v2.1.23: Z80 + YM3526/YM3812 + DAC 둘 (VGM YM2612 DAC로), 7812.5Hz 주기 IRQ, 명령 = (코드 << 1) | 1 폴링 (10 / 10, 곡 161 / 161 + 구분 줄 1)
 - [x] 알파 68k2 6 · 83곡 — v2.1.24: Z80 + YM2203 + YM2413 + DAC (VGM YM2612 DAC), 7614Hz 주기 NMI, 명령 폴링, 뱅크 C000h (6 / 6, 83곡 모두 소리 — 곡은 YM2413만 씀)
 - [x] UPL robokid 5 · 109곡 — v2.1.25: Z80 + YM2203 × 2, 명령 E000h 폴링, YM2203 #1 타이머 IRQ, **VGM 재생기에 듀얼 YM2203** (클럭 bit30 + A5h) (5 / 5, 108곡 + 정지 명령 1)
@@ -137,7 +138,8 @@
 - [x] 남코 wsg6809 11 · 263곡 — v2.1.35 `HootNamcoWsg6809` (6809 + 15XX), 262곡
 - [x] 남코 system86 5 · 71곡 — v2.1.36 새 CPU 6801 계열 (`Cpu6801`) + `HootNamcoSys86`, 71곡 모두 (63701X 음성 없음)
 - [x] 남코 System 2 26 · 870곡 — v2.1.41~42 `HootNamcoSys2` + C140 칩, 827곡 (C140 = PCM 묶음 7200h), 남은 무음 43 (Four Trax 27)
-- [ ] **6809 (CPU는 v2.1.32에 있음)**: 후지쯔 FM77AV 22 · FM-7 7 — 6809 하나로 약 100항목 (+ C140 칩)
+- [x] 후지쯔 FM-7 · FM77AV generic 44 (zip 있음 29) — v2.2.2 `HootFm7` (6809 2MHz, 타이머 IRQ 2ms · FD03h, PSG FD0Dh · OPN FD15h · WHG FD45h, 서브 CPU 멈춤 FD05h, hoot FD58h~FD5Ch · FD59h 쓰기 = bgm 올림; fm7 = FM 카드 없음 → PSG 판), 29 / 29, 곡 279 / 308 (무음 = Ku Gyoku Den 효과음 27 — BGM 타이머 없이는 안 돎)
+- [ ] FM-7 xanadu · xanadu2 6 (자체 규약, hoot 포트 없음)
 - [x] 남코 wsg63701 6 · 157곡 — v2.1.37 (`HootNamcoSys86` 슬롯 요청), 모두
 - [x] 아이렘 M62 15 · 145곡 — v2.1.38 `HootIremM62` (M6803 + AY × 2 + MSM5205 → OKIM6258), VGM 듀얼 AY, 137곡
 - [ ] 남코 System 11 · 12 · 22 · NA-1 · NB-1 (C352 · M37702 / H8) 약 80항목 — 큼

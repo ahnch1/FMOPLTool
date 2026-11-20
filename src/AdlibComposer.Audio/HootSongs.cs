@@ -68,6 +68,12 @@ public static class HootSongs
             v = HootX1.Render(e, dir, code);
             what = "X1 기계 · 곡 0x" + code.ToString("X");
         }
+        else if (HootFm7.Handles(driver, e.Type))
+        {
+            // hoot FM-7 · FM77AV: 시작 코드 · 드라이버 · 곡 데이터를 6809 기계 (타이머 IRQ · PSG · OPN · WHG)에서 돌려 미리 렌더
+            v = HootFm7.Render(e, dir, code);
+            what = "FM-7 기계 · 곡 0x" + code.ToString("X");
+        }
         else if (driver == "neogeo")
         {
             // hoot 네오지오: 사운드 보드 (Z80 + YM2610)에서 M1 ROM을 돌려 미리 렌더 (ADPCM ROM은 VGM 데이터 블록으로)

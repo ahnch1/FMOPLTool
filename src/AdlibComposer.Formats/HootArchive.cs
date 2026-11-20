@@ -19,7 +19,7 @@ public static class HootArchive
 {
     public const string Extension = ".hoot";
     /// <summary>항목을 써 둔 표시 (재생할 수 있는 드라이버가 늘면 이름을 바꿔 이미 푼 zip에도 다시 쓴다: 2 = SPC · KSS · NSF · GBS 더함, 3 = PC/AT DOS, 4 = MIDI 판, 5 = pc98vx · pc98).</summary>
-    private const string Mark = ".fmopl_hoot42";
+    private const string Mark = ".fmopl_hoot43";
 
     /// <summary>
     /// 재생할 수 있는 hoot 드라이버 · 형식: pc98dos opn · opna · 86 · beep · pcatdos adlib · soundblaster16 · beep (기계 흉내), 그리고 이미 읽는 파일을 곡 코드로 고르는 것 —
@@ -65,6 +65,7 @@ public static class HootArchive
             case "namco": return t == "system1"                                                          // 6809 + YM2151 + CUS30 (HootNamcoSys1)
                 || t == "wsg6809"                                                                          // 6809 + 15XX (HootNamcoWsg6809)
                 || t == "system86" || t == "wsg63701";                                                     // HD63701 MCU + (YM2151) + CUS30 (HootNamcoSys86)
+            case "konami": return t == "scramble" || t == "timeplt";                                     // Z80 + AY-3-8910 × 2 (HootKonamiAy)
             case "atari": return t == "system1";                                                         // 6502 + YM2151 + POKEY (HootAtariSys1, TMS5220 없음)
             case "megadrive": return t == "generic_z80" || t == "iyinc" || t == "1c00" || t == "koei";
             case "x68k": return t == "generic";
@@ -218,7 +219,37 @@ public static class HootArchive
             if (string.Equals(Path.GetRelativePath(dir, f), rel, StringComparison.OrdinalIgnoreCase)) return f;
             if (byLeaf == null && string.Equals(Path.GetFileName(f), leaf, StringComparison.OrdinalIgnoreCase)) byLeaf = f;
         }
-        return byLeaf;
+        return byLeaf ?? ByBoardLocation(dir, leaf);
+    }
+
+    private static readonly Regex LocationRx = new Regex(@"^(?=.*\d)(?=.*[a-z])[0-9a-z]{2,3}$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    /// <summary>
+    /// 이름이 다른 판의 zip (MAME 롬 이름이 바뀐 것: amidar.5c ↔ s1.5c, 11-7a.bin ↔ s1.7a): 기판 위치 코드 (숫자 + 글자 2~3자, 예 5c · 7a · 3f)가
+    /// 같은 파일이 폴더에 꼭 하나 있으면 그것. 없거나 여럿이면 null.
+    /// </summary>
+    public static string ByBoardLocation(string dir, string leaf)
+    {
+        var codes = Locations(leaf);
+        if (codes.Count == 0) return null;
+        string hit = null;
+        foreach (var f in Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories))
+        {
+            string n = Path.GetFileName(f);
+            if (n.StartsWith(".", StringComparison.Ordinal) || n.EndsWith(Extension, StringComparison.OrdinalIgnoreCase)) continue;
+            if (!Locations(n).Overlaps(codes)) continue;
+            if (hit != null) return null;   // 여럿이면 고르지 않음
+            hit = f;
+        }
+        return hit;
+    }
+
+    private static HashSet<string> Locations(string name)
+    {
+        var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var t in name.Split('.', '-', '_', ' '))
+            if (LocationRx.IsMatch(t) && !string.Equals(t, "bin", StringComparison.OrdinalIgnoreCase)) set.Add(t);
+        return set;
     }
 
     /// <summary>

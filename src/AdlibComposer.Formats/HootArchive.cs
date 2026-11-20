@@ -62,7 +62,7 @@ public static class HootArchive
             case "upl": return t == "robokid";                                                           // Z80 + YM2203 × 2 (HootUpl, VGM 듀얼 YM2203)
             case "alpha": return t == "68k2";                                                             // Z80 + YM2203 + YM2413 + DAC (HootAlpha68k)
             case "nichibutsu": return t == "terracre" || t == "terraf";                                  // Z80 + YM3526/YM3812 + DAC (HootNichibutsu)
-            case "snk": return t == "3812";                                                               // SNK68: Z80 + YM3812 + uPD7759 (HootSnk68)
+            case "snk": return t == "3812" || t == "3526_8950" || t == "3526x2";                                                               // SNK68: Z80 + YM3812 + uPD7759 (HootSnk68)
             case "toaplan": return t == "generic";                                                        // 토아플랜 1 · Twin Cobra: Z80 + YM3812 (HootToaplan)
             case "namco": return t == "system1"                                                          // 6809 + YM2151 + CUS30 (HootNamcoSys1)
                 || t == "wsg6809"                                                                          // 6809 + 15XX (HootNamcoWsg6809)

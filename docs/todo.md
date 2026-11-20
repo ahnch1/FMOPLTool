@@ -25,7 +25,7 @@
 
 | 기종 | 형식 (zip 있는 항목) | 곡 | 방식 · 클래스 | 소리 남 (조사) |
 |---|---|---:|---|---|
-| PC-98 DOS | opn 1416 · opna 230 · 86 92 · beep 80 | 65,005 | x86 + MS-DOS + PC-98 기계 (`HootPc98`, v2.1.75 DOS 로더 고침) | 300 zip 표본 271 / 303 (v2.1.75, 처음 226 / 301) |
+| PC-98 DOS | opn 1416 · opna 230 · 86 92 · beep 80 | 65,005 | x86 + MS-DOS + PC-98 기계 (`HootPc98`, v2.1.75 DOS 로더 고침) | 300 zip 표본 283 / 303 (v2.2.1, 처음 226 / 301) |
 | PC-9821 DOS | pc9821dos opn 6 · opna 3 · 86 3 | 약 200 | 같은 기계 + 386 리얼 모드 (`Cpu/X86.386.cs`) · 86 PCM 포트 (v2.1.73~74) | 12 / 12 |
 | PC-98 DOS MIDI 판 | beep 444 · opn 237 · 86 5 | 17,778 | MPU-PC98 → 살아 있는 MIDI | 360 / 641 |
 | PC-98 (DOS 없음) | pc98vx opn 198 · beep 40 · opna 25 · 86 9, pc98 opn 81 · beep 4 · opna 2 | 12,054 | `BootGeneric` | 314 / 354 |
@@ -150,7 +150,7 @@
 
 ## 4. 해야 할 일 — 재생은 되지만 무음 · 품질 문제
 
-- [ ] PC-98 DOS FM 무음 (300 zip 표본, v2.1.75 뒤 32개 — 처음 75개): v2.1.75 DOS 로더 고침 (64KB 넘는 EXE 그림이 오프셋 감김으로 깨짐 · 4B03h 그림 크기 · device= 전략 루틴 DS = 드라이버 · 파일 이름 뒤 NUL)으로 vector-not-hooked 25 → 2, unknown-op 9 → 0. 남은 것: writes-no-keyon 21 (FUGA fgplay_h · MAKO · ARTDI_98 hoot 끔), no-chip-writes 7, no-memory 1, 이름 불일치 (koroshi: xml file01.MUS ↔ zip 원래 이름)
+- [ ] PC-98 DOS FM 무음 (300 zip 표본, v2.2.1 뒤 20개 — 처음 75개): v2.1.75 DOS 로더 고침 (64KB 넘는 EXE · 4B03h · device= DS · NUL)으로 vector-not-hooked 25 → 2, unknown-op 9 → 0; v2.2.1 사용자 벡터 40h~7Fh = 0060:xxxx ("ＦＭ音源ドライバー" MUSIC.COM 6) · 닫힌 곡 핸들 다시 열기 (FUGA OPNDRV 6). 남은 것: writes-no-keyon 15 (MAKO · KUAN · NIHON CREATE · UKKY · koroshi), no-chip-writes 1 (majoriko "サウンドボードがありません"), no-memory 1, 이름 불일치 (koroshi: xml file01.MUS ↔ zip 원래 이름)
 - [ ] PC-98 MIDI 무음: DOFMDX98 50 · FUGA 50 · ARTDI 32 · FMX 16 · MINT/NLP 16 · MFD 12 · valky 11, RS-MIDI (내장 8251)
 - [ ] pc98vx 무음 40: writes-no-keyon 19 · no-chip-writes 13 · unknown-op 2 · vector 2 · hoot 끔 2
 - [ ] PC/AT 무음 6 (rakuen · kurodan · eshoutei · darksun · globaleffect · nestory2), SB16 PCM (DSP DMA)

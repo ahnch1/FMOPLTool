@@ -225,7 +225,7 @@ public sealed class PcAtMachine : DosMachine, IHootMachine
 
     public void Play(int code)
     {
-        if (HandleOpen(code & 0xFFFF)) Duplicate(code & 0xFFFF, 0);
+        SelectSongHandle(code & 0xFFFF);
         hootCode = code; hootCause = 0; hootPending = true;
     }
 

@@ -86,6 +86,14 @@ public class DosMachine : IX86Bus
             Poke16(0, v * 4, v * 4); Poke16(0, v * 4 + 2, StubSeg);
             Poke(StubSeg, v * 4, 0xF1); Poke(StubSeg, v * 4 + 1, v); Poke(StubSeg, v * 4 + 2, 0); Poke(StubSeg, v * 4 + 3, 0xCF);
         }
+        // 사용자 벡터 40h~7Fh를 DOS 세그먼트 안 함정으로 (NEC MS-DOS: 안 쓴 벡터 = 0060:xxxx — 상주 확인에 이 값을 보는 드라이버가 있다)
+        if (UserVectorSeg != StubSeg)
+            for (int v = 0x40; v < 0x80; v++)
+            {
+                int off = (v - 0x40) * 4;
+                Poke16(0, v * 4, off); Poke16(0, v * 4 + 2, UserVectorSeg);
+                Poke(UserVectorSeg, off, 0xF1); Poke(UserVectorSeg, off + 1, v); Poke(UserVectorSeg, off + 2, 0); Poke(UserVectorSeg, off + 3, 0xCF);
+            }
         Poke(StubSeg, ReturnStubOff, 0xF1); Poke16(StubSeg, ReturnStubOff + 1, TrapReturn); Poke(StubSeg, ReturnStubOff + 3, 0xF4);
         // 쉬는 곳 (셸 프롬프트 대신): STI; HLT; JMP 앞으로
         Poke(StubSeg, IdleOff, 0xFB); Poke(StubSeg, IdleOff + 1, 0xF4); Poke(StubSeg, IdleOff + 2, 0xEB); Poke(StubSeg, IdleOff + 3, 0xFC);
@@ -403,6 +411,16 @@ public class DosMachine : IX86Bus
     /// <summary>HLT가 인터럽트를 기다리는 것인가 (기종 흉내는 true: 아직 도는 중).</summary>
     protected virtual bool HaltIsIdle { get { return false; } }
 
+    /// <summary>벡터 40h~7Fh의 기본 처리기 세그먼트 (PC-98 = 0060h: NEC MS-DOS처럼, 그 밖 = <see cref="StubSeg"/>). 함정은 seg:(v−40h)×4.</summary>
+    protected virtual int UserVectorSeg { get { return StubSeg; } }
+
+    /// <summary>벡터 v가 아직 기본 처리기 (아무도 가로채지 않음)인가.</summary>
+    public bool VectorIsStub(int v)
+    {
+        int seg = Peek16(0, (v & 0xFF) * 4 + 2);
+        return seg == StubSeg || (seg == UserVectorSeg && v >= 0x40 && v < 0x80);
+    }
+
     /// <summary>CPU를 cycles만큼 (또는 바깥으로 돌아오거나 HLT까지) 돌린다.</summary>
     public virtual void Run(long cycles)
     {
@@ -481,7 +499,21 @@ public class DosMachine : IX86Bus
     {
         if (handle < 0 || handle >= MaxHandles || !Fs.TryGet(name, out var d)) return false;
         handles[handle] = new OpenFile { Name = name, Data = d, Length = d.Length };
+        boundFiles[handle] = name;
         return true;
+    }
+
+    private readonly string[] boundFiles = new string[MaxHandles];
+
+    /// <summary>
+    /// hoot 곡 요청: 곡 코드 번호의 핸들을 0번으로 복사 (처음으로 되감음). 드라이버 · 재생기가 부팅 중 핸들을 닫았으면
+    /// (<see cref="BindFile"/>로 묶어 둔 파일을) 다시 연다 — 상주하기 전에 핸들 0~31을 모두 닫는 드라이버가 있다 (FUGA OPNDRV).
+    /// </summary>
+    public bool SelectSongHandle(int handle)
+    {
+        if (handle < 0 || handle >= MaxHandles) return false;
+        if (handles[handle] == null && boundFiles[handle] != null) BindFile(handle, boundFiles[handle]);
+        return handles[handle] != null && Duplicate(handle, 0);
     }
 
     /// <summary>글자를 핸들 번호에 묶는다 (hoot rom type="conin": 되감을 수 있는 가짜 입력).</summary>

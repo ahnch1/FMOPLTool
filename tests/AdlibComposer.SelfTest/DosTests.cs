@@ -237,6 +237,15 @@ public static class DosTests
         seg = dos.LoadDevice("TEST2.SYS 8192");
         check("DOS device= driver: strategy called with DS = driver, file name NUL-terminated (MS-DOS SYSINIT)", seg > 0 && dos.PeekWord(seg - 1, 3) == 4, dos.LastDeviceResult);
 
+        // hoot 곡 요청: 묶어 둔 파일 핸들을 프로그램이 닫았어도 다시 열어 0번으로 (FUGA OPNDRV는 상주 전에 핸들 0~31을 닫는다)
+        fs.Add("SONG.DAT", B(1, 2, 3));
+        fs.Add("CLOSE.COM", Com(new[] { 0xB4, 0x3E, 0xBB, 0x10, 0x00, 0xCD, 0x21, 0xB8, 0x00, 0x4C, 0xCD, 0x21 }));
+        dos = new DosMachine(fs);
+        dos.BindFile(0x10, "SONG.DAT");
+        dos.Shell("CLOSE");
+        bool closed = !dos.HandleOpen(0x10);
+        check("DOS hoot song handle: reopened after the program closed it, duplicated to handle 0", closed && dos.SelectSongHandle(0x10) && dos.HandleOpen(0), "closed " + closed);
+
         // 64KB를 넘는 EXE 그림: 오프셋이 감기지 않고 이어서 올라감 (그림 10010h의 'Z'를 읽어 찍음)
         var big = new byte[0x10040];
         Array.Copy(B('M', 'Z', 0x40, 0x00, 0x81, 0x00, 0x00, 0x00, 0x02, 0x00, 0x10, 0x00, 0xFF, 0xFF, 0x00, 0x11, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x1C, 0x00, 0x00, 0x00), big, 28);

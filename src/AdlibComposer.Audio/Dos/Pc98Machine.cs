@@ -8,7 +8,7 @@ namespace AdlibComposer.Audio.Dos;
 /// PC-9801 + MS-DOS (hoot pc98dos처럼): <see cref="DosMachine"/>에 PC-98 입출력 · 인터럽트를 더한다.
 /// <para>PIC 8259 둘 (주 00h/02h · 벡터 08h~, 종 08h/0Ah · 벡터 10h~, 종 = 주 IRQ7), PIT 8253 (71h~77h · 3FD9h~3FDFh, 2.4576MHz: 0번 → IRQ0, 1번 = BEEP 높이),
 /// VSYNC 56.42Hz → IRQ2 (64h에 쓰면 다음 한 번 받음), GDC 상태 60h · A0h bit5 = 수직 귀선, BEEP 켜기 37h (6 켬 · 7 끔),
-/// 사운드 보드: OPN (26K, YM2203 3.9936MHz) · OPNA (86, YM2608 7.9872MHz) 188h/18Ah (+ 18Ch/18Eh), 타이머 A · B → INT0 (IRQ3, 벡터 0Bh: SSG I/O 포트로 읽히는 점퍼 = 0), 86 ID A460h.</para>
+/// 사운드 보드: OPN (26K, YM2203 3.9936MHz) · OPNA (86, YM2608 7.9872MHz) 188h/18Ah (+ 18Ch/18Eh), 타이머 A · B → INT5 (IRQ12, 벡터 14h — SoundIrq, SSG 포트 A로 읽히는 점퍼), 86 ID A460h.</para>
 /// <para>hoot 전용: 7E0h 인터럽트 요인 (0 재생 · 2 정지), 7E2h~7E5h 곡 코드, 7E8h 0x80 · 0x81 hoot 인터럽트 끔 · 켬. hoot 인터럽트 = funcvect 벡터를 직접 (PIC 없이,
 /// IF가 켜져 있을 때). 재생 = 곡 코드 번호의 핸들을 표준 입력에 이중화하고 요인 0 (<see cref="Play"/>).</para>
 /// <para>칩 쓰기는 시간 (CPU 클럭)과 함께 <see cref="Log"/>에 모은다 (VGM으로 바꾸기는 바깥에서).</para>
@@ -258,7 +258,7 @@ public sealed class Pc98Machine : DosMachine, IHootMachine
     /// </summary>
     public void Play(int code)
     {
-        if (Generic == null && HandleOpen(code & 0xFFFF)) Duplicate(code & 0xFFFF, 0);
+        if (Generic == null) SelectSongHandle(code & 0xFFFF);
         hootCode = code; hootCause = 0; hootPending = true;
         genericLoadAfter = Generic != null;
     }
@@ -478,7 +478,7 @@ public sealed class Pc98Machine : DosMachine, IHootMachine
     public override void Out(int port, byte value)
     {
         if (Trace) Count(TracePorts, port | 0x10000);
-        if (Trace && (port == 0xE0D0 || port == 0xE0D2 || port == 0x02 || port == 0x00 || port == 0x08 || port == 0x0A)) TraceIoAdd("w" + port.ToString("X") + "=" + value.ToString("X2") + (Cpu.GetFlag(X86.IF) ? "" : "!IF"));
+        if (Trace && (port == 0xE0D0 || port == 0xE0D2 || port == 0x02 || port == 0x00 || port == 0x08 || port == 0x0A)) TraceIoAdd("w" + port.ToString("X") + "=" + value.ToString("X2") + (Cpu.GetFlag(X86.IF) ? "" : "!IF") + "@" + Cpu.CS.ToString("X4") + ":" + Cpu.IP.ToString("X4"));
         int v = value;
         switch (port)
         {
@@ -561,6 +561,9 @@ public sealed class Pc98Machine : DosMachine, IHootMachine
     // ------------------------------------------------------------ BIOS (기본 벡터 처리기)
 
     protected override bool HaltIsIdle { get { return true; } }
+
+    /// <summary>NEC MS-DOS: 안 쓴 사용자 벡터 = 0060:xxxx ("ＦＭ音源ドライバー" MUSIC.COM은 INT 48h 세그먼트가 0060h가 아니고 INT 0Ah와 같으면 이미 상주한 것으로 본다).</summary>
+    protected override int UserVectorSeg { get { return 0x0060; } }
 
     protected override void Interrupt(int n)
     {

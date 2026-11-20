@@ -63,6 +63,9 @@ public static class HootPc98Tests
     public static void Run(Action<string, bool, string> check)
     {
         check("hoot pc9821dos: playable as PC-98 DOS (opn · opna · 86), MIDI out too", HootArchive.Playable("pc9821dos", "opn") && HootArchive.Playable("pc9821dos", "86") && !HootArchive.Playable("pc9821dos", "soundblaster16") && HootArchive.MidiPlayable("pc9821dos"), "");
+        var mv = new Pc98Machine(new DosFileSystem(), Pc98Machine.Board.Opn, 8);
+        check("PC-98 user vectors 40h-7Fh point into DOS segment 0060h (NEC MS-DOS), still stubs; 3Fh / 80h stay F000", mv.PeekWord(0, 0x48 * 4 + 2) == 0x0060 && mv.VectorIsStub(0x48) && mv.PeekWord(0, 0x3F * 4 + 2) == DosMachine.StubSeg && mv.PeekWord(0, 0x80 * 4 + 2) == DosMachine.StubSeg && mv.PeekByte(0x60, (0x48 - 0x40) * 4 + 1) == 0x48,
+            mv.PeekWord(0, 0x48 * 4 + 2).ToString("X4") + ":" + mv.PeekWord(0, 0x48 * 4).ToString("X4"));
         var m86 = new Pc98Machine(new DosFileSystem(), Pc98Machine.Board.Opna, 8);
         m86.Out(0xA468, 0xB5);
         check("PC-98 86 board PCM ports: A468h latch (IRQ flag bit4 reads 0), A466h bit0 only", m86.In(0xA468) == 0xA5 && (m86.In(0xA466) & 0xFE) == 0 && HootPc98.Is386(new HootArchive.Entry { Driver = "pc9821dos" }), m86.In(0xA468).ToString("X2"));
@@ -264,7 +267,7 @@ public static class HootPc98Tests
                 {
                     var m = HootPc98.BootDir(dir, e, out var shells);
                     int vec = m.FuncVector;
-                    bool hooked = m.PeekWord(0, vec * 4 + 2) != DosMachine.StubSeg;
+                    bool hooked = !m.VectorIsStub(vec);
                     int logBoot = m.Log.Count;
                     m.Play(FirstCode(e));
                     m.Run((long)(m.CpuHz * seconds));
@@ -325,7 +328,7 @@ public static class HootPc98Tests
         foreach (var r in e.Roms.Where(r => r.Type != "file")) Console.WriteLine("  rom " + r.Type + " " + r.Offset + " " + r.Text);
         HootPc98.TraceBoot = true;
         var steps = new System.Collections.Generic.List<string>();
-        bool armed = false;
+        bool armed = Environment.GetEnvironmentVariable("HOOT_STEP_NOW") != null;   // 진단: MPU B9h를 기다리지 않고 바로 기록
         if (Environment.GetEnvironmentVariable("HOOT_STEP") is string segText)
         {
             int seg = Convert.ToInt32(segText, 16);
@@ -340,7 +343,8 @@ public static class HootPc98Tests
         HootPc98.Force386 = Environment.GetEnvironmentVariable("HOOT_386") != null;
         var m = HootPc98.BootDir(dir, e, out var shells);
         HootPc98.TraceBoot = false;
-        Pc98Machine.DebugStep = null;
+        if (!armed) Pc98Machine.DebugStep = null;
+        else steps.Clear();   // HOOT_STEP_NOW: 부팅 뒤 (재생) 명령만 끝에 찍는다
         if (steps.Count > 0) { var seen = new System.Collections.Generic.HashSet<string>(); foreach (var st in steps) if (seen.Add(st.Substring(0, 4))) Console.WriteLine("  step " + st); }
         Console.WriteLine("shells " + string.Join("/", shells) + " | " + m.Describe());
         Console.WriteLine("boot calls " + string.Join(" ", m.TraceVectors.OrderBy(k => k.Key).Select(k => (k.Key > 0xFFFF ? "int" + ((k.Key >> 8) & 0xFF).ToString("X2") + "/" + (k.Key & 0xFF).ToString("X2") : "irq" + k.Key.ToString("X2")) + ":" + k.Value)));
@@ -349,6 +353,7 @@ public static class HootPc98Tests
         Console.WriteLine("boot ports " + string.Join(" ", m.TracePorts.OrderByDescending(k => k.Value).Take(24).Select(k => (k.Key > 0xFFFF ? "w" : "r") + (k.Key & 0xFFFF).ToString("X") + ":" + k.Value)));
         m.TraceVectors.Clear(); m.TracePorts.Clear();
         Console.WriteLine("console: " + m.ConsoleText.Replace("\r", " ").Replace("\n", " | "));
+        Console.WriteLine("hooked vectors: " + string.Join(" ", Enumerable.Range(0, 256).Where(v => !m.VectorIsStub(v)).Select(v => v.ToString("X2") + "=" + m.PeekWord(0, v * 4 + 2).ToString("X4") + ":" + m.PeekWord(0, v * 4).ToString("X4"))));
         m.Trace = true;
         int code = FirstCode(e);
         m.Play(code);
@@ -380,6 +385,12 @@ public static class HootPc98Tests
             Console.WriteLine("unknown op " + m.Cpu.LastUnknown.ToString("X") + " at " + m.Cpu.CS.ToString("X4") + ":" + m.Cpu.IP.ToString("X4") + ", last jumps (from: bytes → to):");
             foreach (var (fc, fi, tc, ti) in m.Cpu.RecentJumps())
                 Console.WriteLine("  " + fc.ToString("X4") + ":" + fi.ToString("X4") + " " + string.Join(" ", Enumerable.Range(0, 6).Select(d => m.PeekByte(fc, (fi + d) & 0xFFFF).ToString("X2"))) + "  → " + tc.ToString("X4") + ":" + ti.ToString("X4"));
+        }
+        if (armed)
+        {
+            Pc98Machine.DebugStep = null;
+            var seen = new System.Collections.Generic.HashSet<string>();
+            foreach (var st in steps) if (seen.Add(st.Substring(0, 4))) Console.WriteLine("  play-step " + st);
         }
         Console.WriteLine("missing files: " + string.Join(", ", m.MissingFiles) + " | console: " + m.ConsoleText.Replace("\r", " ").Replace("\n", " | "));
         Console.WriteLine("MPU commands: " + string.Join(" ", m.Mpu.Commands.Select(c => c.ToString("X2"))) + " | uart " + m.Mpu.Uart + ", bytes " + m.Mpu.BytesOut);
@@ -423,7 +434,7 @@ public static class HootPc98Tests
                     bool sound = keyOns > 0 || beeps > 0;
                     if (sound) st.sound++;
                     note = (sound ? "SOUND " : "quiet ") + "key-ons " + keyOns + ", beeps " + beeps + ", writes " + m.Log.Count + " (boot " + boot + "), hoot " + m.HootDelivered + (m.HootInterruptEnabled ? "" : " off") +
-                        ", vec " + m.FuncVector.ToString("X2") + (m.PeekWord(0, m.FuncVector * 4 + 2) == DosMachine.StubSeg ? " stub" : "") + ", shells " + string.Join("/", shells.Select(r => r.ToString().Substring(0, 3))) +
+                        ", vec " + m.FuncVector.ToString("X2") + (m.VectorIsStub(m.FuncVector) ? " stub" : "") + ", shells " + string.Join("/", shells.Select(r => r.ToString().Substring(0, 3))) +
                         (m.Cpu.UnknownOps > 0 ? ", op@" + m.Cpu.CS.ToString("X4") + ":" + m.Cpu.IP.ToString("X4") + " " + m.PeekByte(m.Cpu.CS, m.Cpu.IP).ToString("X2") : "") +
                         (m.UnknownFunctions.Count > 0 ? ", dos " + string.Join(" ", m.UnknownFunctions.Keys.Select(k => k.ToString("X"))) : "") +
                         (m.MissingFiles.Count > 0 ? ", missing " + string.Join(" ", m.MissingFiles.Distinct().Take(3)) : "") +

@@ -31,6 +31,7 @@
 | 2.0.4 | 8-6 (메가드라이브) | hoot megadrive generic_z80 · iyinc: `Audio/HootMegaDrive.cs` (Z80 사운드 쪽 · 카트리지의 Z80 드라이버를 RAM에, 요청 주소) |
 | 2.0.5 | 8-7 (X68000) | MC68000 `Audio/Cpu/M68000.cs` + hoot x68k generic: `Audio/HootX68k.cs` (OPM · ADPCM · DMA · MFP, E00010h = hoot가 대신 하는 IOCS · DOS) |
 | 2.0.6 | 8-7 (X68000 MIDI) | x68k MIDI 판: YM3802 MIDI 보드 (EAFA00h) → 살아 있는 MIDI 곡 (`HootX68k.LoadMidi`) |
+| 2.1.26 | 8-8e 더함 (테크모 16) | hoot tecmo tecmo16 (Final Star Force · Ganbare Ginkun · Riot): `HootOpmBoard.Tecmo16` 배치, `Layout.BootSeconds` |
 | 2.1.25 | 8-8p (UPL robokid) | hoot upl robokid (Psychic 5 · Ark Area · Mutant Night · Atomic Robo-kid · Omega Fighter): `Audio/HootUpl.cs` (Z80 + YM2203 × 2), VGM 재생기 듀얼 YM2203 (`VgmSong.Ym2203Clock2`, 명령 A5h) |
 | 2.1.24 | 8-8o (알파 68k2) | hoot alpha 68k2 (Sky Adventure · Gang Wars · Super Champion Baseball · Time Soldiers · Sky Soldiers · Gold Medalist): `Audio/HootAlpha68k.cs` (Z80 + YM2203 + YM2413 + DAC, 주기 NMI) |
 | 2.1.23 | 8-8n (니치부츠) | hoot nichibutsu terracre · terraf: `Audio/HootNichibutsu.cs` (Z80 + YM3526/YM3812 + DAC → VGM YM2612 DAC, 주기 IRQ, 명령 (코드 << 1) | 1) |
@@ -84,6 +85,7 @@
 | SNK68 (snk 3812) | 4 / 4, 146곡 모두 (키온 또는 uPD7759) | `--test hootsnk` (HOOT_SONGS=1, HOOT_SNKINIT=16진,… 부팅 명령 바꾸기, HOOT_SNKSCAN=곡 = 부팅 명령 00h~FFh 훑기, HOOT_PC · HOOT_PCQ=주소,…) |
 | 토아플랜 1 · Twin Cobra (generic) | 9 / 9, 125곡 모두 (키온) | `--test hoottoaplan` (HOOT_SONGS=1 = 곡마다, HOOT_PROBE=1 = I/O 포트 · 68000 쪽 RAM 후보) |
 | 타이토 YM2151 보드 (fullt) | 9 / 9, 147곡 모두 (FM 키온 또는 MSM 바이트) | `--test hoottaitoopm` (HOOT_SONGS=1 = 곡마다, HOOT_REGS · HOOT_PC · HOOT_PCQ · HOOT_RAM · HOOT_MSMLOG) |
+| 테크모 16 (tecmo16, HootOpmBoard) | 3 / 3, 112곡 모두 (8곡 = OKI 효과음 하나) | `--test hootopm` (HOOT_SONGS=1, HOOT_PCQ=주소,… · HOOT_PCR=시작,끝 — PCR은 부팅부터 셈) |
 | CPS-1 · Double Dragon 2 · 3 (YM2151 + OKIM6295) | 39 / 39 (FM 키온 16개 또는 OKI 2번 이상, 처음 6곡까지) | `--hootopmsurvey roms 200 6` |
 | 세가 System 1 · 아이렘 M72 계열 | 52 / 52 — system1 29/29 · m72 23/23 | `--hootarcadesurvey roms 200 6` (HOOT_ONLY=zip이름,…) |
 | 데이터 이스트 HuC6280 보드 | 41 / 43 — 빠진 2: wizdfire (zip에 사운드 ROM 없음), hangzo (시제품, 곡 목록이 틀뿐) | `--hootdecosurvey roms 300 6` |
@@ -286,6 +288,7 @@
   - 배치 (MAME ninjakd2 · psychic5): Z80 5MHz, ROM ~BFFFh, RAM C000h~, 명령 E000h (폴링), I/O 00h · 01h YM2203 #1 · 80h · 81h YM2203 #2 (각 1.5MHz), YM2203 #1 타이머 = IRQ (A = 72 × (1024 − TA), B = 1152 × (256 − TB) 클럭). 다섯 게임이 같은 드라이버 (ROM 스캔: 포트 · E000h · 벡터 같음)
   - VGM 재생기에 듀얼 YM2203을 더함: 머리말 0x44 클럭 bit30 → `Ym2203Clock2`, 명령 A5h = 둘째 칩 (SN76489 · OKIM6295 둘과 같은 방식). 시험 = A5h로만 키온해서 소리
   - ninjakid2 (Ninja-kun 아수라)는 사운드 Z80이 MC-8123 암호 (rom key 파일) — 따로
+- **테크모 16 (v2.1.26, 3 / 3)**: `HootOpmBoard.Tecmo16` — ROM ~EFFFh, RAM F000h~FBFFh (SP FC00h), OKI FC00h (1MHz), YM2151 FC04h (4MHz), 명령 FC08h (NMI), FC0Ch = 와치독. NMI 처리기가 명령을 거르는 값 (F5FEh = 곡 표 수 7Fh)은 RAM 시험 뒤 드라이버가 스스로 리셋 (FFh)을 한 번 처리한 다음에야 들어가서, 1초에 보내면 버려짐 → `Layout.BootSeconds` = 3초. 진단할 때 PC 세기를 곡 명령부터 하면 부팅 경로가 안 보인다 (`HOOT_PCR`은 부팅부터)
 - 다음 (8-8q): Z80 + YM2151 + OKIM6295 작은 보드 (tecmo16 · raizing mahou · bgaregga · banpresto dbz · dooyong …) — MAME 배치를 하나씩 확인해 `HootOpmBoard.Layout`에, atari system1 (6502), 그 뒤 새 칩
   - 남은 것 (8-8a): "소리 남" 기준이 처음 6초에 키온 하나라 몇 항목은 ADPCM 하나뿐 (driftout · liquidk · megablst 등 첫 곡이 짧은 효과음일 수 있음) — 귀로 확인, bshark (code0 · code1 둘), taito z 계열 다른 보드
 

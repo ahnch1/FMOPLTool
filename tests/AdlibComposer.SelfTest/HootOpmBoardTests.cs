@@ -61,7 +61,7 @@ public static class HootOpmBoardTests
         string root = SopTests.FindDir("_incoming");
         string folder = root == null ? null : Path.Combine(root, "Hootarchive", "roms");
         if (folder == null || !Directory.Exists(folder)) { Console.WriteLine("SKIP  hoot opm board real files (_incoming/Hootarchive/roms not found)"); return; }
-        foreach (var arc in new[] { "forgottn", "ddragon2", "ddragon3" })
+        foreach (var arc in new[] { "forgottn", "ddragon2", "ddragon3", "fstarfrc", "ginkun", "riot" })
         {
             string zip = Path.Combine(folder, arc + ".zip");
             if (!File.Exists(zip)) { Console.WriteLine("SKIP  hoot opm board " + arc + " (zip not found)"); continue; }
@@ -70,6 +70,11 @@ public static class HootOpmBoardTests
             if (hoot == null) { check("hoot opm board " + arc + ": .hoot entry", false, "none"); continue; }
             var r = (sound: false, cause: "", note: "");
             int code = 0;
+            if (Environment.GetEnvironmentVariable("HOOT_SONGS") != null)
+            {
+                foreach (var t in hoot.Titles) Console.WriteLine("  " + arc + " 0x" + t.Code.ToString("X2") + " " + Measure(hoot, dir, t.Code, 8).note + " | " + t.Title);
+                continue;
+            }
             foreach (var t in hoot.Titles.Take(6)) { code = t.Code; r = Measure(hoot, dir, code, 8); if (r.sound) break; }
             check("hoot opm board " + arc + " (" + hoot.Type + "): song 0x" + code.ToString("X2") + " makes sound in 8 s", r.sound, r.note);
         }
@@ -78,10 +83,14 @@ public static class HootOpmBoardTests
     public static (bool sound, string cause, string note) Measure(HootArchive.Entry e, string dir, int code, double seconds)
     {
         var m = HootOpmBoard.Boot(e, name => { string f = HootArchive.FindFile(dir, name); return f != null ? File.ReadAllBytes(f) : null; });
-        if (Environment.GetEnvironmentVariable("HOOT_PC") != null) m.PcCount = new Dictionary<int, int>();
+        string pcq = Environment.GetEnvironmentVariable("HOOT_PCQ");
+        if (Environment.GetEnvironmentVariable("HOOT_PC") != null || pcq != null || Environment.GetEnvironmentVariable("HOOT_PCR") != null) m.PcCount = m.PcCount ?? new Dictionary<int, int>();
         m.Play(code);
         m.RunSeconds(seconds);
-        if (m.PcCount != null) Console.WriteLine("  PC: " + string.Join(" ", m.PcCount.OrderByDescending(x => x.Value).Take(24).Select(x => x.Key.ToString("X4") + ":" + x.Value)));
+        string pcr = Environment.GetEnvironmentVariable("HOOT_PCR");   // 진단: "시작,끝" 범위의 PC 전부 (주소 순)
+        if (pcr != null && m.PcCount != null) { var lr = pcr.Split(','); int lo = Convert.ToInt32(lr[0], 16), hi = Convert.ToInt32(lr[1], 16); Console.WriteLine("  PCR: " + string.Join(" ", m.PcCount.Where(x => x.Key >= lo && x.Key < hi).OrderBy(x => x.Key).Select(x => x.Key.ToString("X4") + ":" + x.Value))); }
+        if (pcq != null) Console.WriteLine("  PCQ:" + string.Concat(pcq.Split(',').Select(q => { m.PcCount.TryGetValue(Convert.ToInt32(q, 16), out int c); return " " + q + "=" + c; })));
+        else if (m.PcCount != null) Console.WriteLine("  PC: " + string.Join(" ", m.PcCount.OrderByDescending(x => x.Value).Take(24).Select(x => x.Key.ToString("X4") + ":" + x.Value)));
         if (Environment.GetEnvironmentVariable("HOOT_REGS") != null) Console.WriteLine("  regs: " + string.Join(" ", m.Log.GroupBy(x => x.chip * 256 + x.reg).OrderByDescending(g => g.Count()).Take(30).Select(g => g.Key.ToString("X3") + ":" + g.Count())));
         int fm = m.Log.Count(x => x.chip == 0 && x.reg == 0x08 && (x.val & 0x78) != 0);
         int pcm = m.OkiStarts;

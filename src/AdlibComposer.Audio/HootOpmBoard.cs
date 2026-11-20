@@ -30,10 +30,14 @@ public static class HootOpmBoard
         public bool LatchNmi;
         public int IdleLatch;
         public double CpuClock = 3579545, YmClock = 3579545, OkiClock = 1056000;
+        /// <summary>부팅 뒤 곡 명령까지 (초).</summary>
+        public double BootSeconds = 1;
     }
 
     public static readonly Layout Cps1 = new Layout { Name = "CPS-1", FixedEnd = 0x8000, BankStart = 0x8000, BankReg = 0xF004, BankBase = 0x8000, RamStart = 0xD000, RamEnd = 0xD800, Ym = 0xF000, Oki = 0xF002, Pin7Reg = 0xF006, Latch = 0xF008, LatchNmi = false, IdleLatch = 0xFF, OkiClock = 1000000 };
     public static readonly Layout DoubleDragon2 = new Layout { Name = "Double Dragon 2", FixedEnd = 0x8000, RamStart = 0x8000, RamEnd = 0x8800, Ym = 0x8800, Oki = 0x9800, Latch = 0xA000, LatchNmi = true };
+    /// <summary>테크모 16 (Final Star Force · Ganbare Ginkun · Riot, MAME tecmo16 sound_map): ROM ~EFFFh, RAM F000h~FBFFh (SP FC00h), OKI FC00h, YM2151 FC04h, 명령 FC08h (NMI), FC0Ch = 안 씀. Z80 · YM2151 4MHz, OKI 1MHz.</summary>
+    public static readonly Layout Tecmo16 = new Layout { Name = "Tecmo 16", FixedEnd = 0xF000, RamStart = 0xF000, RamEnd = 0xFC00, Ym = 0xFC04, Oki = 0xFC00, Latch = 0xFC08, LatchNmi = true, CpuClock = 4000000, YmClock = 4000000, OkiClock = 1000000, BootSeconds = 3 };
     public static readonly Layout DoubleDragon3 = new Layout { Name = "Double Dragon 3", FixedEnd = 0xC000, RamStart = 0xC000, RamEnd = 0xC800, Ym = 0xC800, Oki = 0xD800, Latch = 0xE000, LatchNmi = true, OkiBankReg = 0xE800 };
 
     public static Layout LayoutOf(string driver, string type)
@@ -42,6 +46,7 @@ public static class HootOpmBoard
         if (d == "capcom" && t == "cps1") return Cps1;
         if (d == "technos" && (t == "ddragon2" || t == "ctribe")) return DoubleDragon2;   // Combatribes = DD2와 같은 사운드 배치 (MAME ctribe_sound_map)
         if (d == "technos" && t == "ddragon3") return DoubleDragon3;
+        if (d == "tecmo" && t == "tecmo16") return Tecmo16;
         return null;
     }
 
@@ -80,9 +85,10 @@ public static class HootOpmBoard
             return r;
         }
         var m = new Machine(layout, Join(code, 0x10000), Join(pcm, 0));
+        if (Environment.GetEnvironmentVariable("HOOT_PCR") != null) m.PcCount = new Dictionary<int, int>();   // 진단: 부팅부터 PC 세기
         m.Missing.AddRange(missing);
         foreach (var u in unsupported) m.Unsupported.Add(u);
-        m.RunSeconds(1);
+        m.RunSeconds(layout.BootSeconds);
         return m;
     }
 

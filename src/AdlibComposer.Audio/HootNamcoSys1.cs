@@ -14,11 +14,11 @@ namespace AdlibComposer.Audio;
 /// 8000h~9FFFh = RAM, C000h~FFFFh = 사운드 ROM 첫 16KB, D001h = 와치독, E000h = IRQ 확인. IRQ = 화면 (60Hz), FIRQ = YM2151 타이머 (FM 드라이버).</para>
 /// <para>메인 CPU 쪽 (드라이버가 보는 것): 부팅 때 5000h = A6h를 기다림 (5001h = A6h면 자가 시험, 옛 판은 7000h = A6h). FM 곡 요청 = 공유 RAM 7100h 곡 번호 + 7101h 명령 (bit5~6이 서면 시작, 드라이버가 80h로 — 묶음 1~8개, 7102h · 7103h …), 블레이저만 7100h 한 바이트 (1~84h, FIRQ 처리기가 받아 F0h로),
 /// CUS30 효과음 = 5240h + 슬롯에 0 아닌 값 (슬롯 표 = 뱅크 1의 [0000h] · 종류 [0002h], 종류 0은 값이 남아 있는 동안 울림). hoot 코드 = 묶음 번호 &lt;&lt; 8 | 곡 (묶음 1~ = 효과음, 블레이저는 100h 이상 = CUS30 효과음 슬롯).</para>
-/// <para>곡: rom code = 사운드 ROM (offset 0 = s0, 10000h = s1), 부팅 1초 뒤 요청, 180초를 YM2151 VGM으로 (CUS30 파형 소리는 아직 없음).</para>
+/// <para>곡: rom code = 사운드 ROM (offset 0 = s0, 10000h = s1), 부팅 1초 뒤 요청, 180초를 YM2151 + CUS30 VGM으로 (CUS30은 이 프로그램 안 명령 D8h — VGM 파일로 내보내면 다른 플레이어에선 그 파트가 안 남).</para>
 /// </summary>
 public static class HootNamcoSys1
 {
-    public const double CpuClock = 49152000 / 32.0, OpmClock = 3579545, IrqHz = 60.606;
+    public const double CpuClock = 49152000 / 32.0, OpmClock = 3579545, IrqHz = 60.606, NamcoCus30Clock = 49152000 / 2048.0;
     public const double DefaultSeconds = 180, DefaultFade = 4;
 
     public static bool Handles(string driver, string type)
@@ -29,10 +29,27 @@ public static class HootNamcoSys1
 
     public static VgmSong Render(HootArchive.Entry e, string dir, int code, double seconds = DefaultSeconds, double fade = DefaultFade)
     {
-        var m = Boot(e, name => { string f = HootArchive.FindFile(dir, name); return f != null ? File.ReadAllBytes(f) : null; });
-        m.Play(code);
-        m.RunSeconds(seconds);
+        var m = Start(e, name => { string f = HootArchive.FindFile(dir, name); return f != null ? File.ReadAllBytes(f) : null; }, code);
+        m.RunSeconds(seconds - m.PlayedSeconds);
         return m.ToVgm(seconds, fade);
+    }
+
+    /// <summary>시도 시간: 효과음 코드 (100h 이상)를 FM 묶음으로 보내고 이만큼 돌려 소리가 없으면 CUS30 슬롯으로 다시.</summary>
+    public const double ProbeSeconds = 1.5;
+
+    /// <summary>부팅하고 곡을 요청한다. 코드 100h 이상은 게임마다 FM 묶음 1 (Galaga '88 · Rompers …) 또는 CUS30 효과음 슬롯 (Blazer · World Stadium '89 · Blast Off …)이라
+    /// 먼저 FM 묶음으로 <see cref="ProbeSeconds"/> 돌려 보고, YM2151 키온도 CUS30 음량도 없으면 다시 부팅해 슬롯 (5240h + 아래 바이트)으로 보낸다.</summary>
+    public static Machine Start(HootArchive.Entry e, Func<string, byte[]> file, int code, bool? slot = null)
+    {
+        var m = Boot(e, file);
+        if (code < 0x100 || !m.QueueDriver) { m.Play(code); return m; }
+        if (slot == true) { m.Play(code, true); return m; }
+        m.Play(code);
+        m.RunSeconds(ProbeSeconds);
+        if (slot == false || m.Sounding) return m;
+        m = Boot(e, file);
+        m.Play(code, true);
+        return m;
     }
 
     public static Machine Boot(HootArchive.Entry e, Func<string, byte[]> file)
@@ -65,7 +82,7 @@ public static class HootNamcoSys1
         public readonly Cpu6809 Cpu;
         public readonly List<string> Missing = new List<string>();
         public readonly HashSet<string> Unsupported = new HashSet<string>();
-        /// <summary>칩 쓰기: chip 0 = YM2151.</summary>
+        /// <summary>칩 쓰기: chip 0 = YM2151, 1 = CUS30 (reg = 자리 0~13Fh, 바뀐 것만).</summary>
         public readonly List<(double t, int chip, int reg, int val)> Log = new List<(double, int, int, int)>();
         public int Irqs, Firqs, Cus30Writes;
         public readonly Dictionary<int, int> OtherWrites = new Dictionary<int, int>(), OtherReads = new Dictionary<int, int>();
@@ -97,13 +114,31 @@ public static class HootNamcoSys1
         }
 
         /// <summary>곡 요청: 코드 &lt; 100h = FM 곡 → 공유 RAM 7100h (드라이버가 받으면 F0h로 바꿈), 100h 이상 = CUS30 효과음 슬롯 → 5240h + 아래 바이트에 1 (음악 칸은 남아 있는 동안 울림).</summary>
-        public void Play(int code)
+        /// <summary>요청 뒤 흐른 시간 (초).</summary>
+        public double PlayedSeconds { get { return playStart < 0 ? 0 : (Cpu.Cycles - playStart) / CpuClock; } }
+
+        /// <summary>요청 뒤 소리가 났는가: YM2151 키온 또는 CUS30 음량.</summary>
+        public bool Sounding
+        {
+            get
+            {
+                return Log.Any(x => x.t > 0 && ((x.chip == 0 && x.reg == 0x08 && (x.val & 0x78) != 0)
+                    || (x.chip == 1 && x.reg >= 0x100 && ((x.reg & 7) == 0 || (x.reg & 7) == 4) && (x.val & 15) != 0)));
+            }
+        }
+
+        public void Play(int code) { Play(code, false); }
+
+        /// <summary>곡 요청. slot = true면 코드 아래 바이트를 CUS30 효과음 슬롯 (5240h + n)으로.</summary>
+        public void Play(int code, bool slot)
         {
             var init = Log.Select(x => (0.0, x.chip, x.reg, x.val)).ToList();
             Log.Clear();
             Log.AddRange(init);
             playStart = Cpu.Cycles;
-            if (QueueDriver && code < 0x800) { int g = code >> 8; Shared[0x100 + g * 2] = (byte)code; Shared[0x101 + g * 2] = (byte)PlayCommand; }   // 묶음 (코드 위 바이트): 곡 번호 + 명령
+            Cus30Writes = 0;
+            if (slot) { if (0x240 + (code & 0xFF) < Cus30.Length) Cus30[0x240 + (code & 0xFF)] = 1; }
+            else if (QueueDriver && code < 0x800) { int g = code >> 8; Shared[0x100 + g * 2] = (byte)code; Shared[0x101 + g * 2] = (byte)PlayCommand; }   // 묶음 (코드 위 바이트): 곡 번호 + 명령
             else if (code < 0x100) Shared[0x100] = (byte)code;
             else if (0x240 + (code & 0xFF) < Cus30.Length) Cus30[0x240 + (code & 0xFF)] = 1;
         }
@@ -154,7 +189,7 @@ public static class HootNamcoSys1
             if (a >= 0x5000 && a < 0x5800)
             {
                 int o = a & 0x3FF;
-                if (o < 0x140) Cus30Writes++;
+                if (o < 0x140 && Cus30[o] != v) { Cus30Writes++; Emit(1, o, v); }
                 Cus30[o] = v;
                 return;
             }
@@ -194,9 +229,12 @@ public static class HootNamcoSys1
 
         private void Emit(int chip, int reg, int val)
         {
-            // 같은 값 다시 쓰기는 버린다 — 키온 08h · LFO 리셋 01h는 늘
-            if (reg != 0x08 && reg != 0x01 && last[reg] == val) return;
-            last[reg] = val;
+            // 같은 값 다시 쓰기는 버린다 — 키온 08h · LFO 리셋 01h는 늘 (CUS30은 부르는 쪽이 바뀐 것만)
+            if (chip == 0)
+            {
+                if (reg != 0x08 && reg != 0x01 && last[reg] == val) return;
+                last[reg] = val;
+            }
             if (playStart < 0) playStart = Cpu.Cycles;
             Log.Add((Math.Max(0, (Cpu.Cycles - playStart) * VgmSong.Rate / CpuClock), chip, reg, val));
         }
@@ -211,13 +249,14 @@ public static class HootNamcoSys1
             {
                 long ts = (long)Math.Min(total, Math.Max(0, x.t));
                 if (ts > at) { w.Wait(ts - at); at = ts; }
-                w.Write(0x54, x.reg, x.val);
+                if (x.chip == 0) w.Write(0x54, x.reg, x.val);
+                else w.Write(new byte[] { 0xD8, (byte)(x.reg >> 8), (byte)x.reg, (byte)x.val });   // 남코 CUS30 (이 프로그램 안 명령)
             }
             if ((long)total > at) w.Wait((long)total - at);
             var v = VgmFormat.Read(w.ToArray());
             v.FadeSeconds = Math.Max(0, Math.Min(fade, seconds / 2));
             if (Log.Count == 0) v.UnsupportedChips.Add("(칩 쓰기 없음)");
-            if (Cus30Writes > 0) v.UnsupportedChips.Add("Namco CUS30");
+            if (Log.Any(x => x.chip == 1)) v.Cus30Clock = NamcoCus30Clock;
             return v;
         }
     }

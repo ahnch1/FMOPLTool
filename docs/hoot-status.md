@@ -31,6 +31,7 @@
 | 2.0.4 | 8-6 (메가드라이브) | hoot megadrive generic_z80 · iyinc: `Audio/HootMegaDrive.cs` (Z80 사운드 쪽 · 카트리지의 Z80 드라이버를 RAM에, 요청 주소) |
 | 2.0.5 | 8-7 (X68000) | MC68000 `Audio/Cpu/M68000.cs` + hoot x68k generic: `Audio/HootX68k.cs` (OPM · ADPCM · DMA · MFP, E00010h = hoot가 대신 하는 IOCS · DOS) |
 | 2.0.6 | 8-7 (X68000 MIDI) | x68k MIDI 판: YM3802 MIDI 보드 (EAFA00h) → 살아 있는 MIDI 곡 (`HootX68k.LoadMidi`) |
+| 2.1.34 | 8-8v 더함 (CUS30) | 새 칩 남코 CUS30: `Audio/Chips/NamcoCus30.cs`, VGM 안 명령 D8h (`VgmSong.Cus30Clock`), System 1 효과음 슬롯 시도 |
 | 2.1.33 | 8-8v (남코 System 1) | hoot namco system1 (22항목: Shadowland · Dragon Spirit · Blazer · Pac-Mania · Galaga '88 · World Stadium …): `Audio/HootNamcoSys1.cs` (6809 + YM2151, CUS30 소리는 아직) |
 | 2.1.32 | 8-8u (6809 CPU · 데이터 이스트 6809) | 새 CPU 6809: `Audio/Cpu/Cpu6809.cs`, hoot dataeast brkthru · exprraid (Break Thru · Darwin 4078 · Express Raider): `Audio/HootDeco6809.cs` (6809 + YM2203 + YM3526) |
 | 2.1.31 | 8-8t 더함 (POKEY) | 새 칩 POKEY: `Audio/Chips/Pokey.cs`, VGM 머리말 B0h · 명령 BBh (읽기 · 재생 · 쓰기), 아타리 System 1 효과음 |
@@ -92,7 +93,7 @@
 | SNK68 (snk 3812) | 4 / 4, 146곡 모두 (키온 또는 uPD7759) | `--test hootsnk` (HOOT_SONGS=1, HOOT_SNKINIT=16진,… 부팅 명령 바꾸기, HOOT_SNKSCAN=곡 = 부팅 명령 00h~FFh 훑기, HOOT_PC · HOOT_PCQ=주소,…) |
 | 토아플랜 1 · Twin Cobra (generic) | 9 / 9, 125곡 모두 (키온) | `--test hoottoaplan` (HOOT_SONGS=1 = 곡마다, HOOT_PROBE=1 = I/O 포트 · 68000 쪽 RAM 후보) |
 | 타이토 YM2151 보드 (fullt) | 9 / 9, 147곡 모두 (FM 키온 또는 MSM 바이트) | `--test hoottaitoopm` (HOOT_SONGS=1 = 곡마다, HOOT_REGS · HOOT_PC · HOOT_PCQ · HOOT_RAM · HOOT_MSMLOG) |
-| 남코 System 1 (system1) | 22 / 22, FM 710 / 818곡 — 무음 108 = 정지 명령 19 + CUS30 파형 효과음 (칩 없음) | `--test hootns1` (HOOT_SONGS=1, HOOT_NSCMD=16진 = 시작 명령 바꾸기) |
+| 남코 System 1 (system1) | 22 / 22, 799 / 818곡 (남은 19 = 정지 명령) — FM 또는 CUS30 | `--test hootns1` (HOOT_SONGS=1) |
 | 데이터 이스트 6809 (brkthru · exprraid) | 3 / 3, 19곡 모두 (YM3526 키온) | `--test hootdeco69` (6809 합성 시험 둘 포함, HOOT_SONGS=1) |
 | 아타리 System 1 (system1) | 4 / 4 (Road Blasters는 곡 목록 없음), 179 / 275곡 — 무음 96 = TMS5220 음성 (Indy 92 · Road Runner 3 · 음성칩 시험 1) | `--test hootatari1` (HOOT_SONGS=1, HOOT_DEBUG=1, HOOT_PCS=1 = PC 분포 · RAM 0200h~) |
 | 캡콤 YM2203 × 2 (opn2 · rushcrsh · tigerroad) | 12 / 12, 281 / 282곡 (남은 하나 = Gun.Smoke 정지 명령) | `--test hootcapopn` (HOOT_SONGS=1, HOOT_DEBUG=1 = 많이 쓴 레지스터) |
@@ -333,8 +334,9 @@
   - IRQ = 화면 60Hz (E000h까지 걸려 있음), **FIRQ = YM2151 타이머** (FM 드라이버가 FIRQ에서 도는 판: 블레이저 · Pac-Mania · World Stadium · Mappy Maze · Blast Off — 처리기 첫 줄이 14h ← 15h)
   - 부팅 맞춤: 5000h = A6h (5001h = A6h면 자가 시험), 옛 판 (Shadowland · Beraboh Man · Mappy Maze · Blast Off)은 7000h = A6h 다음 7001h = 0
   - 곡 요청 (대부분): 공유 RAM 7100h + 2 × 묶음 = 곡 번호, 다음 바이트 = 명령 (bit5~6 → 시작, 드라이버가 80h로). hoot 코드 = 묶음 << 8 | 곡 (묶음 0 = 음악, 1~ = 효과음 — 묶음 0만 넣었을 땐 549곡). 블레이저만 7100h 한 바이트 (1~84h, 받으면 F0h) + 5240h + 슬롯 = CUS30 효과음 (ROM에 LDB $7100 … CMPB #$85로 고름)
-  - 남은 것: CUS30 (8목소리 파형 RAM 5000h~ · 레지스터 5100h~, 노이즈, 스테레오) — VGM에 없는 칩이라 새 칩 + 이 프로그램 안 명령 필요. 효과음 89곡 + FM 곡의 파형 파트
-- 다음: CUS30 칩, 그 뒤 wsg6809 (매피 계열, 6809 + 남코 WSG 15xx) · system86 (HD63701)
+  - v2.1.34 CUS30 (`Chips/NamcoCus30.cs`, MAME namco_audio namcos1 모드): 파형 RAM 000h~0FFh (4비트 둘씩 위 먼저, 32칸 × 16), 레지스터 100h + 목소리 × 8 (+0 왼쪽 음량, +1 파형 · 주파수 위, +2 · +3 주파수, +4 오른쪽 음량 · bit7 = 다음 목소리 노이즈), 음높이 = 주파수 × 24kHz / 2^20, 노이즈 = 17비트 LFSR (주파수 아래 바이트 × 187.5Hz). VGM 안 명령 D8h aa bb dd (NSF의 D7h처럼 렌더가 `VgmSong.Cus30Clock`을 세움 — VGM 파일로 내보내면 다른 플레이어에선 그 파트 없음). 바뀐 쓰기만 기록
+  - 코드 1xxh: 게임마다 FM 묶음 1 (Shadowland · Galaga '88 · Rompers …) 또는 CUS30 효과음 슬롯 5240h + n (Blazer · World Stadium · Mappy Maze · Blast Off · Credit 하나뿐인 게임) — `Start`가 FM 묶음으로 1.5초 돌려 보고 소리 (키온 · CUS30 음량)가 없으면 다시 부팅해 슬롯으로
+- 다음: wsg6809 (매피 계열, 6809 + 남코 WSG 15xx) · system86 (HD63701)
 - 그 다음 (8-8v): Z80 + YM2151 + OKIM6295 작은 보드 (tecmo16 · raizing mahou · bgaregga · banpresto dbz · dooyong …) — MAME 배치를 하나씩 확인해 `HootOpmBoard.Layout`에, atari system1 (6502), 그 뒤 새 칩
   - 남은 것 (8-8a): "소리 남" 기준이 처음 6초에 키온 하나라 몇 항목은 ADPCM 하나뿐 (driftout · liquidk · megablst 등 첫 곡이 짧은 효과음일 수 있음) — 귀로 확인, bshark (code0 · code1 둘), taito z 계열 다른 보드
 

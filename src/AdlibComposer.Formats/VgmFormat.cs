@@ -64,6 +64,8 @@ public sealed class VgmSong
     public double SegaPcmClock;
     /// <summary>POKEY 클럭 (VGM B0h, 명령 BBh).</summary>
     public double PokeyClock;
+    /// <summary>남코 CUS30 클럭 — VGM에 없는 칩: hoot 남코 렌더가 읽은 뒤 세우고, 이 프로그램 안 명령 0xD8 aa bb dd로 온다.</summary>
+    public double Cus30Clock;
     public int SegaPcmInterface;
     public double Sn76489Clock, Ym2413Clock, Ym2612Clock, Ym2151Clock, Ym2203Clock, Ym2608Clock, Okim6295Clock, NesApuClock, Huc6280Clock, Ym2610Clock, Okim6258Clock, Saa1099Clock, GbDmgClock;
     /// <summary>OKIM6258 깃발 (머리말 0x94: bit0~1 분주, bit3 12비트 출력).</summary>
@@ -99,7 +101,7 @@ public sealed class VgmSong
     public bool HasOpl { get { return Ym3812Clock > 0 || Ym3526Clock > 0 || Y8950Clock > 0 || Ymf262Clock > 0; } }
     public bool IsOpl3 { get { return Ymf262Clock > 0; } }
     /// <summary>PSG · SCC · OPL 말고 다른 칩 (공통 칩 경로로 내는 것).</summary>
-    public bool HasOther { get { return Sn76489Clock > 0 || Ym2413Clock > 0 || Ym2612Clock > 0 || Ym2151Clock > 0 || Ym2203Clock > 0 || Ym2608Clock > 0 || Okim6295Clock > 0 || NesApuClock > 0 || Huc6280Clock > 0 || Ym2610Clock > 0 || Okim6258Clock > 0 || Saa1099Clock > 0 || GbDmgClock > 0 || Upd7759Clock > 0 || QsoundClock > 0 || SegaPcmClock > 0 || PokeyClock > 0 || SpcImage != null || SelfRunning != null; } }
+    public bool HasOther { get { return Sn76489Clock > 0 || Ym2413Clock > 0 || Ym2612Clock > 0 || Ym2151Clock > 0 || Ym2203Clock > 0 || Ym2608Clock > 0 || Okim6295Clock > 0 || NesApuClock > 0 || Huc6280Clock > 0 || Ym2610Clock > 0 || Okim6258Clock > 0 || Saa1099Clock > 0 || GbDmgClock > 0 || Upd7759Clock > 0 || QsoundClock > 0 || SegaPcmClock > 0 || PokeyClock > 0 || Cus30Clock > 0 || SpcImage != null || SelfRunning != null; } }
     /// <summary>소리 낼 수 있는 칩이 하나라도 있는가.</summary>
     public bool IsPlayable { get { return HasPsg || HasScc || HasOpl || HasOther; } }
     public bool AyIsYm { get { return AyType >= 0x10; } }
@@ -143,6 +145,7 @@ public sealed class VgmSong
             if (QsoundClock > 0) l.Add("QSound");
             if (SegaPcmClock > 0) l.Add("SegaPCM");
             if (PokeyClock > 0) l.Add("POKEY");
+            if (Cus30Clock > 0) l.Add("CUS30");
             if (Okim6258Clock > 0) l.Add("OKIM6258");
             if (Saa1099Clock > 0) l.Add("SAA1099");
             if (GbDmgClock > 0) l.Add("GB DMG");

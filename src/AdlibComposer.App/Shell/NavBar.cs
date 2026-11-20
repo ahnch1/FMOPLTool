@@ -6,7 +6,7 @@ using System.Windows.Forms;
 namespace AdlibComposer.App.Shell;
 
 /// <summary>프로그램의 페이지 (메뉴 하나 = 페이지 하나).</summary>
-internal enum AppPage { Composer, Instrument, Jukebox, Note, Orgel, Tracker, Organizer, Transcribe }
+internal enum AppPage { Composer, Instrument, Jukebox, Hoot, Note, Orgel, Tracker, Organizer, Transcribe }
 
 /// <summary>
 /// 메뉴 줄(File …)과 툴바(새 곡 …) 사이의 가로 페이지 메뉴: 구역 머리글(PLAY / CREATE / SCORE / TOOLS) + 둥근 아이콘 메뉴.
@@ -48,6 +48,7 @@ internal sealed class NavBar : Control
 
         // 순서 = 흐름: 곡을 듣고(Jukebox) → 고치고(Composer) → 악보로(Note)
         Add("PLAY", AppPage.Jukebox, "Jukebox", "첫 페이지 · 왼쪽 목록에서 고르거나 끌어다 놓은 곡 재생 (ROL · IMS · SOP · S3M · STM · MOD · XM · IT · MID · WRK · VGM · KSS · NSF · HES …) · 가사 · 채널 믹서", Glyphs.Jukebox);
+        Add("PLAY", AppPage.Hoot, "Hoot", "hoot 게임 목록 (제작사 → 장비 → 게임 → 곡)에서 고른 곡을 기계 흉내로 재생 — 화면 · 재생 막대는 Jukebox와 같다 (목록 · 데이터 폴더 = Preferences → Hoot)", Glyphs.Hoot);
         Add("CREATE", AppPage.Composer, "Composer", "건반 악보 작곡 · 재생 (ROL / IMS / SOP) — Jukebox의 곡을 불러옴", Glyphs.Composer);
         Add("CREATE", AppPage.Instrument, "Instrument Maker", "FM 악기 편집 · 시음 (BNK / INS)", Glyphs.Instrument);
         Add("CREATE", AppPage.Tracker, "Tracker", "트래커 곡 만들기 (S3M / STM / MOD / NST) — Jukebox의 곡을 불러옴", Glyphs.Tracker);

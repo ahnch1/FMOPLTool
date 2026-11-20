@@ -10,10 +10,10 @@ using AdlibComposer.Formats;
 namespace AdlibComposer.App.Shell;
 
 /// <summary>
-/// hoot 목록 보기 (왼쪽 목록의 [hoot 열기]): xml 폴더(제작사마다 .xml 하나: xml · xml_new …)를 읽어 제작사 → 장비 → 게임 → 곡 트리로.
+/// hoot 목록 보기 (Hoot 페이지의 왼쪽, <see cref="HootBrowser"/> 안): xml 폴더(제작사마다 .xml 하나: xml · xml_new …)를 읽어 제작사 → 장비 → 게임 → 곡 트리로.
 /// <para>제작사 = xml 파일 이름, 장비 = 게임 이름 앞의 [기계] (없으면 driveralias type), 게임 = 나머지 이름, 곡 = titlelist의 title (range = 효과음은 맨 끝에 한 줄).
 /// 아래 단계는 펼칠 때 만든다 (게임 1만 개 · 곡 15만 줄). 찾기 칸: 게임 이름 · 제작사 · 아카이브에 든 글자로 거른다.</para>
-/// <para>곡 두 번 클릭 / Enter: 아카이브 zip을 xml 폴더 위 폴더(hoot 폴더) 아래에서 찾아,
+/// <para>곡 두 번 클릭 / Enter: 아카이브 zip을 데이터 폴더(설정 Preferences → Hoot, 비면 xml 폴더 위 폴더) 아래에서 찾아,
 /// 흉내 낼 수 있는 항목(PC-98 DOS)이면 zip을 풀고 그 항목을 .hoot 파일로 써서 그 곡을 재생 (<see cref="SongActivated"/>),
 /// 아니면 zip을 폴더 목록에서 연다 (<see cref="ZipRequested"/> — 안의 KSS · NSF · SPC · MDX … 는 그대로 재생).</para>
 /// </summary>
@@ -29,7 +29,7 @@ internal sealed class HootTree : UserControl
     private List<HootGame> games = new List<HootGame>();
     private Dictionary<string, string> zipIndex;
     private Task<Dictionary<string, string>> zipTask;
-    private string listDir, playingHoot;
+    private string listDir, dataRoot, playingHoot;
     private int loadId;
 
     /// <summary>곡 재생 요청 ("항목.hoot::n").</summary>
@@ -39,6 +39,10 @@ internal sealed class HootTree : UserControl
 
     /// <summary>읽은 xml 폴더 (없으면 null).</summary>
     public string ListDir { get { return listDir; } }
+    /// <summary>아카이브 zip을 찾는 폴더 (아래 폴더 모두).</summary>
+    public string DataRoot { get { return dataRoot; } }
+    public bool TreeFocused { get { return tree.Focused; } }
+    public void FocusTree() { if (tree.Visible) tree.Focus(); else search.Focus(); }
     public string Summary { get; private set; } = "";
     public event Action SummaryChanged;
 
@@ -92,10 +96,10 @@ internal sealed class HootTree : UserControl
         Controls.Add(tree);
         Controls.Add(status);
         Controls.Add(search);
-        ShowStatus("[hoot 열기]로 hoot 목록 폴더(xml · xml_new …)를 고르세요");
+        ShowStatus("설정 (Preferences → Hoot)에서 hoot 목록 폴더(xml · xml_new …)를 정하세요");
     }
 
-    private void ShowStatus(string text)
+    public void ShowStatus(string text)
     {
         status.Text = text;
         status.Visible = true;
@@ -106,16 +110,23 @@ internal sealed class HootTree : UserControl
 
     // ---------------------------------------------------------------- 읽기
 
-    /// <summary>hoot 목록 폴더를 읽는다 (뒤에서, 수 초). 아카이브 zip 찾기 색인도 함께 (xml 폴더의 위 폴더 아래 *.zip).</summary>
-    public void Open(string dir)
+    /// <summary>
+    /// hoot 목록 폴더를 읽는다 (뒤에서, 수 초). 아카이브 zip 찾기 색인도 함께: 데이터 폴더 아래 *.zip (비면 xml 폴더의 위 폴더).
+    /// 데이터 폴더가 지난번과 같으면 색인을 다시 만들지 않는다 (목록만 바꿀 때).
+    /// </summary>
+    public void Open(string dir, string data)
     {
         listDir = dir;
         int id = ++loadId;
         ShowStatus("hoot 목록 읽는 중…\n" + dir);
         SetSummary("hoot: " + Path.GetFileName(dir.TrimEnd('\\')) + " — 읽는 중…");
-        string hootRoot = Path.GetDirectoryName(dir.TrimEnd('\\')) ?? dir;
-        zipIndex = null;
-        zipTask = Task.Run(() => IndexZips(hootRoot));
+        string hootRoot = string.IsNullOrEmpty(data) ? Path.GetDirectoryName(dir.TrimEnd('\\')) ?? dir : data;
+        if (zipTask == null || zipTask.IsFaulted || !string.Equals(dataRoot, hootRoot, StringComparison.OrdinalIgnoreCase))
+        {
+            zipIndex = null;
+            zipTask = Task.Run(() => IndexZips(hootRoot));
+        }
+        dataRoot = hootRoot;
         var errors = new List<string>();
         var zips = zipTask;
         Task.Run(() => { var l = HootLists.ReadFolder(dir, null, 0, errors); zips.Wait(); return l; }).ContinueWith(t =>
@@ -266,7 +277,7 @@ internal sealed class HootTree : UserControl
                 var n = new TreeNode(code + "  " + text)
                 {
                     ImageKey = "song", SelectedImageKey = "song", Tag = tag, ForeColor = GameColor(g),
-                    ToolTipText = !Has(g) ? "곡 파일 없음: " + g.Archive + ".zip" : Playable(g) ? "두 번 클릭 / Enter: 재생" : "아직 재생하지 못하는 기종 (두 번 클릭: zip을 폴더 목록에서 열기)",
+                    ToolTipText = !Has(g) ? "곡 파일 없음: " + g.Archive + ".zip" : Playable(g) ? "두 번 클릭 / Enter: 재생" : "아직 재생하지 못하는 기종 (두 번 클릭: zip을 Jukebox의 폴더 목록에서 열기)",
                 };
                 node.Nodes.Add(n);
             }
@@ -281,7 +292,7 @@ internal sealed class HootTree : UserControl
         if (g.Titles.Count == 0) l.Add("곡 목록(titlelist) 없음");
         if (g.Alias.Length > 0) l.Add("별칭: " + g.Alias + (g.AliasType.Length > 0 ? " (" + g.AliasType + ")" : ""));
         if (g.Options.Count > 0) l.Add("옵션: " + string.Join(", ", g.Options.Select(o => o.Key + "=" + o.Value)));
-        l.Add(!Playable(g) ? "재생: 아직 못 함 — zip을 폴더 목록에서 열기"
+        l.Add(!Playable(g) ? "재생: 아직 못 함 — zip을 Jukebox의 폴더 목록에서 열기"
             : g.Options.ContainsKey("midiout") ? "재생: " + (g.Driver.Equals("pcatdos", StringComparison.OrdinalIgnoreCase) ? "PC/AT" : "PC-98") + " DOS 흉내 → MIDI (MPU-401, Jukebox MIDI 설정으로)"
             : "재생: " + (g.Driver.Equals("pc98dos", StringComparison.OrdinalIgnoreCase) ? "PC-98 DOS 흉내" : HootArchive.IsPc98Generic(g.Driver) ? "PC-98 흉내 (DOS 없음)" : g.Driver.Equals("pcatdos", StringComparison.OrdinalIgnoreCase) ? "PC/AT DOS 흉내" : g.DriverType.ToUpperInvariant() + " 파일 (곡 코드 = 곡 번호)"));
         return string.Join("\n", l);
@@ -301,7 +312,7 @@ internal sealed class HootTree : UserControl
     public void ExportMissing()
     {
         if (listDir == null || zipTask == null) return;
-        string hootRoot = Path.GetDirectoryName(listDir.TrimEnd('\\')) ?? listDir;
+        string hootRoot = dataRoot ?? Path.GetDirectoryName(listDir.TrimEnd('\\')) ?? listDir;
         string path;
         using (var dlg = new SaveFileDialog
         {
@@ -356,12 +367,12 @@ internal sealed class HootTree : UserControl
         string zip = FindZip(g.Archive);
         if (zip == null)
         {
-            AppLog.Warn("hoot", "아카이브를 찾지 못했습니다: " + g.Archive + ".zip", "찾은 곳: " + (Path.GetDirectoryName(listDir.TrimEnd('\\')) ?? listDir) + " 아래 모든 폴더");
+            AppLog.Warn("hoot", "아카이브를 찾지 못했습니다: " + g.Archive + ".zip", "찾은 곳: " + dataRoot + " 아래 모든 폴더 (Preferences → Hoot의 데이터 폴더)");
             return;
         }
         if (!Playable(g))
         {
-            AppLog.Info("hoot", GameText(g) + ": " + g.Driver + " / " + g.DriverType + "는 hoot 항목으로 아직 재생하지 않습니다 — zip을 폴더 목록에서 엽니다");
+            AppLog.Info("hoot", GameText(g) + ": " + g.Driver + " / " + g.DriverType + "는 hoot 항목으로 아직 재생하지 않습니다 — zip을 Jukebox의 폴더 목록에서 엽니다");
             ZipRequested?.Invoke(zip);
             return;
         }
@@ -374,7 +385,7 @@ internal sealed class HootTree : UserControl
             string missing = HootArchive.MissingRom(dir, g.Raw);
             if (missing != null)
             {
-                AppLog.Warn("hoot", GameText(g) + ": 곡 파일이 zip에 없습니다 — " + missing, "zip: " + zip + " (같은 이름의 아카이브를 다른 판이 쓰는 경우) · zip을 폴더 목록에서 엽니다");
+                AppLog.Warn("hoot", GameText(g) + ": 곡 파일이 zip에 없습니다 — " + missing, "zip: " + zip + " (같은 이름의 아카이브를 다른 판이 쓰는 경우) · zip을 Jukebox의 폴더 목록에서 엽니다");
                 ZipRequested?.Invoke(zip);
                 return;
             }

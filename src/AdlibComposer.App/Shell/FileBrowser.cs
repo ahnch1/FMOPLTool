@@ -18,7 +18,7 @@ internal enum MusicFileKind { None, Adlib, Tracker, Midi, Vgm, Audio }
 /// 곡이 많으면 세로 스크롤바 + 아래 ◀ ▶ 버튼으로 한 쪽(보이는 줄 수)씩 넘긴다. 연 폴더는 설정(BrowserFolder)에 남겨 다음에 다시 연다.
 /// </summary>
 [System.ComponentModel.DesignerCategory("Code")]
-internal sealed class FileBrowser : UserControl
+internal sealed class FileBrowser : UserControl, ISongList
 {
     private static readonly string[] AdlibExt = { ".rol", ".ims", ".sop", ".mus" };
     private static readonly string[] TrackerExt = { ".s3m", ".stm", ".mod", ".nst", ".xm", ".it" };
@@ -57,10 +57,7 @@ internal sealed class FileBrowser : UserControl
     private bool searchMode;
     private int searchGeneration;
     private readonly Label emptyLabel = new Label();
-    private readonly Button openButton = new Button(), upButton = new Button(), hootButton = new Button();
-    /// <summary>hoot 목록 트리 (hoot 모드에서 목록 대신 보인다).</summary>
-    private readonly HootTree hoot = new HootTree { Dock = DockStyle.Fill, Visible = false };
-    private bool hootMode;
+    private readonly Button openButton = new Button(), upButton = new Button();
     private readonly Button prevPage = new Button(), nextPage = new Button();
     private readonly Label pageLabel = new Label();
     private readonly ImageList icons = new ImageList { ImageSize = new Size(16, 16), ColorDepth = ColorDepth.Depth32Bit };
@@ -90,17 +87,11 @@ internal sealed class FileBrowser : UserControl
         var bar = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 36, Padding = new Padding(6, 5, 6, 0), BackColor = Color.FromArgb(246, 247, 249), WrapContents = false };
         SetupButton(openButton, " 폴더 열기", Glyphs.Open, 104, "곡 폴더 열기 (폴더를 끌어다 놓아도 된다) — 그 폴더와 아래 폴더만 오간다");
         SetupButton(upButton, " 위로", '', 64, "위 폴더로 (연 폴더 위로는 가지 않는다) · Backspace");
-        SetupButton(hootButton, " hoot", Glyphs.Jukebox, 70, "hoot 목록 열기: hoot 게임 목록 폴더(xml · xml_new …, 제작사마다 .xml)를 골라 제작사 → 장비 → 게임 → 곡 트리로 본다\n곡 두 번 클릭 = 재생 (PC-98 DOS 항목) / 그 밖의 기종은 아카이브 zip을 폴더 목록에서 연다\n이미 읽었으면 트리로 돌아가고, Shift+클릭은 폴더를 다시 고른다\n트리에서 오른쪽 클릭: 없는 파일(zip) 목록 · 폴더 구성을 CSV로 저장");
         openButton.Click += delegate { BrowseFolder(); };
         upButton.Click += delegate { GoUp(); };
-        hootButton.Click += delegate { OpenHoot((ModifierKeys & Keys.Shift) != 0); };
         bar.Controls.Add(openButton);
         bar.Controls.Add(upButton);
-        bar.Controls.Add(hootButton);
 
-        hoot.SongActivated += p => FileActivated?.Invoke(p);
-        hoot.ZipRequested += z => { LeaveHoot(); OpenZip(z); };
-        hoot.SummaryChanged += delegate { if (hootMode) pathLabel.Text = hoot.Summary; };
 
         pathLabel.Dock = DockStyle.Top;
         pathLabel.Height = 24;
@@ -187,7 +178,6 @@ internal sealed class FileBrowser : UserControl
         pager.Controls.Add(nextPage, 2, 0);
 
         Controls.Add(list);
-        Controls.Add(hoot);
         Controls.Add(emptyLabel);
         Controls.Add(pager);
         Controls.Add(searchBox);
@@ -241,7 +231,6 @@ internal sealed class FileBrowser : UserControl
     {
         get
         {
-            if (hootMode) return hoot.PlaylistPaths;
             var l = new List<string>();
             foreach (ListViewItem it in list.Items) { var e = (Entry)it.Tag; if (!e.IsDir && !e.IsTrack) l.Add(e.Path); }
             return l;
@@ -314,7 +303,6 @@ internal sealed class FileBrowser : UserControl
     /// </summary>
     public void MarkCurrent(string path)
     {
-        hoot.MarkCurrent(path);
         currentPath = path;
         string file = AdlibComposer.Audio.ChipSongs.FilePart(path);
         bool track = path != null && !string.Equals(file, path, StringComparison.OrdinalIgnoreCase);
@@ -352,7 +340,6 @@ internal sealed class FileBrowser : UserControl
 
     private void GoUp()
     {
-        if (hootMode) { LeaveHoot(); return; }
         if (searchMode) { ClearSearch(); return; }
         if (AtRoot) return;
         string from = current;
@@ -385,7 +372,6 @@ internal sealed class FileBrowser : UserControl
 
     private void ShowEmpty()
     {
-        SetHootMode(false);
         list.Items.Clear();
         list.Visible = false;
         emptyLabel.Visible = true;
@@ -400,7 +386,6 @@ internal sealed class FileBrowser : UserControl
     /// <summary>폴더 하나를 목록으로: (..) · 하위 폴더 · 곡 파일 (이름순).</summary>
     private void ShowFolder(string dir)
     {
-        SetHootMode(false);
         if (searchMode || !string.Equals(dir, current, StringComparison.OrdinalIgnoreCase)) { EndSearch(); searchBox.Text = ""; }
         searchBox.Visible = true;
         current = dir;
@@ -471,60 +456,6 @@ internal sealed class FileBrowser : UserControl
         lastTop = -1;
         UpdatePager();
         LoadTitles();
-    }
-
-    // ---------------------------------------------------------------- hoot 목록
-
-    /// <summary>[hoot]: 읽어 둔 트리가 있으면 그리로, 없거나 Shift면 hoot 목록 폴더를 고른다.</summary>
-    private void OpenHoot(bool choose)
-    {
-        if (!choose && hoot.ListDir != null) { SetHootMode(true); return; }
-        string start = hoot.ListDir ?? settings().HootFolderPath;
-        using (var dlg = new FolderBrowserDialog { Description = "hoot 게임 목록 폴더 (xml · xml_new …: 제작사마다 .xml 파일)", UseDescriptionForTitle = true, ShowNewFolderButton = false })
-        {
-            if (start != null && Directory.Exists(start)) dlg.SelectedPath = start;
-            if (dlg.ShowDialog(FindForm()) != DialogResult.OK) return;
-            OpenHootFolder(dlg.SelectedPath);
-        }
-    }
-
-    /// <summary>hoot 목록 폴더를 읽어 트리로 보인다 (설정에 남김). hoot 폴더 자체를 고르면 그 안의 xml_new / xml.</summary>
-    public void OpenHootFolder(string dir)
-    {
-        try { dir = Path.GetFullPath(dir); } catch (Exception) { }
-        if (!Directory.Exists(dir)) return;
-        if (!Directory.EnumerateFiles(dir, "*.xml").Any(f => !Path.GetFileName(f).StartsWith("hoot", StringComparison.OrdinalIgnoreCase)))
-            foreach (var sub in new[] { "xml_new", "xml" })
-                if (Directory.Exists(Path.Combine(dir, sub))) { dir = Path.Combine(dir, sub); break; }
-        hoot.Open(dir);
-        SetHootMode(true);
-        try { var s = settings(); s.HootFolder = AppSettings.ToStored(dir); s.Save(); }
-        catch (Exception ex) { AppLog.Warn("파일", "설정에 hoot 폴더를 남기지 못했습니다", ex.Message); }
-    }
-
-    private void LeaveHoot()
-    {
-        if (!hootMode) return;
-        if (current != null && ZipPath.DirectoryExists(current)) ShowFolder(current);
-        else ShowEmpty();
-    }
-
-    private void SetHootMode(bool on)
-    {
-        hootMode = on;
-        hoot.Visible = on;
-        if (on) { EndSearch(); searchBox.Visible = false; }   // hoot 트리는 자기 찾기 칸
-        hootButton.BackColor = on ? Color.FromArgb(222, 242, 239) : Color.White;
-        tips.SetToolTip(upButton, on ? "폴더 목록으로 돌아가기 · Backspace" : "위 폴더로 (연 폴더 위로는 가지 않는다) · Backspace");
-        if (!on) return;
-        list.Visible = false;
-        emptyLabel.Visible = false;
-        upButton.Enabled = true;
-        pathLabel.Text = hoot.Summary;
-        tips.SetToolTip(pathLabel, hoot.ListDir ?? "");
-        prevPage.Enabled = nextPage.Enabled = false;
-        pageLabel.Text = "";
-        hoot.Focus();
     }
 
     // ---------------------------------------------------------------- ZIP
@@ -685,7 +616,6 @@ internal sealed class FileBrowser : UserControl
 
     private void UpdatePager()
     {
-        if (hootMode) return;   // hoot 트리에는 쪽이 없다
         int n = list.Items.Count;
         int size = PageSize;
         int pages = Math.Max(1, (n + size - 1) / size);

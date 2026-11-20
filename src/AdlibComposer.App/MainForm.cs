@@ -51,6 +51,15 @@ internal sealed class MainForm : Form
     private readonly LogPanel logPanel = new LogPanel();
     private readonly Splitter logSplitter = new Splitter();
     private readonly JukeboxView jukebox;
+    /// <summary>Hoot 페이지: Jukebox와 같은 JukeboxView (왼쪽 = hoot 목록). hoot 목록은 처음 이 페이지를 열 때 읽는다.</summary>
+    private readonly JukeboxView hootJukebox;
+    private readonly HootBrowser hootBrowser;
+    /// <summary>왼쪽 목록 자리: Jukebox · 나머지 페이지 = 공용 폴더 / 파일 목록, Hoot = hoot 목록.</summary>
+    private readonly Panel leftHost = new Panel();
+    /// <summary>
+    /// 마지막에 쓴 재생기 (Jukebox 또는 Hoot): Composer · Note · Orgel Note · Tracker가 이 재생기에 올린 곡을 불러온다.
+    /// </summary>
+    private JukeboxView player;
     private readonly OrgelView orgel;
     private readonly TrackerView trackerView;
     private readonly OrganizerView organizer;
@@ -97,10 +106,17 @@ internal sealed class MainForm : Form
 
         composer = new ComposerView(ws) { Dock = DockStyle.Fill, Visible = false };
         instrument = new InstrumentView(ws) { Dock = DockStyle.Fill, Visible = false };
-        browser = new FileBrowser(ws, delegate { return settings; }) { Dock = DockStyle.Left, Width = 300 };
+        browser = new FileBrowser(ws, delegate { return settings; }) { Dock = DockStyle.Fill };
         browser.FileActivated += OpenFromBrowser;
         jukebox = new JukeboxView(ws, delegate { return settings; }, TryOpenAudio, browser) { Dock = DockStyle.Fill };
         jukebox.PreferencesRequested += ShowPreferences;
+        player = jukebox;
+        hootBrowser = new HootBrowser(delegate { return settings; }) { Dock = DockStyle.Fill, Visible = false };
+        hootJukebox = new JukeboxView(ws, delegate { return settings; }, TryOpenAudio, hootBrowser) { Dock = DockStyle.Fill, Visible = false };
+        hootJukebox.PreferencesRequested += ShowPreferences;
+        hootBrowser.PreferencesRequested += ShowPreferences;
+        hootBrowser.SongActivated += p => { if (page == AppPage.Hoot) hootJukebox.Play(p); };
+        hootBrowser.ZipRequested += z => { ShowPage(AppPage.Jukebox); browser.OpenZip(z); };   // 아직 재생 못 하는 기종: zip 안의 KSS · NSF · SPC … 는 Jukebox가
         note = new NoteView(ws, TryOpenAudio, delegate { return SongFolder(); }) { Dock = DockStyle.Fill, Visible = false };
         trackerView = new TrackerView(ws, delegate { return settings; }, TryOpenAudio) { Dock = DockStyle.Fill, Visible = false };
         organizer = new OrganizerView(delegate { return settings; }) { Dock = DockStyle.Fill, Visible = false };
@@ -156,6 +172,11 @@ internal sealed class MainForm : Form
         navBar.Selected = page;
         navBar.PageSelected += ShowPage;
 
+        leftHost.Dock = DockStyle.Left;
+        leftHost.Width = 300;
+        leftHost.Controls.Add(browser);
+        leftHost.Controls.Add(hootBrowser);
+
         browserSplitter.Dock = DockStyle.Left;
         browserSplitter.Width = 4;
         browserSplitter.BackColor = Color.FromArgb(225, 228, 232);
@@ -163,7 +184,7 @@ internal sealed class MainForm : Form
         browserSplitter.MinExtra = 600;
 
         pageHost.Dock = DockStyle.Fill;
-        pageHost.Controls.AddRange(new Control[] { composer, instrument, jukebox, note, orgel, trackerView, organizer, transcribe });
+        pageHost.Controls.AddRange(new Control[] { composer, instrument, jukebox, hootJukebox, note, orgel, trackerView, organizer, transcribe });
 
         logPanel.Dock = DockStyle.Bottom;
         logPanel.Height = 140;
@@ -193,9 +214,10 @@ internal sealed class MainForm : Form
 
         Controls.Add(content);
         Controls.Add(browserSplitter);
-        Controls.Add(browser);
+        Controls.Add(leftHost);
         Controls.Add(status);
         Controls.Add(jukebox.ControlBar);   // 메뉴 아래 (예전 툴바 자리): Jukebox 재생 · 속도 · 키 · 볼륨 · 음색 · MIDI
+        Controls.Add(hootJukebox.ControlBar);   // Hoot 페이지의 같은 막대
         Controls.Add(navBar);
         Controls.Add(menu);
     }
@@ -248,11 +270,12 @@ internal sealed class MainForm : Form
     private void UpdatePageBars()
     {
         jukebox.ControlBar.Visible = page == AppPage.Jukebox;
+        hootJukebox.ControlBar.Visible = page == AppPage.Hoot;
         toolbar.Visible = composerMode || page == AppPage.Note || page == AppPage.Orgel || page == AppPage.Transcribe;
         foreach (var it in composerTools) it.Available = composerMode;
     }
 
-    /// <summary>페이지 메뉴 / Ctrl+1~8: 페이지 바꾸기 (Ctrl+1 Jukebox, 2 Composer, 3 Instrument Maker, 4 Note …).</summary>
+    /// <summary>페이지 메뉴 / Ctrl+1~9: 페이지 바꾸기 (Ctrl+1 Jukebox, 2 Composer, 3 Instrument Maker, 4 Note … 9 Hoot).</summary>
     private void ShowPage(AppPage target)
     {
         if (page == target) return;
@@ -264,10 +287,17 @@ internal sealed class MainForm : Form
 
         page = target;
         navBar.Selected = target;
+        if (target == AppPage.Jukebox) player = jukebox;
+        else if (target == AppPage.Hoot) player = hootJukebox;
         PullFromJukebox(target);
         composer.Visible = target == AppPage.Composer;
         instrument.Visible = target == AppPage.Instrument;
         jukebox.Visible = target == AppPage.Jukebox;
+        hootJukebox.Visible = target == AppPage.Hoot;
+        // 왼쪽: Hoot = hoot 목록 (처음 열 때 읽음), 나머지 = 공용 폴더 / 파일 목록
+        hootBrowser.Visible = target == AppPage.Hoot;
+        browser.Visible = target != AppPage.Hoot;
+        if (target == AppPage.Hoot) hootBrowser.EnsureLoaded();
         note.Visible = target == AppPage.Note;
         orgel.Visible = target == AppPage.Orgel;
         trackerView.Visible = target == AppPage.Tracker;
@@ -290,6 +320,7 @@ internal sealed class MainForm : Form
         {
             case AppPage.Instrument: return instrument;
             case AppPage.Jukebox: return jukebox;
+            case AppPage.Hoot: return hootJukebox;
             case AppPage.Note: return note;
             case AppPage.Orgel: return orgel;
             case AppPage.Tracker: return trackerView;
@@ -337,7 +368,7 @@ internal sealed class MainForm : Form
         if (!ConfirmDiscardSong()) return false;
         StopPlayback();
         ws.ReplaceSong(song);
-        pulledSong = jukebox.CurrentPath;   // 채보한 곡을 Jukebox 곡으로 덮지 않도록
+        pulledSong = player.CurrentPath;   // 채보한 곡을 Jukebox 곡으로 덮지 않도록
         LogSong("채보");
         ShowPage(target);
         return true;
@@ -376,6 +407,8 @@ internal sealed class MainForm : Form
             ApplyOplCore();
             VoiceColors.Set(settings.VoiceColors);   // Composer · Note · Jukebox가 Changed로 다시 그린다
             jukebox.SettingsChanged();
+            hootJukebox.SettingsChanged();
+            if (page == AppPage.Hoot || hootBrowser.Loaded) hootBrowser.EnsureLoaded();   // 목록 · 데이터 폴더가 바뀌었으면 다시 읽음 (Hoot을 연 적이 없으면 읽지 않음)
             if (f.LoadBankNow && settings.DefaultBankPath != null && File.Exists(settings.DefaultBankPath) && ConfirmDiscardBank())
             {
                 try { StopPlayback(); ws.OpenBank(settings.DefaultBankPath); LogBank("기본 뱅크"); }
@@ -705,6 +738,7 @@ internal sealed class MainForm : Form
         helpMenu.DropDownItems.Insert(0, Item("Instrument Maker", delegate { ShowPage(AppPage.Instrument); }, Keys.None, "Ctrl+3"));
         helpMenu.DropDownItems.Insert(0, Item("Composer", delegate { ShowPage(AppPage.Composer); }, Keys.None, "Ctrl+2"));
         helpMenu.DropDownItems.Insert(0, Item("Jukebox", delegate { ShowPage(AppPage.Jukebox); }, Keys.None, "Ctrl+1"));
+        helpMenu.DropDownItems.Insert(1, Item("Hoot", delegate { ShowPage(AppPage.Hoot); }, Keys.None, "Ctrl+9"));
 
         menu.Items.AddRange(new ToolStripItem[] { fileMenu, editMenu, instOptionMenu, playMenu, displayMenu, optionsMenu, helpMenu });
         menu.MenuActivate += delegate { SyncMenus(); };
@@ -1016,6 +1050,7 @@ internal sealed class MainForm : Form
         bool typing = FocusedControl() is TextBoxBase;   // 찾기 칸 등: 글자 · 공백 · 화살표는 칸이 쓴다
         bool text = typing || inBrowser;   // 왼쪽 파일 목록: 화살표 · Enter는 목록이 쓴다
         if (inBrowser && !typing && page == AppPage.Jukebox && jukebox.HandleKey(keyData)) return true;
+        if (page == AppPage.Hoot && hootBrowser.ListFocused && hootJukebox.HandleKey(keyData)) return true;   // hoot 트리에서도 Space · Esc · ← → …
         switch (keyData)
         {
             case Keys.F5: fileMenu.ShowDropDown(); return true;
@@ -1038,6 +1073,7 @@ internal sealed class MainForm : Form
             case Keys.Control | Keys.D6: ShowPage(AppPage.Tracker); return true;
             case Keys.Control | Keys.D7: ShowPage(AppPage.Organizer); return true;
             case Keys.Control | Keys.D8: ShowPage(AppPage.Transcribe); return true;
+            case Keys.Control | Keys.D9: ShowPage(AppPage.Hoot); return true;
             case Keys.Space: if (composerMode && !text) { TogglePlay(); return true; } break;
             case Keys.Shift | Keys.Space:
                 if (composerMode && !text)
@@ -1134,6 +1170,7 @@ internal sealed class MainForm : Form
         if (page != AppPage.Jukebox && PullsFromJukebox(page, kind, path))
         {
             jukebox.Cue(path);
+            player = jukebox;   // 왼쪽 폴더 목록에서 고른 곡 = Jukebox 곡
             PullFromJukebox(page);
             var p = PageControl(page) as IShellPage;
             if (p != null && page != AppPage.Tracker) p.OnShown();   // Note / Orgel: 새 곡으로 다시 그리기
@@ -1159,7 +1196,7 @@ internal sealed class MainForm : Form
     /// </summary>
     private void PullFromJukebox(AppPage target)
     {
-        string path = jukebox.CurrentPath;
+        string path = player.CurrentPath;
         if (path == null) return;
         var kind = FileBrowser.KindOf(path);
         if (!PullsFromJukebox(target, kind, path)) return;
@@ -1183,7 +1220,7 @@ internal sealed class MainForm : Form
     /// </summary>
     private void PullChipSong(string path)
     {
-        var v = jukebox.CurrentVgm;
+        var v = player.CurrentVgm;
         if (v == null)
         {
             AppLog.Warn("곡", "Jukebox 곡을 노트로 바꾸지 못했습니다: " + Path.GetFileName(ChipSongs.FilePart(path)) + " (칩 기록 곡이 아님 — MIDI로 내는 hoot 항목 등)");
@@ -1382,6 +1419,10 @@ internal sealed class MainForm : Form
     /// <summary>hoot 목록 비교 시작 폴더: 왼쪽 목록의 폴더(또는 그 위)에 xml 묶음 폴더가 있으면.</summary>
     private string HootStartFolder()
     {
+        // 설정의 hoot 데이터 폴더 · 목록 폴더의 위 폴더가 먼저
+        var first = settings.HootXmlFolderPaths.FirstOrDefault();
+        foreach (var c in new[] { settings.HootDataFolderPath, first != null ? Path.GetDirectoryName(first.TrimEnd('\\')) : null })
+            if (c != null && Directory.Exists(c)) return c;
         string d = browser.CurrentFolder;
         for (int i = 0; i < 3 && !string.IsNullOrEmpty(d); i++)
         {

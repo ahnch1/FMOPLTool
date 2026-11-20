@@ -31,6 +31,7 @@
 | 2.0.4 | 8-6 (메가드라이브) | hoot megadrive generic_z80 · iyinc: `Audio/HootMegaDrive.cs` (Z80 사운드 쪽 · 카트리지의 Z80 드라이버를 RAM에, 요청 주소) |
 | 2.0.5 | 8-7 (X68000) | MC68000 `Audio/Cpu/M68000.cs` + hoot x68k generic: `Audio/HootX68k.cs` (OPM · ADPCM · DMA · MFP, E00010h = hoot가 대신 하는 IOCS · DOS) |
 | 2.0.6 | 8-7 (X68000 MIDI) | x68k MIDI 판: YM3802 MIDI 보드 (EAFA00h) → 살아 있는 MIDI 곡 (`HootX68k.LoadMidi`) |
+| 2.1.20 | — (UI) | **Hoot 페이지** (PLAY, Jukebox 옆): 같은 `JukeboxView` + 왼쪽 `Shell/HootBrowser.cs` (목록 고르기 · 설정 · `HootTree`), 왼쪽 목록 접점 `ISongList`, 설정 Preferences → Hoot (HootXmlFolders · HootDataFolder), 처음 열 때 읽음. 왼쪽 목록 [hoot] 버튼은 없앰 |
 | 2.1.19 | 8-8l (데이터 이스트 6502) | hoot dataeast cobracom · drgninja · karnov · triothep · lastmisn · makyosen: `Audio/HootDeco6502.cs` (6502 + YM2203 + YM3812/YM3526 + OKIM6295), 6502 `DecimalMode` · `OpcodeMap` |
 | 2.1.18 | 8-8k (토아플랜 1 · generic) | hoot toaplan generic (Flying Shark · Twin Cobra · Rally Bike · Truxton · Hellfire · Zero Wing · Demon's World · Out Zone · Gulf War 2): `Audio/HootToaplan.cs` (Z80 + YM3812, 같이 쓰는 RAM 명령) |
 | 2.1.17 | 8-8j (타이토 YM2151 · fullt) | hoot taito fullt (Rastan · Top Speed · Asuka · Cadash · Exzisus · Visco 3): `Audio/HootTaitoOpm.cs` (Z80 + YM2151 + TC0140SYT + MSM5205 → VGM OKIM6258) |
@@ -54,7 +55,7 @@
 - `Audio/Dos/HootPc98.cs` — 항목 → 기계 세우기 (`BootAny` · `BootDirAny`: rom 줄 file · conin · device · code · string · shell 차례로; pc98vx · pc98은 `BootGeneric`: code · binary(16진 패치) · string을 주소에, bgm · bgm2 · strlist는 `Pc98Machine.GenericData`로, bootcs:bootip에서 시작), `IHootMachine`, `HootDosChip` (기계를 품은 칩: OPN/OPNA · OPL2/OPL3 + BEEP), MIDI 판 `LoadMidi`
 - `Audio/Dos/Pc98Machine.cs` · `PcAtMachine.cs` · `Pic8259.cs` · `Mpu401.cs` · `SharedPrograms.cs` (zip에 없는 셸 프로그램 = 같은 폴더 다른 zip)
 - `Formats/MidiSong.cs` (`Extend` · `RenderedTicks` · `PrepareLive`) + `Audio/MidiPlayer.cs` — 살아 있는 MIDI 곡 (재생기가 1초 앞까지 오디오 스레드에서 채움)
-- `App/Shell/HootTree.cs` · `FileBrowser.cs` ([hoot] 버튼) · `Views/JukeboxView.cs` (.hoot MIDI 판 → MIDI 재생, MT-32 판 강제)
+- `App/Shell/HootTree.cs` · `HootBrowser.cs` (Hoot 페이지 왼쪽, v2.1.20 — 그 전엔 `FileBrowser.cs`의 [hoot] 버튼) · `Views/JukeboxView.cs` (.hoot MIDI 판 → MIDI 재생, MT-32 판 강제)
 
 ### 지금 결과 (첫 곡 기준)
 

@@ -29,8 +29,8 @@ internal sealed class JukeboxView : UserControl, IShellPage
     private readonly Func<AppSettings> settings;
     private readonly Func<bool> openAudio;
 
-    // 왼쪽 공용 폴더 / 파일 목록 (MainForm)
-    private readonly FileBrowser browser;
+    // 왼쪽 목록 (MainForm): Jukebox = 공용 폴더 / 파일 목록, Hoot = hoot 목록
+    private readonly ISongList browser;
 
     // 오른쪽 데크
     private readonly PlayerDisplay display = new PlayerDisplay();
@@ -103,7 +103,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
     private InstrumentBank defaultBank;
     private string defaultBankPath;
 
-    public JukeboxView(Workspace ws, Func<AppSettings> settings, Func<bool> openAudio, FileBrowser browser)
+    public JukeboxView(Workspace ws, Func<AppSettings> settings, Func<bool> openAudio, ISongList browser)
     {
         this.ws = ws;
         this.browser = browser;

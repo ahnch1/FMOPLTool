@@ -78,6 +78,7 @@ internal static class Glyphs
     public const char Settings = '';
     public const char Organizer = '\uE8C8';   // Copy (같은 곡 정리)
     public const char Transcribe = '\uE720';  // Microphone (채보)
+    public const char Hoot = '\uE7FC';        // Game (게임기: hoot 게임 목록)
     public const char Folder = '';
 }
 

@@ -1,6 +1,7 @@
 using System;
 using System.Drawing;
 using System.IO;
+using System.Linq;
 using System.Windows.Forms;
 
 namespace AdlibComposer.App;
@@ -24,6 +25,8 @@ internal sealed class PreferencesForm : Form
     private readonly ComboBox midiModuleBox = new ComboBox();
     private readonly TextBox mt32RomBox = new TextBox();
     private readonly TextBox karaokeBox = new TextBox();
+    private readonly ListBox hootListBox = new ListBox();
+    private readonly TextBox hootDataBox = new TextBox();
     private readonly TextBox bankFolderBox = new TextBox();
     private readonly TextBox bankBox = new TextBox();
     private readonly CheckBox loadBankCheck = new CheckBox();
@@ -136,6 +139,20 @@ internal sealed class PreferencesForm : Form
             ForeColor = Subtle, AutoSize = true, MaximumSize = new Size(700, 0), Margin = new Padding(0, 0, 0, 12)
         });
 
+        root.Controls.Add(Section("Hoot"));
+        root.Controls.Add(new Label
+        {
+            Text = "Hoot page: game list folders (xml, xml2, xml_new ... — one .xml per maker). The page shows one at a time; pick it in the box above the tree.\nNothing is read until you open the Hoot page for the first time.",
+            ForeColor = Subtle, AutoSize = true, MaximumSize = new Size(700, 0), Margin = new Padding(0, 0, 0, 4)
+        });
+        root.Controls.Add(HootListRow());
+        root.Controls.Add(PathRow("Data folder (archive zips)", hootDataBox, settings.HootDataFolderPath ?? "", delegate { BrowseFolder(hootDataBox, "hoot data folder (archive zips are searched here and in all subfolders)"); }));
+        root.Controls.Add(new Label
+        {
+            Text = "Archive zips (romlist archive) are searched in this folder and all its subfolders — usually the hoot folder with hoot.ini.\nEmpty = the folder above the selected list folder.",
+            ForeColor = Subtle, AutoSize = true, MaximumSize = new Size(700, 0), Margin = new Padding(0, 0, 0, 12)
+        });
+
         root.Controls.Add(Section("Voice colors"));
         root.Controls.Add(new Label
         {
@@ -230,6 +247,82 @@ internal sealed class PreferencesForm : Form
         return row;
     }
 
+    /// <summary>hoot 목록 폴더들: 목록 + [Add...] [Remove] [Up] [Down].</summary>
+    private Control HootListRow()
+    {
+        var row = new TableLayoutPanel { AutoSize = true, ColumnCount = 3, Margin = new Padding(0, 0, 0, 6) };
+        row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 170));
+        row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 420));
+        row.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        var lb = new Label { Text = "Game list folders", AutoSize = true, Anchor = AnchorStyles.Left | AnchorStyles.Top, Margin = new Padding(0, 4, 8, 0) };
+        hootListBox.Dock = DockStyle.Fill;
+        hootListBox.Height = 96;
+        hootListBox.IntegralHeight = false;
+        hootListBox.HorizontalScrollbar = true;
+        hootListBox.Margin = new Padding(0, 3, 8, 3);
+        foreach (var f in settings.HootXmlFolderPaths) hootListBox.Items.Add(f);
+        var buttons = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.TopDown, WrapContents = false, Margin = new Padding(0) };
+        var add = MakeButton("Add...", false);
+        var remove = MakeButton("Remove", false);
+        var up = MakeButton("Up", false);
+        var down = MakeButton("Down", false);
+        foreach (var b in new[] { add, remove, up, down }) { b.Margin = new Padding(0, 0, 0, 4); b.MinimumSize = new Size(84, 0); buttons.Controls.Add(b); }
+        add.Click += delegate { AddHootFolder(); };
+        remove.Click += delegate { int i = hootListBox.SelectedIndex; if (i >= 0) { hootListBox.Items.RemoveAt(i); if (hootListBox.Items.Count > 0) hootListBox.SelectedIndex = Math.Min(i, hootListBox.Items.Count - 1); } };
+        up.Click += delegate { MoveHoot(-1); };
+        down.Click += delegate { MoveHoot(1); };
+        row.Controls.Add(lb, 0, 0);
+        row.Controls.Add(hootListBox, 1, 0);
+        row.Controls.Add(buttons, 2, 0);
+        return row;
+    }
+
+    private void AddHootFolder()
+    {
+        using (var dlg = new FolderBrowserDialog { Description = "hoot game list folder (xml / xml_new ...: one .xml per maker)", UseDescriptionForTitle = true, ShowNewFolderButton = false })
+        {
+            string start = hootListBox.SelectedItem as string ?? (hootDataBox.Text.Trim().Length > 0 ? SafeResolve(hootDataBox.Text) : null);
+            if (start != null && Directory.Exists(start)) dlg.SelectedPath = start;
+            if (dlg.ShowDialog(this) != DialogResult.OK) return;
+            string dir = dlg.SelectedPath;
+            // hoot 폴더 자체를 고르면 그 안의 xml 폴더들을 모두 더한다
+            if (!HasLists(dir))
+            {
+                var subs = Directory.GetDirectories(dir, "xml*").Where(HasLists).OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToList();
+                if (subs.Count > 0)
+                {
+                    foreach (var x in subs) AddHootItem(x);
+                    if (hootDataBox.Text.Trim().Length == 0) hootDataBox.Text = dir;
+                    return;
+                }
+            }
+            AddHootItem(dir);
+        }
+    }
+
+    private static bool HasLists(string dir)
+    {
+        try { return Directory.EnumerateFiles(dir, "*.xml").Any(f => !Path.GetFileName(f).StartsWith("hoot", StringComparison.OrdinalIgnoreCase)); }
+        catch (Exception) { return false; }
+    }
+
+    private void AddHootItem(string dir)
+    {
+        foreach (string x in hootListBox.Items) if (string.Equals(x, dir, StringComparison.OrdinalIgnoreCase)) { hootListBox.SelectedItem = x; return; }
+        hootListBox.Items.Add(dir);
+        hootListBox.SelectedIndex = hootListBox.Items.Count - 1;
+    }
+
+    private void MoveHoot(int d)
+    {
+        int i = hootListBox.SelectedIndex, j = i + d;
+        if (i < 0 || j < 0 || j >= hootListBox.Items.Count) return;
+        object o = hootListBox.Items[i];
+        hootListBox.Items.RemoveAt(i);
+        hootListBox.Items.Insert(j, o);
+        hootListBox.SelectedIndex = j;
+    }
+
     private static Button MakeButton(string text, bool primary)
     {
         var b = new Button
@@ -316,6 +409,8 @@ internal sealed class PreferencesForm : Form
         midiModuleBox.SelectedIndex = 0;
         mt32RomBox.Text = d.Mt32RomFolderPath;
         karaokeBox.Text = "";
+        hootListBox.Items.Clear();
+        hootDataBox.Text = "";
         bankFolderBox.Text = d.BankFolderPath;
         bankBox.Text = d.DefaultBankPath;
         loadBankCheck.Checked = true;
@@ -334,6 +429,8 @@ internal sealed class PreferencesForm : Form
             settings.MidiMt32 = midiModuleBox.SelectedIndex == 1;
             settings.Mt32RomFolder = AppSettings.ToStored(SafeResolve(mt32RomBox.Text));
             settings.KaraokeFolder = karaokeBox.Text.Trim().Length == 0 ? "" : AppSettings.ToStored(SafeResolve(karaokeBox.Text));
+            settings.HootXmlFolders = hootListBox.Items.Cast<string>().Select(AppSettings.ToStored).ToList();
+            settings.HootDataFolder = hootDataBox.Text.Trim().Length == 0 ? "" : AppSettings.ToStored(SafeResolve(hootDataBox.Text));
             settings.BankFolder = AppSettings.ToStored(SafeResolve(bankFolderBox.Text));
             settings.DefaultBank = bankBox.Text.Trim().Length == 0 ? "" : AppSettings.ToStored(SafeResolve(bankBox.Text));
             settings.LoadDefaultBank = loadBankCheck.Checked;

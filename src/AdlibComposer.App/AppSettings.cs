@@ -33,8 +33,12 @@ internal sealed class AppSettings
 
     /// <summary>왼쪽 목록에서 마지막으로 연 곡 폴더 (다음 실행 때 다시 연다). 저장 값(상대/절대), 비면 없음.</summary>
     public string BrowserFolder { get; set; } = "";
-    /// <summary>왼쪽 목록 [hoot]로 마지막에 연 hoot 목록 폴더 (xml · xml_new …). 저장 값(상대/절대), 비면 없음.</summary>
+    /// <summary>Hoot 페이지에서 마지막에 고른 hoot 목록 폴더 (<see cref="HootXmlFolders"/> 중 하나). 저장 값(상대/절대), 비면 첫 폴더.</summary>
     public string HootFolder { get; set; } = "";
+    /// <summary>hoot 목록 폴더들 (xml · xml2 · xml_new …, 제작사마다 .xml). Hoot 페이지 위 고르기 상자에 이 순서로. 저장 값(상대/절대).</summary>
+    public List<string> HootXmlFolders { get; set; } = new List<string>();
+    /// <summary>hoot 데이터 폴더: 아카이브 zip을 이 폴더와 아래 폴더 모두에서 찾는다 (hoot.ini가 있는 hoot 폴더). 비면 목록 폴더의 위 폴더.</summary>
+    public string HootDataFolder { get; set; } = "";
     /// <summary>Organizer 우선 폴더: 같은 곡이면 이 폴더(하위 폴더 포함)의 파일을 가장 먼저 남긴다. 저장 값(상대/절대), 비면 없음.</summary>
     public string OrganizerPreferredFolder { get; set; } = "";
     /// <summary>MIDI를 Windows 신디사이저로 (false = OPL FM).</summary>
@@ -95,6 +99,17 @@ internal sealed class AppSettings
     /// <summary>왼쪽 목록에서 연 곡 폴더 (없으면 null). 파일 대화상자 · Organizer · Tracker의 시작 폴더.</summary>
     public string BrowserFolderPath { get { return string.IsNullOrWhiteSpace(BrowserFolder) ? null : Resolve(BrowserFolder); } }
     public string HootFolderPath { get { return string.IsNullOrWhiteSpace(HootFolder) ? null : Resolve(HootFolder); } }
+    /// <summary>hoot 목록 폴더들 (절대 경로, 빈 칸 뺌).</summary>
+    public List<string> HootXmlFolderPaths
+    {
+        get
+        {
+            var l = new List<string>();
+            foreach (var f in HootXmlFolders ?? new List<string>()) if (!string.IsNullOrWhiteSpace(f)) l.Add(Resolve(f));
+            return l;
+        }
+    }
+    public string HootDataFolderPath { get { return string.IsNullOrWhiteSpace(HootDataFolder) ? null : Resolve(HootDataFolder); } }
     public string OrganizerPreferredFolderPath { get { return string.IsNullOrWhiteSpace(OrganizerPreferredFolder) ? null : Resolve(OrganizerPreferredFolder); } }
     public string MidiBankPath { get { return string.IsNullOrWhiteSpace(MidiBank) ? null : Resolve(MidiBank); } }
     public string Mt32RomFolderPath { get { return Resolve(Mt32RomFolder); } }
@@ -123,6 +138,8 @@ internal sealed class AppSettings
                     {
                         case "browserfolder": s.BrowserFolder = value; break;
                         case "hootfolder": s.HootFolder = value; break;
+                        case "hootxmlfolders": s.HootXmlFolders = new List<string>(value.Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries)); break;
+                        case "hootdatafolder": s.HootDataFolder = value; break;
                         case "organizerpreferredfolder": s.OrganizerPreferredFolder = value; break;
                         case "midisynth":
                             s.MidiWindowsSynth = value.Equals("windows", StringComparison.OrdinalIgnoreCase);
@@ -160,6 +177,8 @@ internal sealed class AppSettings
     {
         bool Same(string a, string b) { return string.Equals((a ?? "").Replace('/', '\\').Trim().TrimEnd('\\'), b, StringComparison.OrdinalIgnoreCase); }
         bool changed = false;
+        // 예전 왼쪽 목록 [hoot]로 연 폴더 하나 → Hoot 목록 폴더들의 첫 칸
+        if ((HootXmlFolders == null || HootXmlFolders.Count == 0) && !string.IsNullOrWhiteSpace(HootFolder)) { HootXmlFolders = new List<string> { HootFolder }; changed = true; }
         if (Same(BankFolder, "bnk")) { BankFolder = DefaultBankFolder; changed = true; }
         if (Same(DefaultBank, "bnk\\STANDARD.BNK")) { DefaultBank = DefaultBankFile; changed = true; }
         if (Same(Mt32RomFolder, "mt32rom")) { Mt32RomFolder = DefaultMt32RomFolder; changed = true; }
@@ -174,8 +193,11 @@ internal sealed class AppSettings
         sb.AppendLine("; Paths are relative to this file's folder (the program folder) or absolute.");
         sb.AppendLine("; BrowserFolder = song folder last opened in the left list, BankFolder = BNK banks, DefaultBank = bank loaded at startup");
         sb.AppendLine("BrowserFolder=" + BrowserFolder);
-        sb.AppendLine("; HootFolder = hoot game list folder (xml / xml_new) last opened with [hoot] in the left list");
+        sb.AppendLine("; Hoot page: HootXmlFolders = hoot game list folders (xml / xml_new ..., separated by |), HootFolder = the one picked last,");
+        sb.AppendLine(";   HootDataFolder = folder searched (with subfolders) for archive zips (empty = parent of the list folder)");
+        sb.AppendLine("HootXmlFolders=" + string.Join("|", HootXmlFolders ?? new List<string>()));
         sb.AppendLine("HootFolder=" + HootFolder);
+        sb.AppendLine("HootDataFolder=" + HootDataFolder);
         sb.AppendLine("BankFolder=" + BankFolder);
         sb.AppendLine("DefaultBank=" + DefaultBank);
         sb.AppendLine("LoadDefaultBank=" + (LoadDefaultBank ? "true" : "false"));
@@ -217,6 +239,7 @@ internal sealed class AppSettings
     {
         var c = (AppSettings)MemberwiseClone();
         c.VoiceColors = (System.Drawing.Color[])(VoiceColors ?? Shell.VoiceColors.Defaults).Clone();
+        c.HootXmlFolders = new List<string>(HootXmlFolders ?? new List<string>());
         return c;
     }
 

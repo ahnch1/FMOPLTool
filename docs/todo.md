@@ -1,4 +1,4 @@
-# FMOPLTool 할 일 (2026-11-20, v2.1.18 기준)
+# FMOPLTool 할 일 (2026-11-20, v2.1.19 기준)
 
 - 이 파일 = **해야 할 일**과 **남겨 둔 일**(보류)을 체크박스로. 끝난 일의 자세한 내용 · 진단 명령 · 원인 분석은 [`hoot-status.md`](hoot-status.md), 사용법 · 구조는 [`../README.md`](../README.md).
 - 옛 할 일 기록(v1.x ~ v2.0 진행 일지)은 `_incoming/Todo.md`(git에 안 들어감)에 그대로 둔다.
@@ -12,8 +12,8 @@
 |---|---:|---:|
 | 목록 전체 | 9,489 | 221,712 |
 | 아카이브 zip이 있는 항목 | 8,432 | — |
-| **재생 규칙에 든 항목 (zip 있음)** | **7,377 (87.5%)** | **195,321** (그 형식 전체) |
-| 아직 재생 못 하는 항목 (zip 있음) | 1,055 | 약 26,390 (그 형식 전체) |
+| **재생 규칙에 든 항목 (zip 있음)** | **7,397 (87.7%)** | **195,608** (그 형식 전체) |
+| 아직 재생 못 하는 항목 (zip 있음) | 1,035 | 약 26,100 (그 형식 전체) |
 | zip이 없는 항목 | 1,057 | — |
 
 곡 수는 zip 유무와 상관없이 그 형식의 titlelist 전체. "재생 규칙에 듦" = 트리에서 두 번 클릭하면 기계 흉내로 곡을 만든다는 뜻. 그 안에서도 무음인 항목이 있다 (아래 2장 "소리 남" · 4장).
@@ -43,6 +43,7 @@
 | 타이토 YM2610 | f2system 40 · bsystem 11 · dual68 10 · fx1a 3 · sonicb 2 · xsystem 1 | 2,491 | `HootTaito` (v2.1.6) | 67 / 67 |
 | 타이토 YM2151 | fullt 9 | 147 | `HootTaitoOpm` + MSM5205 → OKIM6258 (v2.1.17) | 9 / 9 (147곡 모두) |
 | 토아플랜 1 · Twin Cobra | generic 9 | 125 | `HootToaplan` (Z80 + YM3812, v2.1.18) | 9 / 9 (125곡 모두) |
+| 데이터 이스트 6502 | cobracom 8 · drgninja 6 · karnov 3 · triothep 2 · lastmisn 2 · makyosen 1 | 287 | `HootDeco6502` (6502 + YM2203 + YM3812/YM3526 + OKI, v2.1.19) | 20 / 20 (곡 283 / 285, 무음 2 = 효과음) |
 | 캡콤 CPS-1 · 테크노스 | cps1 29 · ddragon2 7 · ddragon3 2 · ctribe 1 | 약 2,600 | `HootOpmBoard` (v2.1.7) | 39 / 39 |
 | 세가 System 1 · 아이렘 M72 | system1 29 · m72 23 | 약 1,200 | `HootSegaSystem1` · `HootM72` (v2.1.8) | 52 / 52 |
 | 데이터 이스트 HuC6280 | deco32 14 · wolffang 14 · thndzone 7 · supbtime 3 · generic 3 · thunderzone 2 | 910 | `HootDeco` (v2.1.9) | 41 / 43 |
@@ -64,7 +65,9 @@
 - [x] 메가드라이브 Koei (megadrive koei) 14 · 330곡, 1c00 5 · 66곡 — v2.1.16: 1c00 = SMPS Z80 큐 1C0Ah, koei = 드라이버 · 우편함 · 곡 표를 카트리지에서 찾음 (19 / 19)
 - [x] 타이토 fullt 9 · 147곡 — v2.1.17: Z80 + YM2151 + TC0140SYT, 소리 켬 EFh, MSM5205는 VGM OKIM6258로 (9 / 9, 147곡 모두 소리)
 - [x] 토아플랜 generic 9 · 125곡 — v2.1.18: Z80 + YM3812 (포트는 ROM에서 찾음), 68000 맞춤 8001h ← AAh, 명령 8000h (9 / 9, 125곡 모두 소리)
-- [ ] 데이터 이스트 cobracom 6 · drgninja 6 · karnov 3 · triothep 2 · midres 1 · brkthru · lastmisn · exprraid · makyosen — 6502 + YM2203 + YM3812/YM3526 (+ OKI), 약 25항목
+- [x] 데이터 이스트 6502 (cobracom 8 · drgninja 6 · karnov 3 · triothep 2 · lastmisn 2 · makyosen 1) — v2.1.19: 래치 자리로 배치 셋 (dec0 · dec8 · karnov), 6502 10진 모드, decrypt = DECO222 (20 / 20)
+- [ ] 데이터 이스트 midres 1 — 사운드 CPU가 HuC6280 (6502 아님) + YM2203 + YM3812 + OKI: `HootDeco`에 YM3812 배치를 더하면 될 듯
+- [ ] 데이터 이스트 brkthru 2 (Break Thru · Darwin 4078) · exprraid 1 — 사운드 CPU가 6809 (3.3의 6809와 같이)
 - [ ] SNK 3526_8950 6 · 3812 4 — Z80 + YM3526 · Y8950 (+ uPD7759 있음)
 - [ ] 니치부츠 terracre 6 · terraf 4 — Z80 + YM3526/YM3812 + DAC
 - [ ] 알파 68k2 6 — Z80 + YM2203 + YM2413 + DAC

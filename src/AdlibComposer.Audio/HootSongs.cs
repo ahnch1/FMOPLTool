@@ -98,6 +98,12 @@ public static class HootSongs
             v = HootMegaSys1.Render(e, dir, code);
             what = "Mega System 1 사운드 보드 · 명령 0x" + code.ToString("X2");
         }
+        else if (HootDeco6502.Handles(driver, e.Type))
+        {
+            // hoot 데이터 이스트 6502 보드: 사운드 보드 (6502 + YM2203 + YM3812/YM3526 (+ OKIM6295))에서 사운드 ROM을 돌려 미리 렌더
+            v = HootDeco6502.Render(e, dir, code);
+            what = "데이터 이스트 6502 사운드 보드 · 명령 0x" + code.ToString("X2");
+        }
         else if (HootDeco.Handles(driver, e.Type))
         {
             // hoot 데이터 이스트: 사운드 보드 (HuC6280 + YM2151 (+ YM2203) + OKIM6295 둘)에서 사운드 ROM을 돌려 미리 렌더

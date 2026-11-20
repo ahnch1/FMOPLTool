@@ -31,6 +31,7 @@
 | 2.0.4 | 8-6 (메가드라이브) | hoot megadrive generic_z80 · iyinc: `Audio/HootMegaDrive.cs` (Z80 사운드 쪽 · 카트리지의 Z80 드라이버를 RAM에, 요청 주소) |
 | 2.0.5 | 8-7 (X68000) | MC68000 `Audio/Cpu/M68000.cs` + hoot x68k generic: `Audio/HootX68k.cs` (OPM · ADPCM · DMA · MFP, E00010h = hoot가 대신 하는 IOCS · DOS) |
 | 2.0.6 | 8-7 (X68000 MIDI) | x68k MIDI 판: YM3802 MIDI 보드 (EAFA00h) → 살아 있는 MIDI 곡 (`HootX68k.LoadMidi`) |
+| 2.1.19 | 8-8l (데이터 이스트 6502) | hoot dataeast cobracom · drgninja · karnov · triothep · lastmisn · makyosen: `Audio/HootDeco6502.cs` (6502 + YM2203 + YM3812/YM3526 + OKIM6295), 6502 `DecimalMode` · `OpcodeMap` |
 | 2.1.18 | 8-8k (토아플랜 1 · generic) | hoot toaplan generic (Flying Shark · Twin Cobra · Rally Bike · Truxton · Hellfire · Zero Wing · Demon's World · Out Zone · Gulf War 2): `Audio/HootToaplan.cs` (Z80 + YM3812, 같이 쓰는 RAM 명령) |
 | 2.1.17 | 8-8j (타이토 YM2151 · fullt) | hoot taito fullt (Rastan · Top Speed · Asuka · Cadash · Exzisus · Visco 3): `Audio/HootTaitoOpm.cs` (Z80 + YM2151 + TC0140SYT + MSM5205 → VGM OKIM6258) |
 | 2.1.16 | 8-6 더함 (메가드라이브 1c00 · koei) | hoot megadrive 1c00 (세가 SMPS Z80) · koei (드라이버 · 우편함 · 곡 표를 카트리지에서 찾음): `Audio/HootMegaDrive.cs`, 진단 `--hootkoeitrace` (MD 버스 68000 부팅) |
@@ -70,6 +71,7 @@
 | X1 (psg · opm) | 143 / 152 — opm 65/71 · psg 78/81 | `--hootx1survey x1 1000 8` |
 | 네오지오 | 137 / 146 (음악일 만한 코드 10h 이상 3곡까지) | `--hootneosurvey roms 200 6` |
 | 타이토 YM2610 보드 (f2 · b · dual68 · x · fx1a · sonicb) | 67 / 67 (첫 곡이 조용하면 다음 곡 3개까지) | `--hoottaitosurvey roms 200 6` |
+| 데이터 이스트 6502 (cobracom · drgninja · karnov · triothep · lastmisn · makyosen) | 20 / 20, 곡 283 / 285 (무음 2 = cobracom SE 12 · ghostb 효과음 하나) | `--test hootdeco65` (HOOT_SONGS=1 = 곡마다) |
 | 토아플랜 1 · Twin Cobra (generic) | 9 / 9, 125곡 모두 (키온) | `--test hoottoaplan` (HOOT_SONGS=1 = 곡마다, HOOT_PROBE=1 = I/O 포트 · 68000 쪽 RAM 후보) |
 | 타이토 YM2151 보드 (fullt) | 9 / 9, 147곡 모두 (FM 키온 또는 MSM 바이트) | `--test hoottaitoopm` (HOOT_SONGS=1 = 곡마다, HOOT_REGS · HOOT_PC · HOOT_PCQ · HOOT_RAM · HOOT_MSMLOG) |
 | CPS-1 · Double Dragon 2 · 3 (YM2151 + OKIM6295) | 39 / 39 (FM 키온 16개 또는 OKI 2번 이상, 처음 6곡까지) | `--hootopmsurvey roms 200 6` |
@@ -245,7 +247,14 @@
   - 명령 = 8000h (FFh = 없음): IRQ에서 읽음 (twincobr 0085h: FFh 그냥, FEh 멈춤, F0h~ 특수, E0h~ 포트 출력, 그 아래 = 곡 · 효과음), 처리하면 FFh로 되돌림. 8002h도 주 루프가 기다리지만 곡 명령 자리가 아님 (처음엔 8002h로 했다가 fshark만 읽고 소리 없음)
   - 드라이버가 IRQ마다 레지스터를 거의 다 다시 씀 (8초에 약 4만9천) → 값이 바뀔 때만 VGM에 (OPL은 같은 값 다시 쓰기가 아무 일 없음) → 8초에 수백
   - 진단 `HOOT_PROBE=1 --test hoottoaplan`: 맞춤 뒤 2초 동안 OUT · IN 포트 횟수, Z80이 읽기만 하는 RAM (68000 쪽 자리 후보)
-- 다음 (8-8l): Z80 + YM2151 + OKIM6295 작은 보드 (tecmo16 · raizing mahou · bgaregga · banpresto dbz · dooyong …) — MAME 배치를 하나씩 확인해 `HootOpmBoard.Layout`에, atari system1 (6502), 그 뒤 새 칩
+- **8-8l. 데이터 이스트 6502 보드 — ✅ v2.1.19 (20 / 20)** — `Audio/HootDeco6502.cs`
+  - 칩: YM2203 1.5MHz + YM3812 (이름에 YM3526이면 YM3526) 3MHz + OKIM6295 1MHz ÷132 (rom pcm이 있을 때), 6502 1.5MHz. 명령 = 래치 + NMI, IRQ = OPL 타이머 (레벨)
+  - 배치 셋 (MAME dec0 · dec8 · karnov) — ROM에서 래치 자리를 LDA abs로 가장 많이 읽는 것으로 고름: dec0 = 래치 3000h, YM2203 0800h, OPL 1000h, OKI 3800h (hbarrel · baddudes · birdtry · robocop · stadhero · hippodrm · actfancr · triothep · lastmisn · shackled), dec8 = 래치 6000h, YM2203 2000h, OPL 4000h (cobracom · garyoret · meikyuh · gondo · ghostb · srdarwin · oscar), karnov = 래치 0800h, YM2203 1000h, OPL 1800h (karnov · wndrplnt · chelnov). 처음 고른 배치로 18개 모두 바로 소리
+  - triothep = code offset 0 · 64KB → 4000h~FFFFh를 파일 그대로 (벡터 40xxh)
+  - hoot 옵션 decrypt (ghostb · srdarwin · oscar) = DECO222: 8000h 이상의 명령 바이트만 bit5 · bit6 바꿈 → `Cpu6502.OpcodeMap`. 10진 모드는 2A03에 없어 `Cpu6502.DecimalMode`를 새로 (기본 꺼짐, NES · HuC6280 그대로)
+  - OPL은 바뀐 레지스터만 VGM에 (토아플랜과 같음). 곡 코드 위 바이트 (extcode, gondo 0x10A 등)는 버림
+  - 빠진 것: midres (HuC6280 사운드 CPU), brkthru · darwin · exprraid (6809 사운드 CPU — 스캔하면 벡터가 엉뚱함)
+- 다음 (8-8m): Z80 + YM2151 + OKIM6295 작은 보드 (tecmo16 · raizing mahou · bgaregga · banpresto dbz · dooyong …) — MAME 배치를 하나씩 확인해 `HootOpmBoard.Layout`에, atari system1 (6502), 그 뒤 새 칩
   - 남은 것 (8-8a): "소리 남" 기준이 처음 6초에 키온 하나라 몇 항목은 ADPCM 하나뿐 (driftout · liquidk · megablst 등 첫 곡이 짧은 효과음일 수 있음) — 귀로 확인, bshark (code0 · code1 둘), taito z 계열 다른 보드
 
 ### 남은 문제 (단계와 따로)

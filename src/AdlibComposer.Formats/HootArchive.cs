@@ -19,7 +19,7 @@ public static class HootArchive
 {
     public const string Extension = ".hoot";
     /// <summary>항목을 써 둔 표시 (재생할 수 있는 드라이버가 늘면 이름을 바꿔 이미 푼 zip에도 다시 쓴다: 2 = SPC · KSS · NSF · GBS 더함, 3 = PC/AT DOS, 4 = MIDI 판, 5 = pc98vx · pc98).</summary>
-    private const string Mark = ".fmopl_hoot25";
+    private const string Mark = ".fmopl_hoot26";
 
     /// <summary>
     /// 재생할 수 있는 hoot 드라이버 · 형식: pc98dos opn · opna · 86 · beep · pcatdos adlib · soundblaster16 · beep (기계 흉내), 그리고 이미 읽는 파일을 곡 코드로 고르는 것 —
@@ -38,7 +38,8 @@ public static class HootArchive
             case "pc88": return t == "opn" || t == "opna";
             case "x1": return t == "psg" || t == "opm";
             case "neogeo": return t == "generic";
-            case "dataeast": return t == "thndzone" || t == "thunderzone" || t == "supbtime" || t == "deco32" || t == "wolffang" || t == "generic";   // HuC6280 + YM2151 + OKIM6295 × 2
+            case "dataeast": return t == "thndzone" || t == "thunderzone" || t == "supbtime" || t == "deco32" || t == "wolffang" || t == "generic"   // HuC6280 + YM2151 + OKIM6295 × 2
+                || t == "cobracom" || t == "drgninja" || t == "karnov" || t == "triothep" || t == "lastmisn" || t == "makyosen";   // 6502 + YM2203 + YM3812/YM3526 (+ OKIM6295) (HootDeco6502)
             case "jaleco": return t == "megasys1";                                                       // 68000 + YM2151 + OKIM6295 × 2
             case "sega": return t == "system1" || t == "system16a" || t == "system16b"                   // Z80 + SN76489 × 2 / Z80 + YM2151 + uPD7759
                 || t == "outrun" || t == "shangon" || t == "toutrun" || t == "aburner" || t == "spmonaco" || t == "gforce" || t == "pdrift"   // Z80 + YM2151 + 세가 PCM

@@ -36,6 +36,10 @@ public sealed class Cpu6502
     public int UnknownOps;
     /// <summary>JAM(KIL) 등으로 멈춤.</summary>
     public bool Jammed;
+    /// <summary>NMOS 6502 10진 모드 (ADC · SBC, SED 뒤) — 2A03은 없어서 기본 꺼짐, 아케이드 6502는 켠다.</summary>
+    public bool DecimalMode;
+    /// <summary>명령 바이트 풀기 (주소, 바이트 → 명령): 데이터 이스트 DECO222처럼 명령 바이트만 암호인 CPU. null = 그대로.</summary>
+    public Func<int, int, int> OpcodeMap;
 
     public Cpu6502(ICpu6502Bus bus, Variant kind)
     {
@@ -109,7 +113,7 @@ public sealed class Cpu6502
 
     private void Adc(int m)
     {
-        if (D && huc)
+        if (D && (huc || DecimalMode))
         {
             int lo = (A & 0x0F) + (m & 0x0F) + (C ? 1 : 0);
             int hi = (A >> 4) + (m >> 4);
@@ -130,7 +134,7 @@ public sealed class Cpu6502
 
     private void Sbc(int m)
     {
-        if (D && huc)
+        if (D && (huc || DecimalMode))
         {
             int lo = (A & 0x0F) - (m & 0x0F) - (C ? 0 : 1);
             int hi = (A >> 4) - (m >> 4);
@@ -224,7 +228,9 @@ public sealed class Cpu6502
     {
         if (Jammed) { Cycles += 2; return 2; }
         long start = Cycles;
+        int opAt = PC;
         int op = Fetch();
+        if (OpcodeMap != null) op = OpcodeMap(opAt, op) & 0xFF;
         Cycles += BaseCycles[op];
         bool wasT = T;
         T = false;

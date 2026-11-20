@@ -19,7 +19,7 @@ public static class HootArchive
 {
     public const string Extension = ".hoot";
     /// <summary>항목을 써 둔 표시 (재생할 수 있는 드라이버가 늘면 이름을 바꿔 이미 푼 zip에도 다시 쓴다: 2 = SPC · KSS · NSF · GBS 더함, 3 = PC/AT DOS, 4 = MIDI 판, 5 = pc98vx · pc98).</summary>
-    private const string Mark = ".fmopl_hoot32";
+    private const string Mark = ".fmopl_hoot33";
 
     /// <summary>
     /// 재생할 수 있는 hoot 드라이버 · 형식: pc98dos opn · opna · 86 · beep · pcatdos adlib · soundblaster16 · beep (기계 흉내), 그리고 이미 읽는 파일을 곡 코드로 고르는 것 —
@@ -49,7 +49,8 @@ public static class HootArchive
             case "irem": return t == "m72";                                                              // Z80 + YM2151
             case "capcom": return t == "cps1" || t == "cps2" || t == "cps1qs" || t == "zn";             // Z80 + YM2151 + OKIM6295 / Z80 + QSound (cps1qs = Kabuki 암호, zn = 래치 + NMI)
             case "technos": return t == "ddragon2" || t == "ddragon3" || t == "ctribe";
-            case "tecmo": return t == "tecmo16";                                                          // Z80 + YM2151 + OKIM6295 (HootOpmBoard.Tecmo16)
+            case "tecmo": return t == "tecmo16"                                                           // Z80 + YM2151 + OKIM6295 (HootOpmBoard.Tecmo16)
+                || t == "gaiden";                                                                          // Z80 + YM2203 × 2 + OKIM6295 (HootGaiden)
             case "taito": return t == "f2system" || t == "bsystem" || t == "dual68" || t == "xsystem" || t == "fx1a" || t == "sonicb"   // Z80 + YM2610 + TC0140SYT
                 || t == "fullt";   // Z80 + YM2151 + MSM5205 + TC0140SYT (HootTaitoOpm)
             case "upl": return t == "robokid";                                                           // Z80 + YM2203 × 2 (HootUpl, VGM 듀얼 YM2203)

@@ -9,7 +9,7 @@ namespace AdlibComposer.SelfTest;
 /// <summary>hoot 코나미 Z80 + AY × 2 (HootKonamiAy, type scramble · timeplt): 실제 zip, 진단 (HOOT_SONGS = 곡마다).</summary>
 public static class HootKonamiAyTests
 {
-    public static readonly string[] Archives = { "theend", "amidar", "scobra", "scramble", "stratgyx", "turtles", "sfx", "jungler", "timeplt", "tutankhm" };
+    public static readonly string[] Archives = { "theend", "amidar", "scobra", "scramble", "stratgyx", "turtles", "sfx", "jungler", "timeplt", "tutankhm", "pooyan", "locomotn", "tactcian" };
 
     public static void Run(Action<string, bool, string> check)
     {

@@ -31,6 +31,7 @@
 | 2.0.4 | 8-6 (메가드라이브) | hoot megadrive generic_z80 · iyinc: `Audio/HootMegaDrive.cs` (Z80 사운드 쪽 · 카트리지의 Z80 드라이버를 RAM에, 요청 주소) |
 | 2.0.5 | 8-7 (X68000) | MC68000 `Audio/Cpu/M68000.cs` + hoot x68k generic: `Audio/HootX68k.cs` (OPM · ADPCM · DMA · MFP, E00010h = hoot가 대신 하는 IOCS · DOS) |
 | 2.0.6 | 8-7 (X68000 MIDI) | x68k MIDI 판: YM3802 MIDI 보드 (EAFA00h) → 살아 있는 MIDI 곡 (`HootX68k.LoadMidi`) |
+| 2.1.48 | 8-9a 더함 (코나미 pooyan) | hoot konami pooyan (Pooyan · Loco-Motion · Tactician): `HootKonamiAy` timeplt 보드, Pooyan 코드는 bit7을 빼고 |
 | 2.1.47 | 8-9g (코나미 System GX) | hoot konami systemgx (17항목: Fantastic Journey · Lethal Enforcers II · Golfing Greats 2 · Puzzle Dama · Racin' Force · Soccer Superstars · Dragoon Might · Taisen Puzzle-dama · Tokimeki Memorial · Daisu-Kiss · Run and Gun 2 · Rushing Heroes · Salamander 2 · Sexy Parodius · Tokkae · Versus Net Soccer · Winning Spike): `Audio/HootKonamiGx.cs` (68000 + K054539 × 2) |
 | 2.1.46 | 8-9f 더함 (세가 System 32) | hoot sega system32 (Air Rescue · Spider-Man · Arabian Fight · Burning Rival · Golden Axe RoG · Holosseum · Dark Edge · F1 Super Lap · F1 Exhaust Note): `HootSegaSystem18` System 32 배치 |
 | 2.1.45 | 8-9f (세가 System 18) | 새 칩 RF5C68: `Audio/Chips/Rf5c68.cs`, VGM 둘째 YM2612 · RF5C68, hoot sega system18 (Shadow Dancer · Alien Storm · Bloxeed · Moonwalker · Clutch Hitter · Pontoon): `Audio/HootSegaSystem18.cs`; `FindFile` 앞부분 맞춤 대안 |
@@ -112,7 +113,7 @@
 | 코나미 K053260 (053260) | 11 / 11, 606 / 616곡 (남은 10 = 정지 명령 7 · 효과음 3) | `--test hootk53` (K053260 합성 포함, HOOT_SONGS=1) |
 | 남코 System 2 (system2) | 25 / 26항목, 827 / 870곡 (C140 키온 498곡) — 무음 43 = Four Trax 27 (옵션 foutrax) · Final Lap 9 · Rolling Thunder 2 4 · 그 밖 3 | `--test hootns2` (HOOT_SONGS=1, HOOT_DEBUG=1 = C140 레지스터 분포) |
 | 타이토 SJ (taitosj) | 12 / 12, 285곡 모두 | `--test hootsj` (HOOT_SONGS=1) |
-| 코나미 Z80 + AY × 2 (scramble · timeplt) | 10 / 10, 75 / 116 — 무음 41 = 한 곡을 채널마다 나눈 ch2 · ch3 파트와 일부 BGM (혼자 보내면 AY 쓰기 없음) | `--test hootkonay` (HOOT_SONGS=1) |
+| 코나미 Z80 + AY × 2 (scramble · timeplt · pooyan) | 13 / 13, 105 / 160 (pooyan 18 / 18) — 무음 41 = 한 곡을 채널마다 나눈 ch2 · ch3 파트와 일부 BGM (혼자 보내면 AY 쓰기 없음) | `--test hootkonay` (HOOT_SONGS=1) |
 | 아이렘 M62 / M52 (m62) | 15 / 15, 137 / 145 (남은 8 = Traverse USA 효과음 — MSM #2로 보임) | `--test hootm62` (HOOT_SONGS=1) |
 | 남코 Pac-Land 계열 (wsg63701) | 6 / 6, 157곡 모두 | `--test hootns86` (HOOT_SONGS=1, HOOT_DEBUG=1 = 슬롯 · 요청 바이트) |
 | 남코 System 86 (system86) | 5 / 5, 71곡 모두 (63701X 음성은 없음) | `--test hootns86` (6801 합성 둘 포함, HOOT_SONGS=1) |

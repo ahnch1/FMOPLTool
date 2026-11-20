@@ -25,7 +25,7 @@ public static class HootKonamiAy
     {
         if (!string.Equals((driver ?? "").Trim(), "konami", StringComparison.OrdinalIgnoreCase)) return false;
         string t = (type ?? "").Trim().ToLowerInvariant();
-        return t == "scramble" || t == "timeplt";
+        return t == "scramble" || t == "timeplt" || t == "pooyan";
     }
 
     public static VgmSong Render(HootArchive.Entry e, string dir, int code, double seconds = DefaultSeconds, double fade = DefaultFade)
@@ -55,8 +55,10 @@ public static class HootKonamiAy
             any = true;
         }
         if (!any) missing.Add("(code)");
-        bool timeplt = string.Equals((e.Type ?? "").Trim(), "timeplt", StringComparison.OrdinalIgnoreCase);
+        string ty = (e.Type ?? "").Trim().ToLowerInvariant();
+        bool timeplt = ty == "timeplt" || ty == "pooyan";   // pooyan = timeplt 보드 (Pooyan · Loco-Motion · Tactician)
         var m = new Machine(rom, timeplt);
+        m.ClearBit7 = ty == "pooyan";   // Pooyan 계열: 드라이버가 bit7 = 멈춤으로 봄 — hoot 코드 (86h · 92h …)는 bit7을 빼고 보냄
         if (timeplt)
         {
             // locomotn 배치 (Jungler · Loco-Motion): ROM ~1FFFh, RAM 2000h~23FFh, 3000h~ = 필터 — ROM이 가리키는 RAM 쪽으로 고름
@@ -79,6 +81,7 @@ public static class HootKonamiAy
     {
         public readonly byte[] Rom;
         public readonly bool TimePilot;
+        public bool ClearBit7;
         public readonly byte[] Ram = new byte[0x400];
         /// <summary>timeplt 배치의 RAM 자리: 3000h (Time Pilot · Tutankham) 또는 2000h (locomotn: Jungler).</summary>
         public int RamBase = 0x3000;
@@ -111,7 +114,7 @@ public static class HootKonamiAy
             Log.Clear();
             Log.AddRange(init);
             playStart = Cpu.Cycles;
-            latch = code & 0xFF;
+            latch = ClearBit7 ? code & 0x7F : code & 0xFF;
             irqLine = true;
         }
 

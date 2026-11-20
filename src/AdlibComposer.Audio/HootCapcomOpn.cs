@@ -29,6 +29,8 @@ public static class HootCapcomOpn
         public double IrqHz;
         /// <summary>쓴 값을 그대로 돌려주는 자리 (없으면 −1): Avengers는 래치를 E006h (soundlatch2)에 쓰고 다시 읽어 비교한다.</summary>
         public int Echo = -1;
+        /// <summary>RAM 자리 (2KB): 보통 C000h, Commando는 4000h.</summary>
+        public int Ram = 0xC000;
     }
 
     public static readonly Layout Gng = new Layout { Name = "Capcom Ghosts'n Goblins", CpuClock = 3000000, OpnClock = 1500000, Latch = 0xC800, Opn1 = 0xE000, Opn2 = 0xE002, IrqHz = 240 };
@@ -36,6 +38,8 @@ public static class HootCapcomOpn
     public static readonly Layout Lwings = new Layout { Name = "Capcom Legendary Wings", CpuClock = 3000000, OpnClock = 1500000, Latch = 0xC800, Opn1 = 0xE000, Opn2 = 0xE002, IrqHz = 222, Echo = 0xE006 };
     public static readonly Layout Srumbler = new Layout { Name = "Capcom Speed Rumbler", CpuClock = 3000000, OpnClock = 4000000, Latch = 0xE000, Opn1 = 0x8000, Opn2 = 0xA000, IrqHz = 240 };
     // MAME sidearms: D000h 명령, F000h · F002h YM2203 × 2 (4MHz), IRQ = YM #1
+    // MAME commando: ROM ~3FFFh, RAM 4000h~47FFh, 6000h 명령, 8000h · 8002h YM2203 × 2 (1.5MHz), IRQ 프레임당 4번
+    public static readonly Layout Commando = new Layout { Name = "Capcom Commando", CpuClock = 3000000, OpnClock = 1500000, Latch = 0x6000, Opn1 = 0x8000, Opn2 = 0x8002, IrqHz = 240, Ram = 0x4000 };
     public static readonly Layout SideArms = new Layout { Name = "Capcom Side Arms", CpuClock = 4000000, OpnClock = 4000000, Latch = 0xD000, Opn1 = 0xF000, Opn2 = 0xF002, IrqHz = 0 };
     // MAME blktiger: C800h 명령, E000h · E002h YM2203 × 2 (3.58MHz), IRQ = YM #1
     public static readonly Layout BlackTiger = new Layout { Name = "Capcom Black Tiger", CpuClock = 3579545, OpnClock = 3579545, Latch = 0xC800, Opn1 = 0xE000, Opn2 = 0xE002, IrqHz = 0 };
@@ -51,6 +55,7 @@ public static class HootCapcomOpn
             case "opn2": return name != null && LwingsGames.Any(g => name.IndexOf(g, StringComparison.OrdinalIgnoreCase) >= 0) ? Lwings : Gng;
             case "rushcrsh": return Srumbler;
             case "tigerroad": return TigerRoad;
+            case "commando": return Commando;
             case "sidearms": return SideArms;
             case "blktiger": return BlackTiger;
         }
@@ -185,7 +190,7 @@ public static class HootCapcomOpn
         public void Write(int a, byte v)
         {
             a &= 0xFFFF;
-            if (a >= 0xC000 && a < 0xC800) { Mem[a] = v; return; }
+            if (a >= L.Ram && a < L.Ram + 0x800) { Mem[a] = v; return; }
             if (a == L.Opn1) { addr[0] = v; return; }
             if (a == L.Opn1 + 1) { OpnWrite(0, addr[0], v); return; }
             if (a == L.Opn2) { addr[1] = v; return; }

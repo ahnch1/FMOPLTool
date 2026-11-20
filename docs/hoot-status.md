@@ -31,6 +31,7 @@
 | 2.0.4 | 8-6 (메가드라이브) | hoot megadrive generic_z80 · iyinc: `Audio/HootMegaDrive.cs` (Z80 사운드 쪽 · 카트리지의 Z80 드라이버를 RAM에, 요청 주소) |
 | 2.0.5 | 8-7 (X68000) | MC68000 `Audio/Cpu/M68000.cs` + hoot x68k generic: `Audio/HootX68k.cs` (OPM · ADPCM · DMA · MFP, E00010h = hoot가 대신 하는 IOCS · DOS) |
 | 2.0.6 | 8-7 (X68000 MIDI) | x68k MIDI 판: YM3802 MIDI 보드 (EAFA00h) → 살아 있는 MIDI 곡 (`HootX68k.LoadMidi`) |
+| 2.1.36 | 8-8x (6801 계열 CPU · 남코 System 86) | 새 CPU 6801 / HD63701: `Audio/Cpu/Cpu6801.cs`, hoot namco system86 (Sky Kid DX · Return of Ishtar · Genpei · Rolling Thunder · Wonder Momo): `Audio/HootNamcoSys86.cs` (MCU + YM2151 + CUS30) |
 | 2.1.35 | 8-8w (남코 매피 계열) | hoot namco wsg6809 (Mappy · Super Pac-Man · Pac & Pal · Phozon · Grobda · Libble Rabble · Druaga · Gaplus · Dig Dug II · Motos · Toy Pop): `Audio/HootNamcoWsg6809.cs` (6809 + 15XX), `NamcoCus30` 15XX 모드 |
 | 2.1.34 | 8-8v 더함 (CUS30) | 새 칩 남코 CUS30: `Audio/Chips/NamcoCus30.cs`, VGM 안 명령 D8h (`VgmSong.Cus30Clock`), System 1 효과음 슬롯 시도 |
 | 2.1.33 | 8-8v (남코 System 1) | hoot namco system1 (22항목: Shadowland · Dragon Spirit · Blazer · Pac-Mania · Galaga '88 · World Stadium …): `Audio/HootNamcoSys1.cs` (6809 + YM2151, CUS30 소리는 아직) |
@@ -94,6 +95,7 @@
 | SNK68 (snk 3812) | 4 / 4, 146곡 모두 (키온 또는 uPD7759) | `--test hootsnk` (HOOT_SONGS=1, HOOT_SNKINIT=16진,… 부팅 명령 바꾸기, HOOT_SNKSCAN=곡 = 부팅 명령 00h~FFh 훑기, HOOT_PC · HOOT_PCQ=주소,…) |
 | 토아플랜 1 · Twin Cobra (generic) | 9 / 9, 125곡 모두 (키온) | `--test hoottoaplan` (HOOT_SONGS=1 = 곡마다, HOOT_PROBE=1 = I/O 포트 · 68000 쪽 RAM 후보) |
 | 타이토 YM2151 보드 (fullt) | 9 / 9, 147곡 모두 (FM 키온 또는 MSM 바이트) | `--test hoottaitoopm` (HOOT_SONGS=1 = 곡마다, HOOT_REGS · HOOT_PC · HOOT_PCQ · HOOT_RAM · HOOT_MSMLOG) |
+| 남코 System 86 (system86) | 5 / 5, 71곡 모두 (63701X 음성은 없음) | `--test hootns86` (6801 합성 둘 포함, HOOT_SONGS=1) |
 | 남코 매피 계열 (wsg6809) | 11 / 11, 262 / 263 (남은 하나 = Phozon "Sound Initialize" 명령) | `--test hootwsg` (HOOT_SONGS=1) |
 | 남코 System 1 (system1) | 22 / 22, 799 / 818곡 (남은 19 = 정지 명령) — FM 또는 CUS30 | `--test hootns1` (HOOT_SONGS=1) |
 | 데이터 이스트 6809 (brkthru · exprraid) | 3 / 3, 19곡 모두 (YM3526 키온) | `--test hootdeco69` (6809 합성 시험 둘 포함, HOOT_SONGS=1) |
@@ -343,7 +345,12 @@
   - 15XX = `NamcoCus30(is15xx)`: 목소리 × 8바이트 (+3 음량, +4 · +5 · +6 주파수, +6 bit4~6 파형), 파형 PROM (rom pcm 256바이트, 아래 4비트, VGM D8h 200h~로), 클럭 24kHz, 모노
   - 메인 CPU 몫 흉내 (게임마다, hoot seq_type): MOTO (Grobda · Motos) = 0040h "CK" → 사운드 CPU가 0042h "OK" → 0040h "GO", GAPL (Gaplus) = 0040h 11h, 0041h에 0 아닌 값을 쓰면 0040h · 0041h 지움 (Phozon · Pac & Pal · Super Pac-Man), SUPE (Super Pac-Man) = IRQ 벡터가 리셋이라 IRQ 대신 00FBh를 화면마다 올림
   - IRQ = 화면 60Hz, 처음부터 켜짐 · 받으면 내려감 (Toy Pop은 처리기가 확인을 안 써 끝없이 걸렸음), irq_enable_addr 옵션이 있으면 화면마다 다시 켬 (메인이 켜는 자리), 없으면 2001h · 4000h 쓰기가 켬 (Libble Rabble · Toy Pop = 4000h)
-- 다음: system86 (매피 계열, 6809 + 남코 WSG 15xx) · system86 (HD63701)
+- **8-8x. 6801 계열 CPU + 남코 System 86 — ✅ v2.1.36 (5 / 5, 71곡)** — `Audio/Cpu/Cpu6801.cs`, `Audio/HootNamcoSys86.cs`
+  - CPU: 6800 + 6801 (LSRD · ASLD · PSHX · PULX · ABX · MUL · LDD · STD · ADDD · SUBD) + 6301 (XGDX · SLP · AIM · OIM · EIM · TIM), 내부 레지스터 00h~1Fh (포트 1~4 방향 · 자료 → 버스 PortRead/PortWrite, TCSR · FRC · OCR, OCF · TOF 인터럽트), 벡터 FFFEh~FFEEh. 합성 시험: MUL · PSHX/PULX · OIM · JSR, OCF 65536 E 사이클
+  - System 86 사운드 = MCU (HD63701, E 1.536MHz): 내부 ROM cus60 (F000h~, 남코 MCU 공용 OS — [8000h] = A6h면 외부 ROM 진입점 [8001h], 벡터는 [00AEh] 표로 넘김), 외부 ROM 4000h~BFFFh, CUS30 1000h~13FFh, RAM 1400h~1FFFh, YM2151 = 옵션 opmaddr (없으면 ROM의 STA 확장 쓰기 짝으로 찾음 — Genpei 2800h). IRQ = 화면, OCF = 작업 전환 (OCR = 0100h)
+  - 요청: 1380h에 곡 번호 (받으면 FFh). Return of Ishtar는 hoot가 롬을 0000h에도 올림 → 2000h~3FFFh를 롬으로 (곡 6개가 그 자리 자료를 읽음)
+  - 남은 것: 63701X 음성 (rom pcm, Genpei · Rolling Thunder · Wonder Momo의 북 · 목소리)
+- 다음: 아이렘 M62 (M6803 + AY-3-8910 × 2 + MSM5205, 15항목) · 남코 wsg63701 (6항목) — 같은 CPU (매피 계열, 6809 + 남코 WSG 15xx) · system86 (HD63701)
 - 그 다음 (8-8v): Z80 + YM2151 + OKIM6295 작은 보드 (tecmo16 · raizing mahou · bgaregga · banpresto dbz · dooyong …) — MAME 배치를 하나씩 확인해 `HootOpmBoard.Layout`에, atari system1 (6502), 그 뒤 새 칩
   - 남은 것 (8-8a): "소리 남" 기준이 처음 6초에 키온 하나라 몇 항목은 ADPCM 하나뿐 (driftout · liquidk · megablst 등 첫 곡이 짧은 효과음일 수 있음) — 귀로 확인, bshark (code0 · code1 둘), taito z 계열 다른 보드
 

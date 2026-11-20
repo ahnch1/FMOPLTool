@@ -140,6 +140,12 @@ public static class HootSongs
             v = HootGaiden.Render(e, dir, code);
             what = "Ninja Gaiden 사운드 보드 · 명령 0x" + code.ToString("X2");
         }
+        else if (HootSeibu.Handles(driver, e.Type))
+        {
+            // hoot 세이부 raiden: 사운드 CPU (Z80 + YM3812 + OKIM6295)에서 ROM을 돌려 미리 렌더
+            v = HootSeibu.Render(e, dir, code);
+            what = "Seibu 사운드 시스템 · 명령 0x" + code.ToString("X2");
+        }
         else if (HootTaitoBubble.Handles(driver, e.Type))
         {
             // hoot 타이토 bubblebobble: 사운드 CPU (Z80 + YM2203 + YM3526)에서 ROM을 돌려 미리 렌더

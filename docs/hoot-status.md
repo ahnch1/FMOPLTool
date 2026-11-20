@@ -31,6 +31,7 @@
 | 2.0.4 | 8-6 (메가드라이브) | hoot megadrive generic_z80 · iyinc: `Audio/HootMegaDrive.cs` (Z80 사운드 쪽 · 카트리지의 Z80 드라이버를 RAM에, 요청 주소) |
 | 2.0.5 | 8-7 (X68000) | MC68000 `Audio/Cpu/M68000.cs` + hoot x68k generic: `Audio/HootX68k.cs` (OPM · ADPCM · DMA · MFP, E00010h = hoot가 대신 하는 IOCS · DOS) |
 | 2.0.6 | 8-7 (X68000 MIDI) | x68k MIDI 판: YM3802 MIDI 보드 (EAFA00h) → 살아 있는 MIDI 곡 (`HootX68k.LoadMidi`) |
+| 2.1.43 | 8-9d (코나미 K053260) | 새 칩 K053260: `Audio/Chips/K053260.cs` (VGM ACh · BAh · 8Eh), hoot konami 053260 (Lightning Fighters · Parodius · Escape Kids · Thunder Cross II · Vendetta · Punk Shot · Sunset Riders · Bells & Whistles · TMNT 2 · Quiz Gakumon · Simpsons): `Audio/HootKonami53260.cs` |
 | 2.1.42 | 8-9c 더함 (System 2 C140 요청) | PCM 묶음 7200h (FM으로 1.5초 시도 → 없으면 다시 부팅해 7200h), C140 출력 × 8 |
 | 2.1.41 | 8-9c (남코 System 2, 일부) | 새 칩 C140: `Audio/Chips/NamcoC140.cs` (VGM A8h · D4h · 8Dh), hoot namco system2: `Audio/HootNamcoSys2.cs` (6809 + YM2151 + C140) — FM 곡만 |
 | 2.1.40 | 8-9b (타이토 SJ) | hoot taito taitosj (Elevator Action · Front Line · Alpine Ski · Time Tunnel · Wild Western · Bio Attack · Tinstar · Kick Start · Sea Fighter Poseidon …): `Audio/HootTaitoSj.cs` (Z80 + AY × 3 + DAC), VGM 셋째 AY (안 명령 D9h) |
@@ -101,6 +102,7 @@
 | SNK68 (snk 3812) | 4 / 4, 146곡 모두 (키온 또는 uPD7759) | `--test hootsnk` (HOOT_SONGS=1, HOOT_SNKINIT=16진,… 부팅 명령 바꾸기, HOOT_SNKSCAN=곡 = 부팅 명령 00h~FFh 훑기, HOOT_PC · HOOT_PCQ=주소,…) |
 | 토아플랜 1 · Twin Cobra (generic) | 9 / 9, 125곡 모두 (키온) | `--test hoottoaplan` (HOOT_SONGS=1 = 곡마다, HOOT_PROBE=1 = I/O 포트 · 68000 쪽 RAM 후보) |
 | 타이토 YM2151 보드 (fullt) | 9 / 9, 147곡 모두 (FM 키온 또는 MSM 바이트) | `--test hoottaitoopm` (HOOT_SONGS=1 = 곡마다, HOOT_REGS · HOOT_PC · HOOT_PCQ · HOOT_RAM · HOOT_MSMLOG) |
+| 코나미 K053260 (053260) | 11 / 11, 606 / 616곡 (남은 10 = 정지 명령 7 · 효과음 3) | `--test hootk53` (K053260 합성 포함, HOOT_SONGS=1) |
 | 남코 System 2 (system2) | 25 / 26항목, 827 / 870곡 (C140 키온 498곡) — 무음 43 = Four Trax 27 (옵션 foutrax) · Final Lap 9 · Rolling Thunder 2 4 · 그 밖 3 | `--test hootns2` (HOOT_SONGS=1, HOOT_DEBUG=1 = C140 레지스터 분포) |
 | 타이토 SJ (taitosj) | 12 / 12, 285곡 모두 | `--test hootsj` (HOOT_SONGS=1) |
 | 코나미 Z80 + AY × 2 (scramble · timeplt) | 10 / 10, 75 / 116 — 무음 41 = 한 곡을 채널마다 나눈 ch2 · ch3 파트와 일부 BGM (혼자 보내면 AY 쓰기 없음) | `--test hootkonay` (HOOT_SONGS=1) |
@@ -387,7 +389,12 @@
   - v2.1.42: **C140 효과음 · 음성은 따로 묶음 7200h~720Fh** (FIRQ의 D7F9h가 훑음 — FM 7100h와 같은 (곡, 명령 40h) 꼴, C140 채널 키온은 상태 6,Y = 40h · 8,Y = 0일 때 D9EAh → DC11h). hoot 코드에 구분이 없어 FM으로 1.5초 돌려 보고 소리가 없으면 다시 부팅해 7200h로 (`Start`) → 무음 526 → 43
   - C140 출력 = 8 × 합 (MAME 고전 c140), 그래도 FM보다 작을 수 있음 — 귀로 확인
   - 남은 것: Four Trax 전부 (hoot 옵션 foutrax — 요청 방식 다른 듯), Final Lap 9 · Rolling Thunder 2 4
-- 다음: 코나미 K053260 (11항목, Z80 + YM2151 + K053260) · K054539, 또는 세가 System 24 · 세이부 (매피 계열, 6809 + 남코 WSG 15xx) · system86 (HD63701)
+- **8-9d. 코나미 K053260 — ✅ v2.1.43 (11 / 11, 606 / 616)** — `Audio/HootKonami53260.cs`, `Audio/Chips/K053260.cs`
+  - 배치는 hoot 옵션 (ram_addr · ram_size · opm_addr · pcm_addr · opm_mirror · bank_addr), Z80 · YM2151 · K053260 3.58MHz
+  - 명령 = K053260 포트 0 · 1 (pcm_addr + 0 · 1 읽기, 코드 위 바이트 = 포트 1) + IRQ (hold). 박자 = YM2151 타이머 상태 폴링 또는 NMI: K053260이 FC00h면 FA00h (FA00h면 FC00h)에 쓰면 무장 → SH1 끝 (64클럭 뒤) NMI 한 번 (MAME z80_arm_nmi_w, 처리기가 다시 무장) — Vendetta · Escape Kids · Punk Shot · Simpsons · Thunder Cross II
+  - Parodius · Vendetta: 부팅 때 K053260 ROM 읽기 포트 (2Eh, 목소리 0 시작부터 하나씩)로 PCM 롬 전체 검사 → 부팅을 IRQ가 켜질 때까지 (최대 8초) 돌림. Thunder Cross II: opm_mirror 0011h (YM2151 F810h · F811h)
+  - K053260 칩 (MAME): 4목소리, 클럭/64마다 카운터 += 64 · 1000h 넘으면 − 1000h + 피치, 8비트 부호 PCM 또는 KADPCM (아래 니블 먼저, 표 0 1 2 4 8 16 32 64 −128 −64 …), 반복, 팬 3비트 (cos/sin 근사), 2Fh bit1 = 소리 켬
+- 다음: 코나미 K054539 (Xexex · Mystic Warriors · Run and Gun … 약 30항목, 68000/Z80 + K054539) 또는 세가 System 24 · 세이부 (매피 계열, 6809 + 남코 WSG 15xx) · system86 (HD63701)
 - 그 다음 (8-8v): Z80 + YM2151 + OKIM6295 작은 보드 (tecmo16 · raizing mahou · bgaregga · banpresto dbz · dooyong …) — MAME 배치를 하나씩 확인해 `HootOpmBoard.Layout`에, atari system1 (6502), 그 뒤 새 칩
   - 남은 것 (8-8a): "소리 남" 기준이 처음 6초에 키온 하나라 몇 항목은 ADPCM 하나뿐 (driftout · liquidk · megablst 등 첫 곡이 짧은 효과음일 수 있음) — 귀로 확인, bshark (code0 · code1 둘), taito z 계열 다른 보드
 

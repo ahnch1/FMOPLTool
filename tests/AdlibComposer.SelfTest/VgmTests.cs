@@ -105,13 +105,13 @@ public static class VgmTests
 
     private static void Parse(Action<string, bool, string> check)
     {
-        var b = new Builder().Clock(0x74, 1789772).AyType(0x10).Clock(0x9C, 0x80000000u | 1789772).Clock(0x0C, 3579545).Clock(0xAC, 3579545)
+        var b = new Builder().Clock(0x74, 1789772).AyType(0x10).Clock(0x9C, 0x80000000u | 1789772).Clock(0x0C, 3579545).Clock(0xA0, 18432000)
             .Psg(7, 0x3F).Wait(1000).Loop().Wait(500);
         var raw = b.Build("Stage 1");
         var s = VgmFormat.Read(raw);
         check("VGM header version / length", s.Version == 0x161 && s.TotalSamples == 1500 && s.VersionText == "1.61", s.VersionText + " " + s.TotalSamples);
         check("VGM chips: PSG YM2149 + SCC+ clocks", s.HasPsg && s.AyIsYm && s.HasScc && s.SccPlus && Math.Abs(s.SccClock - 1789772) < 1 && s.ChipSummary == "SN76489 + YM2149 + SCC+", s.ChipSummary);
-        check("VGM unsupported chip listed (K053260)", s.UnsupportedChips.Contains("K053260") && !s.UnsupportedChips.Contains("SN76489") && s.IsPlayable, string.Join(",", s.UnsupportedChips));
+        check("VGM unsupported chip listed (K054539)", s.UnsupportedChips.Contains("K054539") && !s.UnsupportedChips.Contains("SN76489") && s.IsPlayable, string.Join(",", s.UnsupportedChips));
         check("VGM loop offset / samples", s.LoopOffset == 0x100 + 3 + 3 && s.LoopSamples == 500, s.LoopOffset + " " + s.LoopSamples);
         check("VGM GD3 tags", s.Title == "Stage 1" && s.Game == "Test Game" && s.SystemName == "MSX" && s.Author == "Composer" && s.ReleaseDate == "1987", s.Title + "|" + s.Game + "|" + s.Author);
         check("VGM play length = total + one loop", VgmPlayer.PlayLength(s) == 2000, VgmPlayer.PlayLength(s).ToString());
@@ -121,8 +121,8 @@ public static class VgmTests
         var z = VgmFormat.Read(ms.ToArray());
         check("VGZ (gzip) reads the same", z.TotalSamples == 1500 && z.Title == "Stage 1" && z.Data.Length == raw.Length, "");
 
-        var sn = VgmFormat.Read(new Builder().Clock(0xAC, 3579545).Raw(0xBA, 0x00, 0x00).Wait(100).Build());
-        check("VGM with only K053260 is not playable", !sn.IsPlayable && sn.UnsupportedChips.Count == 1, "");
+        var sn = VgmFormat.Read(new Builder().Clock(0xA0, 18432000).Raw(0xD3, 0x00, 0x00, 0x00).Wait(100).Build());
+        check("VGM with only K054539 is not playable", !sn.IsPlayable && sn.UnsupportedChips.Count == 1, "");
 
         bool threw = false;
         try { VgmFormat.Read(new byte[0x80]); } catch (InvalidDataException) { threw = true; }

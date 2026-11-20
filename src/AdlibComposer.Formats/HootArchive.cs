@@ -71,6 +71,7 @@ public static class HootArchive
             case "toaplan": return t == "generic";                                                        // 토아플랜 1 · Twin Cobra: Z80 + YM3812 (HootToaplan)
             case "namco": return t == "system1"                                                          // 6809 + YM2151 + CUS30 (HootNamcoSys1)
                 || t == "wsg6809"                                                                          // 6809 + 15XX (HootNamcoWsg6809)
+                || t == "wsgz80"                                                                           // Z80 + WSG (HootNamcoWsgZ80)
                 || t == "system2"                                                                          // 6809 + YM2151 + C140 (HootNamcoSys2)
                 || t == "system86" || t == "wsg63701";                                                     // HD63701 MCU + (YM2151) + CUS30 (HootNamcoSys86)
             case "konami": return t == "scramble" || t == "timeplt" || t == "pooyan" || t == "frogger"                     // Z80 + AY-3-8910 × 2 (HootKonamiAy)

@@ -31,6 +31,7 @@
 | 2.0.4 | 8-6 (메가드라이브) | hoot megadrive generic_z80 · iyinc: `Audio/HootMegaDrive.cs` (Z80 사운드 쪽 · 카트리지의 Z80 드라이버를 RAM에, 요청 주소) |
 | 2.0.5 | 8-7 (X68000) | MC68000 `Audio/Cpu/M68000.cs` + hoot x68k generic: `Audio/HootX68k.cs` (OPM · ADPCM · DMA · MFP, E00010h = hoot가 대신 하는 IOCS · DOS) |
 | 2.0.6 | 8-7 (X68000 MIDI) | x68k MIDI 판: YM3802 MIDI 보드 (EAFA00h) → 살아 있는 MIDI 곡 (`HootX68k.LoadMidi`) |
+| 2.1.71 | 남코 갤러그 계열 | hoot namco wsgz80 (Bosconian · Galaga · Dig Dug · Xevious): `Audio/HootNamcoWsgZ80.cs` (Z80 + WSG, WSG 쓰기를 15XX 목소리로 옮겨 D8h) |
 | 2.1.70 | 8-9l 더함 (타이토 tokio) | hoot taito tokio (Tokio 원래 ROM · Bubble Bobble 시제품): `HootTaitoBubble` tokio 배치 (9000h 명령, A000h · A800h NMI, B000h YM2203) |
 | 2.1.69 | 캡콤 Exed Exes | hoot capcom exedexes: `Audio/HootCapcomPsg.cs` (Z80 + AY-3-8910 + SN76489 × 2, MAME exedexes) |
 | 2.1.68 | 캡콤 Bionic Commando | hoot capcom bionicc: `HootOpmBoard.BionicCommando` (MAME bionicc: 8000h YM2151 상태 폴링, A000h 명령 NMI, RAM C000h, OKI 없음) |
@@ -146,6 +147,7 @@
 | 아이렘 M62 / M52 (m62) | 15 / 15, 137 / 145 (남은 8 = Traverse USA 효과음 — MSM #2로 보임) | `--test hootm62` (HOOT_SONGS=1) |
 | 남코 Pac-Land 계열 (wsg63701) | 6 / 6, 157곡 모두 | `--test hootns86` (HOOT_SONGS=1, HOOT_DEBUG=1 = 슬롯 · 요청 바이트) |
 | 남코 System 86 (system86) | 5 / 5, 71곡 모두 (63701X 음성은 없음) | `--test hootns86` (6801 합성 둘 포함, HOOT_SONGS=1) |
+| 남코 갤러그 계열 (wsgz80) | 4 / 4, 71 / 71 | `--test hootwsg` (HOOT_SONGS=1) |
 | 남코 매피 계열 (wsg6809) | 11 / 11, 262 / 263 (남은 하나 = Phozon "Sound Initialize" 명령) | `--test hootwsg` (HOOT_SONGS=1) |
 | 남코 System 1 (system1) | 22 / 22, 799 / 818곡 (남은 19 = 정지 명령) — FM 또는 CUS30 | `--test hootns1` (HOOT_SONGS=1) |
 | 데이터 이스트 6809 (brkthru · exprraid) | 3 / 3, 19곡 모두 (YM3526 키온) | `--test hootdeco69` (6809 합성 시험 둘 포함, HOOT_SONGS=1) |
@@ -478,6 +480,9 @@
   - YM3812 IRQ 받기: 드라이버가 4h에 42h를 써서 (T1 가림 + 깃발 지움) IRQ를 내림 — MAME fmopl처럼 4h bit6 · 5 = 그 깃발 지움 + 남은 게 다 가려지면 IRQ 내림 (bit7 리셋만 따르면 IRQ가 쉬지 않음)
 - **8-9n. 윤성 Z80 + YM3812 + OKIM6295 — ✅ v2.1.64 (6 / 6, 64곡)** — `Audio/HootYunsung.cs`
   - MAME nmg5.cpp: Z80 4MHz, ROM ~DFFFh, RAM E000h (pclubys 배치는 F800h~FFFFh, 스택 0000h → FFFFh), I/O 00h OKI 뱅크 · 10h · 11h YM3812 · 18h 명령 (NMI) · 1Ch OKIM6295 1MHz. IRQ = YM3812 (fmopl 깃발 지움)
+- **8-9o. 남코 갤러그 계열 (wsgz80) — ✅ v2.1.71 (4 / 4, 71곡)** — `Audio/HootNamcoWsgZ80.cs`
+  - MAME galaga · bosco · digdug · xevious 셋째 Z80: 3.072MHz, ROM 0000h~3FFFh, WSG 6800h~681Fh (팩맨 배치 니블), 6822h = NMI 끔 · 켬 (사운드 CPU가 부팅 때 끄고 메인이 켬 → 흉내에선 늘 켬), NMI = 줄 64 · 192 (약 121Hz). 나머지는 같이 쓰는 RAM
+  - 요청 = seq_addr (bosco 8A08h · galaga 9AA0h · digdug 9A80h · xevious A000h) + 소리 번호에 1. 파형 PROM = 첫 rom pcm. WSG 목소리 3개 → 15XX 목소리 0~2 (클럭 96kHz, 주파수 공식 같음), VGM 안 명령 D8h
 - 다음: 타이토 F3 (ES5505 + MC68681, 36항목), 아이렘 M92 (V35 + GA20), 코나미 K007232 보드 (매피 계열, 6809 + 남코 WSG 15xx) · system86 (HD63701)
 - 그 다음 (8-8v): Z80 + YM2151 + OKIM6295 작은 보드 (tecmo16 · raizing mahou · bgaregga · banpresto dbz · dooyong …) — MAME 배치를 하나씩 확인해 `HootOpmBoard.Layout`에, atari system1 (6502), 그 뒤 새 칩
   - 남은 것 (8-8a): "소리 남" 기준이 처음 6초에 키온 하나라 몇 항목은 ADPCM 하나뿐 (driftout · liquidk · megablst 등 첫 곡이 짧은 효과음일 수 있음) — 귀로 확인, bshark (code0 · code1 둘), taito z 계열 다른 보드

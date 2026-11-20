@@ -51,6 +51,48 @@ public static class HootNamcoWsgTests
             foreach (var t in hoot.Titles.Take(4)) { code = t.Code; r = Measure(hoot, dir, code, 8); if (r.sound) break; }
             check("hoot namco wsg6809 " + arc + ": song 0x" + code.ToString("X2") + " makes sound in 8 s", r.sound, r.note);
         }
+
+        // Z80 + WSG (갤러그 계열, type wsgz80)
+        check("hoot namco wsgz80: playable, own board", HootArchive.Playable("namco", "wsgz80") && HootNamcoWsgZ80.Handles("Namco", "WSGZ80") && !HootNamcoWsgZ80.Handles("namco", "wsg6809"), "");
+        foreach (var arc in Z80Archives)
+        {
+            string zip = Path.Combine(folder, arc + ".zip");
+            if (!File.Exists(zip)) { Console.WriteLine("SKIP  hoot namco wsgz80 " + arc + " (zip not found)"); continue; }
+            string dir = ZipFolder.Extract(zip);
+            var hoot = Directory.GetFiles(dir, "*" + HootArchive.Extension).Select(HootArchive.Load).FirstOrDefault(x => HootNamcoWsgZ80.Handles(x.Driver, x.Type));
+            if (hoot == null) { check("hoot namco wsgz80 " + arc + ": .hoot entry", false, "none"); continue; }
+            if (all)
+            {
+                foreach (var t in hoot.Titles) Console.WriteLine("  " + arc + " 0x" + t.Code.ToString("X2") + " " + MeasureZ80(hoot, dir, t.Code, 8).note + " | " + t.Title);
+                continue;
+            }
+            if (arc == "galaga")
+            {
+                var v = HootNamcoWsgZ80.Render(hoot, dir, 0x0B, 3, 0);
+                var p = new VgmPlayer(); p.Start(v, 0, null);
+                double peak = 0;
+                for (int i = 0; i < 44100 * 3; i++) { p.Step(); p.Generate(out double l, out _); peak = Math.Max(peak, Math.Abs(l)); }
+                check("hoot namco wsgz80 galaga: WSG plays through VGM (D8h)", v.Cus30Is15xx && peak > 100, "peak " + peak.ToString("0") + ", " + v.ChipSummary);
+            }
+            var r = (sound: false, note: "");
+            int code = 0;
+            foreach (var t in hoot.Titles.Take(4)) { code = t.Code; r = MeasureZ80(hoot, dir, code, 8); if (r.sound) break; }
+            check("hoot namco wsgz80 " + arc + ": song 0x" + code.ToString("X2") + " makes sound in 8 s", r.sound, r.note);
+        }
+    }
+
+    public static readonly string[] Z80Archives = { "bosco", "galaga", "digdug", "xevious" };
+
+    public static (bool sound, string note) MeasureZ80(HootArchive.Entry e, string dir, int code, double seconds)
+    {
+        var m = HootNamcoWsgZ80.Boot(e, name => { string f = HootArchive.FindFile(dir, name); return f != null ? File.ReadAllBytes(f) : null; });
+        m.Play(code);
+        m.RunSeconds(seconds);
+        int vol = m.Log.Count(x => x.t > 0 && (x.reg & 7) == 3 && (x.val & 15) != 0);
+        string note = "vol " + vol + ", writes " + m.Log.Count + ", nmi " + m.Nmis + ", PC " + m.Cpu.PC.ToString("X4")
+            + (m.OtherWrites.Count > 0 ? ", other " + string.Join(" ", m.OtherWrites.OrderByDescending(x => x.Value).Take(5).Select(x => x.Key.ToString("X4") + ":" + x.Value)) : "")
+            + (m.Missing.Count > 0 ? ", missing " + string.Join(" ", m.Missing) : "") + (m.Unsupported.Count > 0 ? ", unsupported " + string.Join(" ", m.Unsupported) : "");
+        return (vol > 0, note);
     }
 
     public static (bool sound, string note) Measure(HootArchive.Entry e, string dir, int code, double seconds)

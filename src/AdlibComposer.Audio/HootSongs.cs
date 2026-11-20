@@ -248,6 +248,12 @@ public static class HootSongs
             v = HootNamcoWsg6809.Render(e, dir, code);
             what = "Namco 6809 + 15XX 사운드 CPU · 소리 0x" + code.ToString("X2");
         }
+        else if (HootNamcoWsgZ80.Handles(driver, e.Type))
+        {
+            // hoot 남코 갤러그 계열: 셋째 Z80 (사운드 CPU) + WSG에서 ROM을 돌려 미리 렌더
+            v = HootNamcoWsgZ80.Render(e, dir, code);
+            what = "Namco Z80 + WSG 사운드 CPU · 소리 0x" + code.ToString("X2");
+        }
         else if (HootNamcoSys1.Handles(driver, e.Type))
         {
             // hoot 남코 System 1: 사운드 보드 (6809 + YM2151 + CUS30)에서 사운드 ROM을 돌려 미리 렌더 (CUS30 파형은 아직)

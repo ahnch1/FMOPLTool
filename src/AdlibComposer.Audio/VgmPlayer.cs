@@ -101,7 +101,7 @@ public sealed class VgmPlayer
         if (s.Ym2610Clock > 0) l.Add(new OpnChip(s.Ym2610B ? OpnChip.Variant.Ym2610B : OpnChip.Variant.Ym2610, s.Ym2610Clock));
         if (s.Okim6295Clock > 0) l.Add(new Okim6295(s.Okim6295Clock, s.OkiPin7, Rate));
         if (s.Okim6295Clock > 0 && s.Okim6295Clock2 > 0) l.Add(new Okim6295(s.Okim6295Clock2, s.OkiPin7, Rate));
-        if (s.Upd7759Clock > 0) l.Add(new Upd7759(s.Upd7759Clock, Rate));
+        if (s.Upd7759Clock > 0) l.Add(new Upd7759(s.Upd7759Clock, Rate, s.Upd7759Master));
         if (s.QsoundClock > 0) l.Add(new QSound(s.QsoundClock, Rate));
         if (s.SegaPcmClock > 0) l.Add(new SegaPcm(s.SegaPcmClock, s.SegaPcmInterface, Rate));
         if (s.NesApuClock > 0) l.Add(new NesApu(s.NesApuClock, Rate, s.NesFds));
@@ -528,7 +528,7 @@ public sealed class VgmPlayer
             ((NesApu)xNes.Chip).LoadRam(d[at] | (d[at + 1] << 8), d, at + 2, size - 2);
             return;
         }
-        if ((type == 0x81 || type == 0x82 || type == 0x83 || type == 0x8B || type == 0x8F || type == 0x80 || type == 0x8D || type == 0x8E || type == 0x8C) && size > 8)
+        if ((type == 0x81 || type == 0x82 || type == 0x83 || type == 0x8B || type == 0x8F || type == 0x80 || type == 0x8D || type == 0x8E || type == 0x8C || type == 0x92) && size > 8)
         {
             int start = (int)VgmFormat.U32(d, at + 4);
             var data = new byte[size - 8];
@@ -544,6 +544,7 @@ public sealed class VgmPlayer
             if (type == 0x8C && second && xK54539b != null) ((K054539)xK54539b.Chip).LoadRom(data, start);
             if (type == 0x8E && xK53260 != null) ((K053260)xK53260.Chip).LoadRom(data, start);
             if (type == 0x8D && xC140 != null) ((NamcoC140)xC140.Chip).LoadRom(data, start);
+            if (type == 0x92 && xUpd != null) ((Upd7759)xUpd.Chip).LoadRom(data, start);
         }
     }
 

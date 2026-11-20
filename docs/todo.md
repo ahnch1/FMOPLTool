@@ -103,7 +103,8 @@
 - [x] 코나미 System GX 17 · 489곡 — v2.1.47 `HootKonamiGx` (68000 + K054539 × 2 at 200000h), 모두
 - [x] 코나미 scontra 3 · thundercross 3 · 89곡 — v2.1.50 `HootKonamiK007232` + K007232 칩, 84곡
 - [x] 코나미 salamander 3 · hcastle 3 · crimfght 2 · 231곡 — v2.1.51 같은 보드 배치 표, 229곡 (무음 = 정지 항목)
-- [ ] 코나미 twin16 5 (K007232 + uPD7759 마스터 모드 — 재생기 uPD7759는 슬레이브만) · gx400 5 (VLM5030 · K005289)
+- [x] 코나미 twin16 5 · 82곡 — v2.1.52 uPD7759 마스터 모드 + 같은 보드, 모두
+- [ ] 코나미 gx400 5 (VLM5030 · K005289)
 - [ ] 세가 model2 4 · system_multi 4 (315-5560 = MultiPCM)
 - [ ] 코나미 hornet 8 · gticlub 4 — RF5C400 (CPU 68000)
 

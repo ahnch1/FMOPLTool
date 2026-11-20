@@ -60,8 +60,9 @@ public sealed class VgmSong
     public double Okim6295Clock2;
     /// <summary>둘째 YM2203 (머리말 0x44 클럭 bit30, 명령 A5h). 0 = 하나.</summary>
     public double Ym2203Clock2;
-    /// <summary>uPD7759 클럭 (VGM 8Ch, 명령 B6h). 슬레이브 모드만 (bit31 마스터 모드 = 자기 ROM은 아직).</summary>
+    /// <summary>uPD7759 클럭 (VGM 8Ch, 명령 B6h). bit31 = 마스터 모드 (<see cref="Upd7759Master"/>, ROM 블록 92h).</summary>
     public double Upd7759Clock;
+    public bool Upd7759Master;
     /// <summary>QSound 클럭 (VGM B4h, 명령 C4h, ROM 블록 8Fh) — DSP 없는 HLE로 낸다.</summary>
     public double QsoundClock;
     /// <summary>세가 PCM 클럭 (VGM 38h) · 인터페이스 (3Ch: 마스크 &lt;&lt; 16 | 뱅크 자리), 명령 C0h, ROM 블록 80h.</summary>
@@ -290,8 +291,8 @@ public static class VgmFormat
         s.Huc6280Clock = hz(0xA4);
         s.OkiPin7 = (clock(0x98) & 0x80000000) != 0;
         if (s.Okim6295Clock > 0 && (clock(0x98) & 0x40000000) != 0) s.Okim6295Clock2 = s.Okim6295Clock;
-        s.Upd7759Clock = (clock(0x8C) & 0x80000000) != 0 ? 0 : hz(0x8C);   // 마스터 모드 (bit31)는 아직
-        if ((clock(0x8C) & 0x80000000) != 0) s.UnsupportedChips.Add("uPD7759 (master)");
+        s.Upd7759Clock = hz(0x8C);
+        s.Upd7759Master = (clock(0x8C) & 0x80000000) != 0;   // 마스터 모드: 칩이 ROM (블록 92h)을 읽음
         s.QsoundClock = hz(0xB4);
         s.SegaPcmClock = hz(0x38);
         s.PokeyClock = hz(0xB0);

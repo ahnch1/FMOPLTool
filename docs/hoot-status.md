@@ -31,6 +31,7 @@
 | 2.0.4 | 8-6 (메가드라이브) | hoot megadrive generic_z80 · iyinc: `Audio/HootMegaDrive.cs` (Z80 사운드 쪽 · 카트리지의 Z80 드라이버를 RAM에, 요청 주소) |
 | 2.0.5 | 8-7 (X68000) | MC68000 `Audio/Cpu/M68000.cs` + hoot x68k generic: `Audio/HootX68k.cs` (OPM · ADPCM · DMA · MFP, E00010h = hoot가 대신 하는 IOCS · DOS) |
 | 2.0.6 | 8-7 (X68000 MIDI) | x68k MIDI 판: YM3802 MIDI 보드 (EAFA00h) → 살아 있는 MIDI 곡 (`HootX68k.LoadMidi`) |
+| 2.1.52 | 8-9i 더함 (코나미 Twin16) | uPD7759 마스터 모드 (칩이 ROM 머리 표에서 직접, VGM 8Ch bit31 · ROM 블록 92h · 뱅크 레지스터 3) + hoot konami twin16 (Devil World · Vulcan Venture · Final Round · Cue Brick · M.I.A.): `HootKonamiK007232` 배치 |
 | 2.1.51 | 8-9i 더함 (코나미 K007232 보드 셋) | hoot konami salamander (Salamander · Life Force) · hcastle (Haunted Castle · City Bomber · Kitten Kaboodle — YM3812 + SCC + K007232) · crimfght (Crime Fighters · Aliens): `HootKonamiK007232` 배치 표 |
 | 2.1.50 | 8-9i (코나미 K007232) | 새 칩 K007232 (`Audio/Chips/K007232.cs`, 이 프로그램 안 명령 DBh) + hoot konami scontra · thundercross (Super Contra · Gang Busters · Crazy Cop · Thunder Cross · Block Hole): `Audio/HootKonamiK007232.cs` |
 | 2.1.49 | 8-9h (비디오시스템 · 사이쿄 YM2610) | hoot videosystem turbofrc · aerofgt (Turbo Force · Spinal Breakers · Power Spikes · Karate Blazers · Aero Fighters · Goal! '92), psikyo gunbird (Gunbird · Battle K-Road · Strikers 1945): `Audio/HootYm2610Board.cs` |
@@ -111,7 +112,7 @@
 | 토아플랜 1 · Twin Cobra (generic) | 9 / 9, 125곡 모두 (키온) | `--test hoottoaplan` (HOOT_SONGS=1 = 곡마다, HOOT_PROBE=1 = I/O 포트 · 68000 쪽 RAM 후보) |
 | 타이토 YM2151 보드 (fullt) | 9 / 9, 147곡 모두 (FM 키온 또는 MSM 바이트) | `--test hoottaitoopm` (HOOT_SONGS=1 = 곡마다, HOOT_REGS · HOOT_PC · HOOT_PCQ · HOOT_RAM · HOOT_MSMLOG) |
 | 비디오시스템 · 사이쿄 YM2610 | 9 / 9, 169곡 모두 | `--test hoot2610` (HOOT_SONGS=1) |
-| 코나미 K007232 (scontra · thundercross · salamander · hcastle · crimfght) | 14 / 14, 320곡 중 313 (무음 = 00h 머리 · 정지 항목 6 · Thunder Cross 8Fh) | `--test hootk7232` (HOOT_SONGS=1) |
+| 코나미 K007232 (scontra · thundercross · salamander · hcastle · crimfght · twin16) | 19 / 19, 402곡 중 395 (무음 = 00h 머리 · 정지 항목 6 · Thunder Cross 8Fh) | `--test hootk7232` (HOOT_SONGS=1) |
 | 코나미 System GX (systemgx) | 17 / 17, 489곡 모두 | `--test hootgx` (HOOT_SONGS=1) |
 | 세가 System 18 · 32 (system18 · system32) | 15 / 15, 388 / 397곡 (남은 9 = 정지 명령) | `--test hoots18` (RF5C68 합성 포함, HOOT_SONGS=1) |
 | 코나미 K054539 (054539 · 054539x2) | 10 / 10, 266 / 267곡 | `--test hootk54` (K054539 합성 포함, HOOT_SONGS=1, HOOT_DEBUG=1 = YM2151 타이머) |
@@ -427,6 +428,7 @@
   - MAME thunderx scontra_sound_map: Z80 3.58MHz, RAM 8000h, A000h 래치 (IRQ hold), B000h~B00Dh K007232 (12 = 바깥 포트 → 음량 위 니블 채널 0 · 아래 채널 1), C000h · C001h YM2151 (타이머 폴링), F000h 뱅크 (채널마다 2비트, 128KB 단위)
   - K007232 (MAME 옛 구현): 2채널, 피치 9비트 → 걸음 32 / (512 − f) (클럭 ÷ 128), 표본 bit7 = 끝, reg 13 = 반복. 음량 · 뱅크는 보드 바깥이라 가짜 레지스터 10h~15h
   - Block Hole은 E00Ch에 쓰지만 MAME에도 K007232가 없음 → YM2151만
+  - v2.1.52 twin16 (MAME twin16): scontra 배치 + RAM ~8FFFh, 9000h bit1 = uPD7759 /RESET, D000h = 번호, E000h bit0 = START, F000h 읽기 = 쉬는 중 (1). uPD7759 마스터 모드 (MAME): 시작 때 번호 = 데이터 포트, ROM[0] = 마지막 번호, ROM[5 + 2n] · [6 + 2n] = 주소 (× 512 · × 2), 빈 바이트 뒤 블록, C0h 되풀이 = 자리로 돌아감. 음악은 uPD를 안 씀 (목소리 효과음)
   - v2.1.51 배치 표 (`Layouts`): salamander (MAME nemesis salamand — RAM 8000h~8FFFh, E000h 읽기 = VLM5030 바쁨 → 0을 돌려줘야 부팅 · D000h · F000h VLM 빼고, 뱅크 없음; K007232는 효과음 채널 8 · 9만 — 음악은 FM만), hcastle (9800h SCC 3.58 / 2MHz → VGM D2h, A000h YM3812 — 타이머 IRQ = NMI, C000h 뱅크, D000h 명령), crimfght · aliens (A000h YM2151, C000h 명령, E000h K007232, 음량 아래 니블 = 채널 0, 뱅크 = YM2151 1Bh CT 핀 bit7 · bit6)
 - 다음: 타이토 F3 (ES5505 + MC68681, 36항목), 아이렘 M92 (V35 + GA20), 코나미 K007232 보드 (매피 계열, 6809 + 남코 WSG 15xx) · system86 (HD63701)
 - 그 다음 (8-8v): Z80 + YM2151 + OKIM6295 작은 보드 (tecmo16 · raizing mahou · bgaregga · banpresto dbz · dooyong …) — MAME 배치를 하나씩 확인해 `HootOpmBoard.Layout`에, atari system1 (6502), 그 뒤 새 칩

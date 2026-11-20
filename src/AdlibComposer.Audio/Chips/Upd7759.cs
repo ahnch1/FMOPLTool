@@ -4,7 +4,8 @@ using System.Collections.Generic;
 namespace AdlibComposer.Audio.Chips;
 
 /// <summary>
-/// NEC uPD7759 ADPCM 음성 칩 (세가 System 16 · 18의 목소리 · 효과음), 슬레이브 모드 (자기 ROM 없이 CPU가 바이트를 하나씩 넣어 줌).
+/// NEC uPD7759 ADPCM 음성 칩 (세가 System 16 · 18의 목소리 · 효과음), 슬레이브 모드 (자기 ROM 없이 CPU가 바이트를 하나씩 넣어 줌)
+/// 또는 마스터 모드 (<see cref="Rom"/>이 있으면: 데이터 포트 = 곡 번호, 칩이 ROM 머리 표 (0 = 마지막 번호, 5 + 2n = 주소 ÷ 2)에서 직접 읽음 — 코나미 Twin16).
 /// MAME upd7759.cpp의 상태 기계를 따른다: START → (35클럭) 첫 요청 → 마지막 곡 번호 · 빈 바이트 · 주소 두 바이트 · 빈 바이트 → 블록 머리
 /// (00 = 쉼 · 40 = 256니블 · 80 = n니블 · C0 = 되풀이) → 니블. 바이트를 받을 때마다 DRQ를 올린다 (21클럭).
 /// <para><see cref="Queued"/> = false (보드 흉내): 칩은 마지막으로 쓴 바이트를 읽는다 — DRQ 시점에 CPU가 다음 바이트를 쓴다.
@@ -38,6 +39,10 @@ public sealed class Upd7759Core
     private enum St { Idle, DropDrq, Start, FirstReq, LastSample, Dummy1, AddrMsb, AddrLsb, Dummy2, BlockHeader, NibbleCount, NibbleMsn, NibbleLsn }
 
     public bool Queued;
+    /// <summary>마스터 모드 ROM (null = 슬레이브). <see cref="Bank"/> = 128KB 뱅크.</summary>
+    public byte[] Rom;
+    public int Bank;
+    private int offset, repeatOffset;
     private St state = St.Idle, postDrqState;
     private int clocksLeft, postDrqClocks;
     private bool reset = true, start;
@@ -76,6 +81,7 @@ public sealed class Upd7759Core
 
     public void Data(int v)
     {
+        if (Rom != null) { fifoIn = v & 0xFF; return; }   // 마스터 모드: 곡 번호
         if (!Queued) { fifoIn = v & 0xFF; return; }
         if (pendingDrqs > 0) { pendingDrqs--; fifoIn = v & 0xFF; }   // 이미 지난 DRQ의 바이트
         else fifo.Enqueue(v & 0xFF);
@@ -85,11 +91,18 @@ public sealed class Upd7759Core
     private void RaiseDrq()
     {
         Drq = true;
-        if (!Queued) return;
+        if (!Queued || Rom != null) return;
         if (fifo.Count > 0) fifoIn = fifo.Dequeue(); else pendingDrqs++;
     }
 
-    private int ReadByte() { return fifoIn; }
+    private int ReadByte() { return Rom != null ? RomAt(offset++ & 0x1FFFF) : fifoIn; }
+
+    private int RomAt(int a)
+    {
+        if (Rom == null || Rom.Length == 0) return 0;
+        long x = (long)Bank * 0x20000 + a;
+        return Rom[(int)(x % Rom.Length)];
+    }
 
     /// <summary>칩 클럭 cycles만큼 진행.</summary>
     public void Advance(int cycles)
@@ -116,7 +129,7 @@ public sealed class Upd7759Core
                 state = postDrqState;
                 break;
             case St.Start:
-                reqSample = 0x10;   // 슬레이브 모드
+                reqSample = Rom != null ? fifoIn : 0x10;   // 마스터 = 데이터 포트의 번호, 슬레이브 = 10h
                 clocksLeft = 70;
                 state = St.FirstReq;
                 break;
@@ -126,7 +139,7 @@ public sealed class Upd7759Core
                 state = St.LastSample;
                 break;
             case St.LastSample:
-                lastSample = ReadByte();
+                lastSample = Rom != null ? RomAt(0) : ReadByte();
                 Drq = true;
                 clocksLeft = 28;
                 state = reqSample > lastSample ? St.Idle : St.Dummy1;
@@ -137,25 +150,26 @@ public sealed class Upd7759Core
                 state = St.AddrMsb;
                 break;
             case St.AddrMsb:
-                ReadByte();
+                if (Rom != null) offset = RomAt(reqSample * 2 + 5) << 9; else ReadByte();
                 Drq = true;
                 clocksLeft = 44;
                 state = St.AddrLsb;
                 break;
             case St.AddrLsb:
-                ReadByte();
+                if (Rom != null) offset |= RomAt(reqSample * 2 + 6) << 1; else ReadByte();
                 Drq = true;
                 clocksLeft = 36;
                 state = St.Dummy2;
                 break;
             case St.Dummy2:
+                offset++;
                 firstValidHeader = false;
                 Drq = true;
                 clocksLeft = 36;
                 state = St.BlockHeader;
                 break;
             case St.BlockHeader:
-                if (repeatCount > 0) repeatCount--;   // 슬레이브 모드에서는 CPU가 같은 바이트를 다시 넣는다
+                if (repeatCount > 0) { repeatCount--; offset = repeatOffset; }   // 슬레이브 모드에서는 CPU가 같은 바이트를 다시 넣는다
                 blockHeader = ReadByte();
                 Drq = true;
                 switch (blockHeader & 0xC0)
@@ -178,6 +192,7 @@ public sealed class Upd7759Core
                         break;
                     default:
                         repeatCount = (blockHeader & 7) + 1;
+                        repeatOffset = offset;
                         clocksLeft = 36;
                         state = St.BlockHeader;
                         break;
@@ -222,7 +237,7 @@ public sealed class Upd7759Core
     }
 }
 
-/// <summary>uPD7759 VGM 칩 (명령 B6h: 레지스터 0 = /RESET, 1 = START, 2 = 데이터, 3 = 뱅크 — 슬레이브 모드만, 쓴 바이트를 차례로).</summary>
+/// <summary>uPD7759 VGM 칩 (명령 B6h: 레지스터 0 = /RESET, 1 = START, 2 = 데이터, 3 = 뱅크). 슬레이브 모드 = 쓴 바이트를 차례로, 마스터 모드 (머리말 bit31) = ROM 블록 92h.</summary>
 public sealed class Upd7759 : ISoundChip
 {
     private readonly Upd7759Core core = new Upd7759Core { Queued = true };
@@ -231,8 +246,9 @@ public sealed class Upd7759 : ISoundChip
     private bool mute;
     private float level;
 
-    public Upd7759(double clock, int rate = 44100)
+    public Upd7759(double clock, int rate = 44100, bool master = false)
     {
+        if (master) core.Rom = new byte[0];
         NativeRate = rate;
         clocksPerSample = (clock > 0 ? clock : Upd7759Core.StandardClock) / rate;
     }
@@ -250,6 +266,7 @@ public sealed class Upd7759 : ISoundChip
             case 0: core.SetReset(value != 0); break;
             case 1: core.SetStart(value != 0); break;
             case 2: core.Data(value); break;
+            case 3: core.Bank = value; break;
         }
     }
 
@@ -264,6 +281,16 @@ public sealed class Upd7759 : ISoundChip
         int v = mute ? 0 : core.Sample << 7;
         level = Math.Min(1f, Math.Abs(core.Sample) / 128f);
         left = right = v;
+    }
+
+    /// <summary>마스터 모드 ROM (VGM 블록 92h: 시작 자리 + 바이트).</summary>
+    public void LoadRom(byte[] data, int start)
+    {
+        if (data == null) return;
+        var r = core.Rom ?? new byte[0];
+        if (r.Length < start + data.Length) Array.Resize(ref r, start + data.Length);
+        Array.Copy(data, 0, r, start, data.Length);
+        core.Rom = r;
     }
 
     public void SetMute(int ch, bool m) { mute = m; }

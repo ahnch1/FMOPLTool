@@ -31,6 +31,7 @@
 | 2.0.4 | 8-6 (메가드라이브) | hoot megadrive generic_z80 · iyinc: `Audio/HootMegaDrive.cs` (Z80 사운드 쪽 · 카트리지의 Z80 드라이버를 RAM에, 요청 주소) |
 | 2.0.5 | 8-7 (X68000) | MC68000 `Audio/Cpu/M68000.cs` + hoot x68k generic: `Audio/HootX68k.cs` (OPM · ADPCM · DMA · MFP, E00010h = hoot가 대신 하는 IOCS · DOS) |
 | 2.0.6 | 8-7 (X68000 MIDI) | x68k MIDI 판: YM3802 MIDI 보드 (EAFA00h) → 살아 있는 MIDI 곡 (`HootX68k.LoadMidi`) |
+| 2.1.22 | 8-8m (SNK68) | hoot snk 3812 (P.O.W. · SAR · Street Smart · Ikari III): `Audio/HootSnk68.cs` (Z80 + YM3812 + uPD7759, 명령 0Dh × 2 = 음악 켬) |
 | 2.1.21 | 8-8b 더함 (midres) | hoot dataeast midres (Midnight Resistance): `Audio/HootDeco.cs` midres 배치 — YM3812 (타이머 = IRQ2) · YM2203 · OKIM6295 · 명령 138000h |
 | 2.1.20 | — (UI) | **Hoot 페이지** (PLAY, Jukebox 옆): 같은 `JukeboxView` + 왼쪽 `Shell/HootBrowser.cs` (목록 고르기 · 설정 · `HootTree`), 왼쪽 목록 접점 `ISongList`, 설정 Preferences → Hoot (HootXmlFolders · HootDataFolder), 처음 열 때 읽음. 왼쪽 목록 [hoot] 버튼은 없앰 |
 | 2.1.19 | 8-8l (데이터 이스트 6502) | hoot dataeast cobracom · drgninja · karnov · triothep · lastmisn · makyosen: `Audio/HootDeco6502.cs` (6502 + YM2203 + YM3812/YM3526 + OKIM6295), 6502 `DecimalMode` · `OpcodeMap` |
@@ -74,6 +75,7 @@
 | 네오지오 | 137 / 146 (음악일 만한 코드 10h 이상 3곡까지) | `--hootneosurvey roms 200 6` |
 | 타이토 YM2610 보드 (f2 · b · dual68 · x · fx1a · sonicb) | 67 / 67 (첫 곡이 조용하면 다음 곡 3개까지) | `--hoottaitosurvey roms 200 6` |
 | 데이터 이스트 6502 (cobracom · drgninja · karnov · triothep · lastmisn · makyosen) | 20 / 20, 곡 283 / 285 (무음 2 = cobracom SE 12 · ghostb 효과음 하나) | `--test hootdeco65` (HOOT_SONGS=1 = 곡마다) |
+| SNK68 (snk 3812) | 4 / 4, 146곡 모두 (키온 또는 uPD7759) | `--test hootsnk` (HOOT_SONGS=1, HOOT_SNKINIT=16진,… 부팅 명령 바꾸기, HOOT_SNKSCAN=곡 = 부팅 명령 00h~FFh 훑기, HOOT_PC · HOOT_PCQ=주소,…) |
 | 토아플랜 1 · Twin Cobra (generic) | 9 / 9, 125곡 모두 (키온) | `--test hoottoaplan` (HOOT_SONGS=1 = 곡마다, HOOT_PROBE=1 = I/O 포트 · 68000 쪽 RAM 후보) |
 | 타이토 YM2151 보드 (fullt) | 9 / 9, 147곡 모두 (FM 키온 또는 MSM 바이트) | `--test hoottaitoopm` (HOOT_SONGS=1 = 곡마다, HOOT_REGS · HOOT_PC · HOOT_PCQ · HOOT_RAM · HOOT_MSMLOG) |
 | CPS-1 · Double Dragon 2 · 3 (YM2151 + OKIM6295) | 39 / 39 (FM 키온 16개 또는 OKI 2번 이상, 처음 6곡까지) | `--hootopmsurvey roms 200 6` |
@@ -257,7 +259,13 @@
   - OPL은 바뀐 레지스터만 VGM에 (토아플랜과 같음). 곡 코드 위 바이트 (extcode, gondo 0x10A 등)는 버림
   - 빠진 것: midres (HuC6280 사운드 CPU), brkthru · darwin · exprraid (6809 사운드 CPU — 스캔하면 벡터가 엉뚱함)
 - **midres (v2.1.21, 1 / 1 · 12곡)**: HuC6280 보드인데 YM2151 대신 YM3812. 칩 자리는 ROM이 TAM으로 MPR2에 넣는 쪽 번호 (84h = 108000h YM3812, 8Ch = 118000h YM2203, 98h = 130000h OKI, 9Ch = 138000h 명령)로 확인 — MAME dec0 midres_s_map과 같음. 벡터: IRQ1 = NMI = E111h (명령 처리), IRQ2 = 타이머 = E0CAh (음악 틱, YM3812 타이머 1을 다시 건다) → YM3812 타이머 = IRQ2. 클럭 YM3812 3MHz · YM2203 1.5MHz · OKI 1MHz (MAME 기억). 0x5A (Intermission)는 8초에 OKI 하나 — 짧은 징글일 수 있음
-- 다음 (8-8m): Z80 + YM2151 + OKIM6295 작은 보드 (tecmo16 · raizing mahou · bgaregga · banpresto dbz · dooyong …) — MAME 배치를 하나씩 확인해 `HootOpmBoard.Layout`에, atari system1 (6502), 그 뒤 새 칩
+- **8-8m. SNK68 (snk 3812) — ✅ v2.1.22 (4 / 4, 146곡 모두)** — `Audio/HootSnk68.cs`
+  - 배치 (MAME snk68): Z80 4MHz, ROM ~EFFFh, RAM F000h~F7FFh, 명령 F800h (NMI), I/O 00h YM3812 주소 · 상태 · 20h 자료 · 40h uPD7759 곡 번호 (START) · 80h uPD7759 /RESET. YM3812 4MHz 타이머 = IRQ (처리기가 상태 60h를 보고 틱)
+  - uPD7759 640kHz 마스터 모드 (칩이 ROM을 읽음) → VGM은 슬레이브 모드뿐이라 보드가 DRQ마다 ROM 바이트를 넣는다: FFh (슬레이브 칩은 "마지막 곡 번호"가 10h 이상이어야 계속) · 빈 · 주소 위 (ROM 5 + 2n) · 아래 (6 + 2n) · (위 << 9 | 아래 << 1)부터 차례로 (첫 바이트는 DUMMY2가 버림 = 마스터의 offset++). 곡 번호 쓰기는 VGM 데이터로 내지 않음 (재생기 칩이 쌓아 두므로 한 바이트 밀림). 되풀이 블록 (C0h)은 되감지 않음
+  - **음악 켬**: 드라이버 깃발 (P.O.W. F115h, SAR F116h) 처음 0Ch — bit2 = BGM 끔 (곡 처리기 09ACh가 그냥 돌아감), bit3 = 효과음 · 목소리 끔. 명령 형식 표 (ROM, 0 무시 · 1 제어 · 2 BGM · 3 효과음 · 4 …)의 형식 1 중 낮은 니블만 있는 명령 (00h~0Fh)은 **같은 값이 두 번 연달아** 와야 처리 (F12Fh에 앞 값), 처리기는 bit1 = 끔 · bit0 = 켬 (bit2 BGM · bit3 효과음) → 0Dh 두 번 = 둘 다 켬. 35h는 P.O.W. · Ikari III에서만 BGM 켬 (SAR · Street Smart는 형식 표가 달라 그냥 돌아감)
+  - 찾은 길: 타이머 쓰기 기록 (부팅 80h · 60h · 21h 뒤 곡 명령에서 r4 = 6Bh = 두 타이머 가림) → 곡 처리기의 깃발 검사 → 깃발 지우는 RES 2 · 그 앞 분기 · 두 번 오기 검사. 진단 `HOOT_SNKSCAN` (부팅 명령 훑기)은 3Ah · BFh처럼 자기 소리를 내는 명령도 걸리니 조심
+  - 3Ah = 소리 초기화 (RAM · ROM 시험 뒤 다시 시작), BFh = 짧은 효과 — hoot 목록 맨 앞 줄
+- 다음 (8-8n): Z80 + YM2151 + OKIM6295 작은 보드 (tecmo16 · raizing mahou · bgaregga · banpresto dbz · dooyong …) — MAME 배치를 하나씩 확인해 `HootOpmBoard.Layout`에, atari system1 (6502), 그 뒤 새 칩
   - 남은 것 (8-8a): "소리 남" 기준이 처음 6초에 키온 하나라 몇 항목은 ADPCM 하나뿐 (driftout · liquidk · megablst 등 첫 곡이 짧은 효과음일 수 있음) — 귀로 확인, bshark (code0 · code1 둘), taito z 계열 다른 보드
 
 ### 남은 문제 (단계와 따로)

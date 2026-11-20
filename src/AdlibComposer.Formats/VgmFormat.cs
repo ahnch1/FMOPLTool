@@ -66,6 +66,8 @@ public sealed class VgmSong
     public double PokeyClock;
     /// <summary>남코 CUS30 클럭 — VGM에 없는 칩: hoot 남코 렌더가 읽은 뒤 세우고, 이 프로그램 안 명령 0xD8 aa bb dd로 온다.</summary>
     public double Cus30Clock;
+    /// <summary>true = <see cref="Cus30Clock"/>의 칩이 15XX (매피 계열: 레지스터 00h~3Fh, 파형 PROM 200h~).</summary>
+    public bool Cus30Is15xx;
     public int SegaPcmInterface;
     public double Sn76489Clock, Ym2413Clock, Ym2612Clock, Ym2151Clock, Ym2203Clock, Ym2608Clock, Okim6295Clock, NesApuClock, Huc6280Clock, Ym2610Clock, Okim6258Clock, Saa1099Clock, GbDmgClock;
     /// <summary>OKIM6258 깃발 (머리말 0x94: bit0~1 분주, bit3 12비트 출력).</summary>
@@ -145,7 +147,7 @@ public sealed class VgmSong
             if (QsoundClock > 0) l.Add("QSound");
             if (SegaPcmClock > 0) l.Add("SegaPCM");
             if (PokeyClock > 0) l.Add("POKEY");
-            if (Cus30Clock > 0) l.Add("CUS30");
+            if (Cus30Clock > 0) l.Add(Cus30Is15xx ? "Namco 15XX" : "CUS30");
             if (Okim6258Clock > 0) l.Add("OKIM6258");
             if (Saa1099Clock > 0) l.Add("SAA1099");
             if (GbDmgClock > 0) l.Add("GB DMG");

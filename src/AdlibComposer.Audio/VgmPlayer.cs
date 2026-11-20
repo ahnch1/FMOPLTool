@@ -107,7 +107,7 @@ public sealed class VgmPlayer
         if (s.Okim6258Clock > 0) l.Add(new Msm6258(s.Okim6258Clock, s.Okim6258Flags, Rate));
         if (s.Saa1099Clock > 0) l.Add(new Saa1099(s.Saa1099Clock, Rate));
         if (s.PokeyClock > 0) l.Add(new Pokey(s.PokeyClock, Rate));
-        if (s.Cus30Clock > 0) l.Add(new NamcoCus30(s.Cus30Clock, Rate));
+        if (s.Cus30Clock > 0) l.Add(new NamcoCus30(s.Cus30Clock, Rate, s.Cus30Is15xx));
         if (s.GbDmgClock > 0) l.Add(new GbApu(s.GbDmgClock, Rate));
         return l;
     }

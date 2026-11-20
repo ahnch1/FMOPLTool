@@ -8,27 +8,32 @@ namespace AdlibComposer.Audio.Chips;
 /// +0 왼쪽 음량 (아래 4비트), +1 bit4~7 파형 · bit0~3 주파수 위, +2 · +3 주파수 (20비트), +4 오른쪽 음량 · bit7 = <b>다음</b> 목소리의 노이즈 켬.</para>
 /// <para>소리 높이 = 주파수 × 클럭 / 2^20 (클럭 = 49.152MHz ÷ 2048 = 24kHz). 노이즈 = 17비트 LFSR, 초당 주파수 아래 바이트 × 187.5번.
 /// VGM에 없는 칩: 이 프로그램 안에서만 명령 0xD8 aa bb dd (자리 = aa &lt;&lt; 8 | bb).</para>
+/// <para><b>15XX 모드</b> (매피 · 슈퍼 팩맨 · 갤럭시안 계열 6809 보드): 레지스터 00h~3Fh = 목소리 × 8 (+3 음량 (모노), +4 · +5 · +6 bit0~3 주파수 20비트, +6 bit4~6 파형),
+/// 파형 = PROM 256바이트 (아래 4비트, 32칸 × 8가지 — 자리 200h~2FFh로 쓴다), 노이즈 없음. 클럭 18.432MHz ÷ 768 = 24kHz.</para>
 /// </summary>
 public sealed class NamcoCus30 : ISoundChip
 {
     public const double DefaultClock = 49152000 / 2048.0;
     public const int Voices = 8;
 
-    private readonly byte[] mem = new byte[0x140];
+    private readonly byte[] mem = new byte[0x300];
+    /// <summary>15XX 모드 (매피 계열): 레지스터 배치 · 파형 PROM이 다름.</summary>
+    public readonly bool Is15xx;
     private readonly int[] freq = new int[Voices], wave = new int[Voices], volL = new int[Voices], volR = new int[Voices];
     private readonly bool[] noise = new bool[Voices], mute = new bool[Voices];
     private readonly double[] phase = new double[Voices], noiseAcc = new double[Voices], pitch = { 1, 1, 1, 1, 1, 1, 1, 1 };
     private readonly int[] noiseSeed = new int[Voices], noiseState = new int[Voices];
     private readonly double clock;
 
-    public NamcoCus30(double clock = DefaultClock, int rate = 44100)
+    public NamcoCus30(double clock = DefaultClock, int rate = 44100, bool is15xx = false)
     {
+        Is15xx = is15xx;
         this.clock = clock > 0 ? clock : DefaultClock;
         NativeRate = rate > 0 ? rate : 44100;
         Reset();
     }
 
-    public string Name { get { return "Namco CUS30"; } }
+    public string Name { get { return Is15xx ? "Namco 15XX" : "Namco CUS30"; } }
     public int NativeRate { get; }
     public int ChannelCount { get { return Voices; } }
     public string ChannelLabel(int c) { return "W" + (c + 1); }
@@ -41,11 +46,23 @@ public sealed class NamcoCus30 : ISoundChip
 
     public void Write(int port, int reg, int value)
     {
-        int o = reg & 0x1FF;
+        int o = reg & 0x3FF;
         if (o >= mem.Length) return;
         int d = value & 0xFF;
         mem[o] = (byte)d;
-        if (o < 0x100) return;
+        if (Is15xx)
+        {
+            if (o >= 0x40) return;
+            int c = o >> 3;
+            switch (o & 7)
+            {
+                case 3: volL[c] = volR[c] = d & 15; break;
+                case 6: wave[c] = (d >> 4) & 7; goto case 4;
+                case 4: case 5: freq[c] = mem[c * 8 + 4] | (mem[c * 8 + 5] << 8) | ((mem[c * 8 + 6] & 15) << 16); break;
+            }
+            return;
+        }
+        if (o < 0x100 || o >= 0x140) return;
         int r = o - 0x100, ch = r >> 3;
         switch (r & 7)
         {
@@ -63,6 +80,7 @@ public sealed class NamcoCus30 : ISoundChip
 
     private int Sample(int v, int idx)
     {
+        if (Is15xx) return (mem[0x200 + ((wave[v] * 32 + idx) & 0xFF)] & 15) - 8;
         int b = mem[(wave[v] * 16 + (idx >> 1)) & 0xFF];
         return ((idx & 1) == 0 ? b >> 4 : b & 15) - 8;
     }

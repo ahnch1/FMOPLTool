@@ -62,12 +62,16 @@ public static class HootPc98
         }
     }
 
+    public const double TandyClock = 14318180 / 4.0;
+
     public static PcAtMachine.Card CardOf(HootArchive.Entry e)
     {
         switch (e.Type.ToLowerInvariant())
         {
             case "adlib": return PcAtMachine.Card.AdLib;
             case "soundblaster16": return PcAtMachine.Card.SoundBlaster16;
+            case "gameblaster": return PcAtMachine.Card.GameBlaster;
+            case "tandy": return PcAtMachine.Card.Tandy;
             default: return PcAtMachine.Card.Beep;
         }
     }
@@ -78,6 +82,8 @@ public static class HootPc98
         if (IsPcAt(e))
         {
             var c = CardOf(e);
+            if (c == PcAtMachine.Card.GameBlaster) return new Chips.Saa1099Pair();
+            if (c == PcAtMachine.Card.Tandy) return new Chips.Sn76489(TandyClock, 44100, 0x0006, 16);   // NCR 8496 (MAME tandy: 탭 0006h)
             return c == PcAtMachine.Card.Beep ? null : new OplChip(c == PcAtMachine.Card.SoundBlaster16);
         }
         return HootDosChip.OpnFor(BoardOf(e));
@@ -85,7 +91,7 @@ public static class HootPc98
 
     private static string ChipLabel(HootArchive.Entry e)
     {
-        if (IsPcAt(e)) { var c = CardOf(e); return "PC/AT (" + (c == PcAtMachine.Card.AdLib ? "OPL2" : c == PcAtMachine.Card.SoundBlaster16 ? "OPL3" : "BEEP") + ")"; }
+        if (IsPcAt(e)) { var c = CardOf(e); return "PC/AT (" + (c == PcAtMachine.Card.AdLib ? "OPL2" : c == PcAtMachine.Card.SoundBlaster16 ? "OPL3" : c == PcAtMachine.Card.GameBlaster ? "SAA1099 × 2" : c == PcAtMachine.Card.Tandy ? "SN76489" : "BEEP") + ")"; }
         var b = BoardOf(e);
         return "PC-98" + (IsGeneric(e) ? "" : " DOS") + " (" + (b == Pc98Machine.Board.Opn ? "YM2203" : b == Pc98Machine.Board.Opna ? "YM2608" : "BEEP") + ")";
     }

@@ -32,7 +32,7 @@ public static class HootArchive
         switch (d)
         {
             case "pc98dos": case "pc98vx": case "pc98": return t == "opn" || t == "opna" || t == "86" || t == "beep";
-            case "pcatdos": return t == "adlib" || t == "soundblaster16" || t == "beep";
+            case "pcatdos": return t == "adlib" || t == "soundblaster16" || t == "beep" || t == "gameblaster" || t == "tandy";
             case "snes": return t == "spc";
             case "msx": return t == "kss" || t == "generic";
             case "pc88": return t == "opn" || t == "opna";

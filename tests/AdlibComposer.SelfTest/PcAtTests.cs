@@ -62,6 +62,19 @@ public static class PcAtTests
         sp.Out(0x43, 0xB6); sp.Out(0x42, 0xA9); sp.Out(0x42, 0x04); sp.Out(0x61, 0x03);
         check("PC/AT speaker: PIT 2 counter + port 61h → beep log (counter, on)", sp.Log.Any(x => x.kind == 3 && x.val == 0x4A9) && sp.Log.Any(x => x.kind == 2 && x.val == 1), string.Join(" ", sp.Log.Select(x => x.kind + ":" + x.val.ToString("X"))));
 
+        // Game Blaster: 221h 주소 · 220h 데이터 = SAA1099 #1, 223h · 222h = #2 / Tandy: C0h = SN76489, BIOS 모델 바이트 FFh
+        var gb = new PcAtMachine(new DosFileSystem(), PcAtMachine.Card.GameBlaster, 4);
+        gb.Out(0x221, 0x00); gb.Out(0x220, 0xFF); gb.Out(0x223, 0x1C); gb.Out(0x222, 0x01); gb.Out(0x389, 0x20);
+        check("PC/AT Game Blaster: SAA1099 × 2 writes logged (kind 0 · 1), no OPL", gb.Log.Count == 2 && gb.Log[0].kind == 0 && gb.Log[0].reg == 0 && gb.Log[0].val == 0xFF && gb.Log[1].kind == 1 && gb.Log[1].reg == 0x1C,
+            string.Join(" ", gb.Log.Select(x => x.kind + ":" + x.reg.ToString("X") + "=" + x.val.ToString("X"))));
+        var td = new PcAtMachine(new DosFileSystem(), PcAtMachine.Card.Tandy, 4);
+        td.Out(0xC0, 0x90);
+        check("PC/AT Tandy: SN76489 at C0h, Tandy BIOS signature", td.Log.Count == 1 && td.Log[0].val == 0x90 && td.PeekByte(0xF000, 0xFFFE) == 0xFF && td.PeekByte(0xF000, 0xC000) == 0x21, "");
+        var pair = new AdlibComposer.Audio.Chips.Saa1099Pair();
+        pair.Write(1, 0x1C, 1); pair.Write(1, 0x14, 1); pair.Write(1, 0x00, 0xFF); pair.Write(1, 0x08, 0x80); pair.Write(1, 0x10, 4);
+        int pk = 0; for (int i = 0; i < 4410; i++) { pair.Generate(out int l, out _); pk = Math.Max(pk, Math.Abs(l)); }
+        check("Saa1099Pair: second chip (port 1) sounds, 12 channels", pk > 100 && pair.ChannelCount == 12 && pair.ChannelActive(6), "peak " + pk);
+
         Midi(check);
         Real(check);
         RealMidi(check);
@@ -181,7 +194,7 @@ public static class PcAtTests
         try
         {
             ZipFolder.CacheBase = root;
-            foreach (var (zipName, type) in new[] { ("7cogold_at.zip", "adlib"), ("", "soundblaster16") })
+            foreach (var (zipName, type) in new[] { ("7cogold_at.zip", "adlib"), ("", "soundblaster16"), ("sq3_at.zip", "gameblaster"), ("silpheed_at.zip", "tandy"), ("wibarm_at.zip", "tandy") })
             {
                 string hp = null;
                 var candidates = zipName.Length > 0 ? new[] { Path.Combine(pc, zipName) } : Directory.GetFiles(pc, "*.zip").OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToArray();

@@ -399,9 +399,12 @@ public static class HootPc98Tests
                 {
                     var m = (PcAtMachine)HootPc98.BootDirAny(dir, e, out var shells);
                     int boot = m.Log.Count;
-                    m.Play(e.Titles.Count > 0 ? e.Titles[0].Code : 0);
+                    int ti = int.TryParse(Environment.GetEnvironmentVariable("HOOT_TITLE"), out int tv) ? Math.Min(tv, Math.Max(0, e.Titles.Count - 1)) : 0;   // 진단: 몇째 곡
+                    m.Play(e.Titles.Count > 0 ? e.Titles[ti].Code : 0);
                     m.Run((long)(m.CpuHz * seconds));
-                    int keyOns = m.Log.Count(x => x.kind <= 1 && ((x.reg >= 0xB0 && x.reg <= 0xB8 && (x.val & 0x20) != 0) || (x.reg == 0xBD && (x.val & 0x20) != 0 && (x.val & 0x1F) != 0)));
+                    int keyOns = m.Sound == PcAtMachine.Card.GameBlaster ? m.Log.Count(x => x.kind <= 1 && x.reg <= 5 && x.val != 0)   // SAA1099 음량
+                        : m.Sound == PcAtMachine.Card.Tandy ? m.Log.Count(x => x.kind == 0 && (x.val & 0x90) == 0x90 && (x.val & 15) != 15)   // SN76489 감쇠 < 15
+                        : m.Log.Count(x => x.kind <= 1 && ((x.reg >= 0xB0 && x.reg <= 0xB8 && (x.val & 0x20) != 0) || (x.reg == 0xBD && (x.val & 0x20) != 0 && (x.val & 0x1F) != 0)));
                     int beeps = m.Log.Count(x => x.kind == 2 && x.val != 0);
                     bool sound = keyOns > 0 || beeps > 0;
                     if (sound) st.sound++;

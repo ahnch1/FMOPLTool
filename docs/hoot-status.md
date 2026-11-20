@@ -31,6 +31,7 @@
 | 2.0.4 | 8-6 (메가드라이브) | hoot megadrive generic_z80 · iyinc: `Audio/HootMegaDrive.cs` (Z80 사운드 쪽 · 카트리지의 Z80 드라이버를 RAM에, 요청 주소) |
 | 2.0.5 | 8-7 (X68000) | MC68000 `Audio/Cpu/M68000.cs` + hoot x68k generic: `Audio/HootX68k.cs` (OPM · ADPCM · DMA · MFP, E00010h = hoot가 대신 하는 IOCS · DOS) |
 | 2.0.6 | 8-7 (X68000 MIDI) | x68k MIDI 판: YM3802 MIDI 보드 (EAFA00h) → 살아 있는 MIDI 곡 (`HootX68k.LoadMidi`) |
+| 2.1.72 | PC/AT Game Blaster · Tandy | hoot pcatdos gameblaster · tandy (시에라 SCI CMS.DRV · JR.DRV, Silpheed · Zeliard · Wibarm): `PcAtMachine` 카드 둘, `Chips/Saa1099Pair.cs` |
 | 2.1.71 | 남코 갤러그 계열 | hoot namco wsgz80 (Bosconian · Galaga · Dig Dug · Xevious): `Audio/HootNamcoWsgZ80.cs` (Z80 + WSG, WSG 쓰기를 15XX 목소리로 옮겨 D8h) |
 | 2.1.70 | 8-9l 더함 (타이토 tokio) | hoot taito tokio (Tokio 원래 ROM · Bubble Bobble 시제품): `HootTaitoBubble` tokio 배치 (9000h 명령, A000h · A800h NMI, B000h YM2203) |
 | 2.1.69 | 캡콤 Exed Exes | hoot capcom exedexes: `Audio/HootCapcomPsg.cs` (Z80 + AY-3-8910 + SN76489 × 2, MAME exedexes) |
@@ -115,6 +116,7 @@
 | PC-98 DOS FM (opn · opna · 86 · beep) | 300 zip 표본 226 / 301 (약 75%) | `--hoot98survey pc98 300 6` |
 | PC-98 pc98vx · pc98 FM (opn · opna · 86 · beep) | 354항목 중 314 (약 89%) — vx opn 168/198 · opna 18/20 · 86 9/9 · beep 36/40, pc98 opn 77/81 | `--hoot98survey _vx 400 6` (pc98vx · pc98 항목이 든 zip 285개를 따로 모은 폴더) |
 | MIDI 판 pc98vx · pc98 | 97 / 109 | `--hootmidisurvey _vx 400 20` |
+| PC/AT DOS gameblaster · tandy | 8 / 8 · 4 / 4 | `--hootatsurvey 폴더 50 8` (HOOT_TITLE = 몇째 곡) |
 | PC/AT DOS (adlib · sb16 · beep) | 482 / 488 | `--hootatsurvey pc 1000 6` |
 | MIDI 판 PC/AT | 571 / 586 | `--hootmidisurvey pc 1000 20` |
 | MIDI 판 PC-98 | 360 / 641 | `--hootmidisurvey pc98 1709 20` |
@@ -490,5 +492,5 @@
 ### 남은 문제 (단계와 따로)
 - PC-98 FM 무음 (300 zip 표본): vector-not-hooked 25 (98stdium · g3: 0으로 찬 메모리로 뛰어감), writes-no-keyon 24 (FUGA fgplay_h · MAKO · ARTDI_98이 hoot 인터럽트를 끔), unknown-op 9 (386 접두어 66h · 65h), no-chip-writes 8, koroshi 같은 이름 불일치 (xml = file01.MUS, zip = 일본어 원래 이름)
 - PC-98 MIDI 무음 (드라이버별): DOFMDX98 50 · FUGA 50 · ARTDI 32 · FMX 16 · MINT/NLP 16 · MFD 12 · valky 11, RS-MIDI (내장 8251) 없음
-- PC/AT: 무음 6 (rakuen · kurodan · eshoutei · darksun · globaleffect · nestory2), SB16 PCM (DSP DMA) 없음, Game Blaster 8 · Tandy 4 (칩은 있음: SAA1099 · SN76489), CPU 기준 클럭 (1.193MHz × clockmul로 추정) 확인
+- PC/AT: 무음 6 (rakuen · kurodan · eshoutei · darksun · globaleffect · nestory2), SB16 PCM (DSP DMA) 없음, Game Blaster 8 · Tandy 4는 v2.1.72 (Tandy는 BIOS 모델 바이트 FFh · F000:C000 = 21h를 보는 드라이버가 있음), CPU 기준 클럭 (1.193MHz × clockmul로 추정) 확인
 - 공통: 이동(seek) = 기계를 처음부터 그만큼 돌림 (오디오 스레드에서 기다림) → 상태 저장 · 되돌리기, 곡 길이 3분 고정 → 끝 · 되풀이 찾기, 86 PCM · OPNA ADPCM, fm_mix · ssg_mix 옵션, 트리 장비 이름 정리 (PC-98 / PC-9801 …), zip은 있지만 .kss가 없는 KSS 71항목을 트리에서 미리 빨강으로

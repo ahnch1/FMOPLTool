@@ -22,7 +22,8 @@ public sealed class PcAtMachine : DosMachine, IHootMachine
     bool IHootMachine.KeepRunning { get { return AutoIdle; } set { AutoIdle = value; } }
     int IHootMachine.HootCount { get { return HootDelivered; } }
 
-    public enum Card { AdLib, SoundBlaster16, Beep }
+    /// <summary>GameBlaster = SAA1099 × 2 (220h 데이터 · 221h 주소, 222h · 223h 둘째 칩 → 쓰기 종류 0 · 1), Tandy = SN76489 (C0h → 종류 0).</summary>
+    public enum Card { AdLib, SoundBlaster16, Beep, GameBlaster, Tandy }
 
     public const double PitClock = 1193182;
     public readonly Card Sound;
@@ -35,7 +36,7 @@ public sealed class PcAtMachine : DosMachine, IHootMachine
     /// <summary>MPU-401 인터럽트: IRQ2 = AT에서 IRQ9 (벡터 71h, 카드 기본).</summary>
     public int MpuIrq = 9;
 
-    /// <summary>칩 쓰기: 시간 (CPU 클럭), 종류 (0 OPL 포트 0, 1 OPL3 포트 1, 2 스피커 켜기, 3 스피커 카운터, 4 MIDI 바이트), 레지스터, 값.</summary>
+    /// <summary>칩 쓰기: 시간 (CPU 클럭), 종류 (0 OPL 포트 0 · SAA1099 #1 · SN76489, 1 OPL3 포트 1 · SAA1099 #2, 2 스피커 켜기, 3 스피커 카운터, 4 MIDI 바이트), 레지스터, 값.</summary>
     public readonly List<(long t, int kind, int reg, int val)> Log = new List<(long, int, int, int)>();
     public readonly HashSet<int> UnknownPorts = new HashSet<int>();
     public long Interrupts { get; private set; }
@@ -47,6 +48,7 @@ public sealed class PcAtMachine : DosMachine, IHootMachine
     {
         Sound = sound;
         CpuHz = PitClock * Math.Max(1, clockMul);
+        if (sound == Card.Tandy) { Poke(BiosSeg, 0xFFFE, 0xFF); Poke(BiosSeg, 0xC000, 0x21); }   // Tandy 1000 BIOS: 모델 바이트 FFh + F000:C000 = 21h (드라이버의 Tandy 확인)
         Mpu.MidiOut = b => Log.Add((Cpu.Cycles, 4, 0, b));
         // BIOS 데이터 (0040:xx): 장비 · 메모리 크기 · 틱
         Poke16(0x40, 0x10, 0x0021); Poke16(0x40, 0x13, 640);
@@ -195,6 +197,7 @@ public sealed class PcAtMachine : DosMachine, IHootMachine
 
     // ------------------------------------------------------------ SB16 DSP
 
+    private int saaAddr0, saaAddr1;
     private readonly Queue<int> dspOut = new Queue<int>();
     private int dspResetStep, dspArgs, mixerAddr;
     private readonly byte[] mixer = new byte[256];
@@ -256,7 +259,7 @@ public sealed class PcAtMachine : DosMachine, IHootMachine
             case 0x7E2: return (byte)hootCode; case 0x7E3: return (byte)(hootCode >> 8);
             case 0x7E4: return (byte)(hootCode >> 16); case 0x7E5: return (byte)(hootCode >> 24);
         }
-        if (Sound != Card.Beep)
+        if (Sound == Card.AdLib || Sound == Card.SoundBlaster16)
         {
             switch (port)
             {
@@ -309,7 +312,19 @@ public sealed class PcAtMachine : DosMachine, IHootMachine
                 else if (v == 0x81) hootEnabled = true;
                 return;
         }
-        if (Sound != Card.Beep)
+        if (Sound == Card.GameBlaster && port >= 0x220 && port <= 0x22F)
+        {
+            switch (port)
+            {
+                case 0x220: Log.Add((Cpu.Cycles, 0, saaAddr0, v)); return;
+                case 0x221: saaAddr0 = v & 0x1F; return;
+                case 0x222: Log.Add((Cpu.Cycles, 1, saaAddr1, v)); return;
+                case 0x223: saaAddr1 = v & 0x1F; return;
+            }
+            return;   // 검출 래치 (226h · 227h) 등
+        }
+        if (Sound == Card.Tandy && port >= 0xC0 && port <= 0xC7) { Log.Add((Cpu.Cycles, 0, 0, v)); return; }
+        if (Sound == Card.AdLib || Sound == Card.SoundBlaster16)
         {
             switch (port)
             {

@@ -135,7 +135,12 @@ public class DosMachine : IX86Bus
         return KoreanText.ShiftJis.GetString(b.ToArray());
     }
 
-    private void WriteBytes(int seg, int off, byte[] d, int start, int n) { for (int i = 0; i < n; i++) Poke(seg, off + i, d[start + i]); }
+    /// <summary>seg:off부터 n바이트 (선형 주소로 이어 씀: 64KB를 넘는 EXE 그림도 오프셋이 감기지 않게).</summary>
+    private void WriteBytes(int seg, int off, byte[] d, int start, int n)
+    {
+        int at = (seg << 4) + (off & 0xFFFF);
+        for (int i = 0; i < n; i++) Mem[(at + i) & 0xFFFFF] = d[start + i];
+    }
 
     // ------------------------------------------------------------ 메모리 (MCB)
 
@@ -423,6 +428,9 @@ public class DosMachine : IX86Bus
     }
 
     /// <summary>config.sys의 device= 줄: 드라이버를 읽어 초기화 (전략 → 인터럽트, 명령 0) 하고 끝 주소까지 남긴다. 성공하면 드라이버 세그먼트, 실패하면 −1.</summary>
+    /// <summary>진단: 마지막 <see cref="LoadDevice"/>의 호출 결과 · 끝 주소 · 상태.</summary>
+    public string LastDeviceResult = "";
+
     public int LoadDevice(string commandLine)
     {
         string line = (commandLine ?? "").Trim();
@@ -446,19 +454,23 @@ public class DosMachine : IX86Bus
         int rq = 0x100, cmd = 0x180;
         for (int i = 0; i < 0x30; i++) Poke(DosSeg, rq + i, 0);
         Poke(DosSeg, rq, 0x17);
+        // MS-DOS SYSINIT처럼 파일 이름 뒤 첫 빈칸을 NUL로 (이름은 ASCIIZ, 인자는 그 뒤): NUL까지 건너뛰어 인자를 찾는 드라이버가 있다 (MMD2.SYS)
         var cl = KoreanText.ShiftJis.GetBytes(line + "\r\n");
+        if (sp > 0 && sp < cl.Length) cl[sp] = 0;
         WriteBytes(DosSeg, cmd, cl, 0, Math.Min(cl.Length, 0x7F));
         Poke16(DosSeg, rq + 0x12, cmd); Poke16(DosSeg, rq + 0x14, DosSeg);
         Poke(DosSeg, rq + 0x16, 2);
         int strategy = Peek16(seg, 6), intr = Peek16(seg, 8);
-        int es = Cpu.ES, bx = Cpu.BX;
-        Cpu.ES = DosSeg; Cpu.BX = rq;
+        int es = Cpu.ES, bx = Cpu.BX, ds = Cpu.DS;
+        // DS = 드라이버 세그먼트 (MS-DOS SYSINIT처럼): CS: 없이 [12h]에 요청 주소를 적는 드라이버가 있다 (NMUSE.DRV)
+        Cpu.ES = DosSeg; Cpu.BX = rq; Cpu.DS = seg;
         bool ok = CallFar(seg, strategy);
-        Cpu.ES = DosSeg; Cpu.BX = rq;
+        Cpu.ES = DosSeg; Cpu.BX = rq; Cpu.DS = seg;
         ok &= CallFar(seg, intr);
-        Cpu.ES = es; Cpu.BX = bx;
+        Cpu.ES = es; Cpu.BX = bx; Cpu.DS = ds;
         int endOff = Peek16(DosSeg, rq + 0x0E), endSeg = Peek16(DosSeg, rq + 0x10);
         int keep = ((endSeg * 16 + endOff) - seg * 16 + 15) / 16;
+        LastDeviceResult = "call " + ok + ", end " + endSeg.ToString("X4") + ":" + endOff.ToString("X4") + ", status " + Peek16(DosSeg, rq + 3).ToString("X4");
         if (!ok || keep <= 0 || (Peek16(DosSeg, rq + 3) & 0x8000) != 0) { Free(blk); return -1; }
         Resize(blk, Math.Min(keep, largest), out _);
         return seg;
@@ -898,8 +910,9 @@ public class DosMachine : IX86Bus
             int load = Peek16(pbSeg, pb), reloc = Peek16(pbSeg, pb + 2);
             if (img.Length >= 2 && img[0] == 'M' && img[1] == 'Z')
             {
-                int hdr = U16(img, 8) * 16;
-                WriteBytes(load, 0, img, hdr, img.Length - hdr);
+                int hdr = U16(img, 8) * 16, cp = U16(img, 4), cblp = U16(img, 2);
+                int len = Math.Max(0, Math.Min(cp * 512 - (cblp != 0 ? 512 - cblp : 0) - hdr, img.Length - hdr));   // 머리말의 그림 크기 (뒤에 붙은 자료는 빼고)
+                WriteBytes(load, 0, img, hdr, len);
                 int nrel = U16(img, 6), relAt = U16(img, 0x18);
                 for (int i = 0; i < nrel; i++) { int o = U16(img, relAt + i * 4), s = U16(img, relAt + i * 4 + 2); Poke16(load + s, o, Peek16(load + s, o) + reloc); }
             }

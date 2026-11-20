@@ -31,6 +31,15 @@ public sealed partial class X86
     public int UnknownOps;
     /// <summary>마지막 모르는 명령 (진단).</summary>
     public int LastUnknown = -1, LastUnknownAt = -1;
+    /// <summary>진단: 마지막 흐름 바뀜 64개 (점프 · 호출 · 인터럽트: 앞 명령 CS:IP → 새 CS:IP), 고리 — <see cref="RecentJumps"/>로 오래된 것부터.</summary>
+    public readonly long[] History = new long[64];
+    private int historyPos, lastCs = -1, lastIp;
+    public (int fromCs, int fromIp, int toCs, int toIp)[] RecentJumps()
+    {
+        var r = new (int, int, int, int)[64];
+        for (int i = 0; i < 64; i++) { long h = History[(historyPos + i) & 63]; int f = (int)(h >> 32), t = (int)h; r[i] = ((f >> 16) & 0xFFFF, f & 0xFFFF, (t >> 16) & 0xFFFF, t & 0xFFFF); }
+        return r;
+    }
     /// <summary>INT n: true면 바깥이 처리함 (레지스터를 직접 바꿔도 된다).</summary>
     public Func<int, bool> HostInterrupt;
     /// <summary>호스트 함정: 명령 F1 xx xx (286에 없는 명령) = 바깥 처리기 호출 (번호 16비트). DOS · BIOS 흉내는 인터럽트 벡터가 이 함정을 가리키게 둔다
@@ -323,6 +332,8 @@ public sealed partial class X86
         interruptShadow = false;
         segOverride = -1; rep = 0; op32 = addr32 = false;
         opStartIp = IP; opStartCs = CS;
+        if (CS != lastCs || IP <= lastIp || IP > lastIp + 15) { History[historyPos & 63] = ((long)((lastCs << 16) | lastIp) << 32) | (uint)((CS << 16) | IP); historyPos++; }
+        lastCs = CS; lastIp = IP;
         int op = Fetch8();
         for (int n = 0; n < 14; n++)   // 접두어 (세그먼트 · REP · LOCK, 386: FS · GS · 크기)
         {

@@ -48,7 +48,10 @@ public static class HootPc98
     }
 
     /// <summary>386 리얼 모드 CPU로 돌릴 항목: PC-9821용 (pc9821dos — 386을 확인하고 32비트 명령을 쓰는 드라이버).</summary>
-    public static bool Is386(HootArchive.Entry e) { return e.Driver.Equals("pc9821dos", StringComparison.OrdinalIgnoreCase); }
+    public static bool Is386(HootArchive.Entry e) { return Force386 || e.Driver.Equals("pc9821dos", StringComparison.OrdinalIgnoreCase); }
+
+    /// <summary>진단: 모든 DOS 항목을 386으로 (SelfTest 환경 변수 HOOT_386).</summary>
+    public static bool Force386;
 
     public static bool IsPcAt(HootArchive.Entry e) { return e.Driver.Equals("pcatdos", StringComparison.OrdinalIgnoreCase); }
 
@@ -258,7 +261,10 @@ public static class HootPc98
                     m.BindText((int)Math.Max(0, off), sjis.GetBytes(text));
                     break;
                 case "device":
-                    m.LoadDevice(text);
+                    {
+                        int dseg = m.LoadDevice(text);
+                        if (TraceBoot) Console.WriteLine("device " + text + " → " + (dseg < 0 ? "failed (" + m.LastDeviceResult + ")" : dseg.ToString("X4") + ", kept " + m.PeekWord(dseg - 1, 3).ToString("X4") + " paragraphs"));
+                    }
                     if (m.HostReturned) m.Idle();
                     break;
                 case "code": case "binary":

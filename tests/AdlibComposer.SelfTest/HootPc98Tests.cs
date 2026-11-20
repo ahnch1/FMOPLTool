@@ -240,6 +240,7 @@ public static class HootPc98Tests
     /// </summary>
     public static int Survey(string folder, int count, double seconds)
     {
+        HootPc98.Force386 = Environment.GetEnvironmentVariable("HOOT_386") != null;
         var zips = Directory.GetFiles(folder, "*.zip").OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToList();
         var rnd = new Random(98);
         zips = zips.OrderBy(_ => rnd.Next()).Take(count).ToList();
@@ -336,6 +337,7 @@ public static class HootPc98Tests
                 steps.Add(mm.Cpu.IP.ToString("X4") + ":" + string.Join("", Enumerable.Range(0, 6).Select(i => mm.PeekByte(seg, mm.Cpu.IP + i).ToString("X2"))) + " ax" + mm.Cpu.AX.ToString("X4"));
             };
         }
+        HootPc98.Force386 = Environment.GetEnvironmentVariable("HOOT_386") != null;
         var m = HootPc98.BootDir(dir, e, out var shells);
         HootPc98.TraceBoot = false;
         Pc98Machine.DebugStep = null;
@@ -371,6 +373,13 @@ public static class HootPc98Tests
             int cs = (int)(kv.Key >> 16), ip = (int)(kv.Key & 0xFFFF);
             Console.WriteLine("hot " + cs.ToString("X4") + ":" + ip.ToString("X4") + " x" + kv.Value + "  " +
                 string.Join(" ", Enumerable.Range(-24, 48).Select(d => m.PeekByte(cs, (ip + d) & 0xFFFF).ToString("X2") + (d == -1 ? " |" : ""))));
+        }
+        if (m.Cpu.UnknownOps > 0)
+        {
+            // 모르는 명령에 닿기 전 64명령: 바뀐 흐름 (점프 · 호출)만
+            Console.WriteLine("unknown op " + m.Cpu.LastUnknown.ToString("X") + " at " + m.Cpu.CS.ToString("X4") + ":" + m.Cpu.IP.ToString("X4") + ", last jumps (from: bytes → to):");
+            foreach (var (fc, fi, tc, ti) in m.Cpu.RecentJumps())
+                Console.WriteLine("  " + fc.ToString("X4") + ":" + fi.ToString("X4") + " " + string.Join(" ", Enumerable.Range(0, 6).Select(d => m.PeekByte(fc, (fi + d) & 0xFFFF).ToString("X2"))) + "  → " + tc.ToString("X4") + ":" + ti.ToString("X4"));
         }
         Console.WriteLine("missing files: " + string.Join(", ", m.MissingFiles) + " | console: " + m.ConsoleText.Replace("\r", " ").Replace("\n", " | "));
         Console.WriteLine("MPU commands: " + string.Join(" ", m.Mpu.Commands.Select(c => c.ToString("X2"))) + " | uart " + m.Mpu.Uart + ", bytes " + m.Mpu.BytesOut);

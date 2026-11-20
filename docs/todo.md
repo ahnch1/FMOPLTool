@@ -147,7 +147,7 @@
 
 ## 4. 해야 할 일 — 재생은 되지만 무음 · 품질 문제
 
-- [ ] PC-98 DOS FM 무음 (300 zip 표본 75개): vector-not-hooked 25 (98stdium · g3), writes-no-keyon 24 (FUGA fgplay_h · MAKO · ARTDI_98 hoot 끔), unknown-op 9 (386 접두어 66h · 65h), no-chip-writes 8, 이름 불일치 (koroshi: xml file01.MUS ↔ zip 원래 이름)
+- [ ] PC-98 DOS FM 무음 (300 zip 표본, v2.1.75 뒤 32개 — 처음 75개): v2.1.75 DOS 로더 고침 (64KB 넘는 EXE 그림이 오프셋 감김으로 깨짐 · 4B03h 그림 크기 · device= 전략 루틴 DS = 드라이버 · 파일 이름 뒤 NUL)으로 vector-not-hooked 25 → 2, unknown-op 9 → 0. 남은 것: writes-no-keyon 21 (FUGA fgplay_h · MAKO · ARTDI_98 hoot 끔), no-chip-writes 7, no-memory 1, 이름 불일치 (koroshi: xml file01.MUS ↔ zip 원래 이름)
 - [ ] PC-98 MIDI 무음: DOFMDX98 50 · FUGA 50 · ARTDI 32 · FMX 16 · MINT/NLP 16 · MFD 12 · valky 11, RS-MIDI (내장 8251)
 - [ ] pc98vx 무음 40: writes-no-keyon 19 · no-chip-writes 13 · unknown-op 2 · vector 2 · hoot 끔 2
 - [ ] PC/AT 무음 6 (rakuen · kurodan · eshoutei · darksun · globaleffect · nestory2), SB16 PCM (DSP DMA)

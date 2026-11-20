@@ -219,6 +219,34 @@ public static class DosTests
         bool kept = seg > 0 && dos.PeekWord(seg - 1, 3) == 4 && dos.PeekWord(seg - 1, 1) == 8 && dos.PeekByte(seg, 0x0A) == 'T';
         check("DOS device= driver: strategy + interrupt (init), keeps 4 paragraphs up to its break address, programs load above", kept && psp > seg + 4,
             "seg " + seg.ToString("X4") + " MCB size " + (seg > 0 ? dos.PeekWord(seg - 1, 3).ToString("X") : "-") + " next PSP " + psp.ToString("X4"));
+
+        // MS-DOS처럼: 전략 루틴이 DS = 드라이버 세그먼트로 불림 (CS: 없이 [3Ch]에 적음), 명령 줄의 파일 이름 뒤는 NUL (아니면 끝 주소를 안 줌)
+        sys = new byte[0x40];
+        b = B(0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x80, 0x12, 0x00, 0x1B, 0x00, 'T', 'E', 'S', 'T', 'D', 'E', 'V', '2',
+            0x89, 0x1E, 0x3C, 0x00, 0x8C, 0x06, 0x3E, 0x00, 0xCB,                            // 12: 전략 (DS 기준)
+            0x2E, 0xC4, 0x1E, 0x3C, 0x00,                                                    // 1B: LES BX,CS:[3C]
+            0x26, 0xC5, 0x77, 0x12,                                                          //     LDS SI,ES:[BX+12] (명령 줄)
+            0x80, 0x7C, 0x09, 0x00, 0x75, 0x06,                                              //     CMP [SI+9],0 / JNE (끝 주소 없음)
+            0x26, 0xC7, 0x47, 0x0E, 0x40, 0x00,                                              //     끝 오프셋 40h
+            0x26, 0x8C, 0x4F, 0x10,                                                          //     끝 세그먼트 = CS
+            0x26, 0xC7, 0x47, 0x03, 0x00, 0x01,                                              //     상태: 끝남
+            0xCB);
+        Array.Copy(b, sys, b.Length);
+        fs.Add("TEST2.SYS", sys);
+        dos = new DosMachine(fs);
+        seg = dos.LoadDevice("TEST2.SYS 8192");
+        check("DOS device= driver: strategy called with DS = driver, file name NUL-terminated (MS-DOS SYSINIT)", seg > 0 && dos.PeekWord(seg - 1, 3) == 4, dos.LastDeviceResult);
+
+        // 64KB를 넘는 EXE 그림: 오프셋이 감기지 않고 이어서 올라감 (그림 10010h의 'Z'를 읽어 찍음)
+        var big = new byte[0x10040];
+        Array.Copy(B('M', 'Z', 0x40, 0x00, 0x81, 0x00, 0x00, 0x00, 0x02, 0x00, 0x10, 0x00, 0xFF, 0xFF, 0x00, 0x11, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x1C, 0x00, 0x00, 0x00), big, 28);
+        var prog = B(0x8C, 0xC8, 0x05, 0x01, 0x10, 0x8E, 0xD8, 0x8A, 0x16, 0x00, 0x00, 0xB4, 0x02, 0xCD, 0x21, 0xB8, 0x00, 0x4C, 0xCD, 0x21);
+        Array.Copy(prog, 0, big, 0x20, prog.Length);
+        big[0x20 + 0x10010] = (byte)'Z';
+        fs.Add("BIG.EXE", big);
+        dos = new DosMachine(fs);
+        var rb = dos.Shell("BIG");
+        check("DOS EXE image over 64 KB loads linearly (no offset wrap)", rb == DosMachine.ShellResult.Exited && dos.ConsoleText == "Z", rb + " '" + dos.ConsoleText + "'");
     }
 
     // ------------------------------------------------------------ 실제: PMD 상주 + hoot 드라이버

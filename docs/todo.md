@@ -106,7 +106,7 @@
 - [x] 남코 system86 5 · 71곡 — v2.1.36 새 CPU 6801 계열 (`Cpu6801`) + `HootNamcoSys86`, 71곡 모두 (63701X 음성 없음)
 - [ ] **6809 (CPU는 v2.1.32에 있음)**: 남코 System 2 (C140) 26, 후지쯔 FM77AV 22 · FM-7 7 — 6809 하나로 약 100항목 (+ C140 칩)
 - [x] 남코 wsg63701 6 · 157곡 — v2.1.37 (`HootNamcoSys86` 슬롯 요청), 모두
-- [ ] **M6803 (CPU는 v2.1.36에 있음)**: 아이렘 M62 15 (AY × 2 포트 연결 + VGM 듀얼 AY)
+- [x] 아이렘 M62 15 · 145곡 — v2.1.38 `HootIremM62` (M6803 + AY × 2 + MSM5205 → OKIM6258), VGM 듀얼 AY, 137곡
 - [ ] 남코 System 11 · 12 · 22 · NA-1 · NB-1 (C352 · M37702 / H8) 약 80항목 — 큼
 - [ ] 세가 Model 2A (SCSP + 68000) 24 · Model 3 9 — SCSP 큼
 
@@ -149,7 +149,7 @@
 - [ ] VRC7 내장 악기 표를 emu2413 원본과 대조
 - [ ] 형식: .ay (ZX · CPC) · .ym (아타리 ST, LHA 풀기 필요) · D00 · RAD · A2M (AdLib 트래커)
 - [ ] 형식: SAP (6502 + POKEY) · SID (6502 + SID)
-- [ ] VGM 듀얼 칩 나머지: YM2203 · AY-3-8910 · YM2151 둘째 칩 (3.1의 robokid · gaiden · taitosj에 필요)
+- [ ] VGM 듀얼 칩 나머지: YM2151 둘째 칩 (YM2203 v2.1.25 · AY-3-8910 v2.1.38은 됨) (3.1의 robokid · gaiden · taitosj에 필요)
 - [ ] 칩 곡 VGM 내보내기 (KSS · NSF · HES · S98 → .vgm, 0xD7 확장은 경고)
 - [ ] LHA / LZH · 7z 압축 폴더
 - [ ] HES 효과음 줄 숨기기, Jukebox 곡 정보에 칩별 채널 · 확장 음원 표시

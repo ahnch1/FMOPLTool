@@ -140,6 +140,12 @@ public static class HootSongs
             v = HootGaiden.Render(e, dir, code);
             what = "Ninja Gaiden 사운드 보드 · 명령 0x" + code.ToString("X2");
         }
+        else if (HootDeco6809.Handles(driver, e.Type))
+        {
+            // hoot 데이터 이스트 brkthru · exprraid: 사운드 보드 (6809 + YM2203 + YM3526)에서 사운드 ROM을 돌려 미리 렌더
+            v = HootDeco6809.Render(e, dir, code);
+            what = HootDeco6809.LayoutOf(driver, e.Type).Name + " 사운드 보드 · 명령 0x" + code.ToString("X2");
+        }
         else if (HootAtariSys1.Handles(driver, e.Type))
         {
             // hoot 아타리 System 1: 사운드 보드 (6502 + YM2151 + POKEY)에서 사운드 ROM을 돌려 미리 렌더 (TMS5220 음성 없음)

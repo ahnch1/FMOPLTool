@@ -67,7 +67,7 @@
 - [x] 토아플랜 generic 9 · 125곡 — v2.1.18: Z80 + YM3812 (포트는 ROM에서 찾음), 68000 맞춤 8001h ← AAh, 명령 8000h (9 / 9, 125곡 모두 소리)
 - [x] 데이터 이스트 6502 (cobracom 8 · drgninja 6 · karnov 3 · triothep 2 · lastmisn 2 · makyosen 1) — v2.1.19: 래치 자리로 배치 셋 (dec0 · dec8 · karnov), 6502 10진 모드, decrypt = DECO222 (20 / 20)
 - [x] 데이터 이스트 midres 1 · 12곡 — v2.1.21: `HootDeco`에 midres 배치 (YM3812 108000h 타이머 = IRQ2 · YM2203 118000h · OKI 130000h · 명령 138000h), 12곡 모두 소리
-- [ ] 데이터 이스트 brkthru 2 (Break Thru · Darwin 4078) · exprraid 1 — 사운드 CPU가 6809 (3.3의 6809와 같이)
+- [x] 데이터 이스트 brkthru 2 (Break Thru · Darwin 4078) · exprraid 1 · 19곡 — v2.1.32: 새 CPU 6809 (`Cpu6809`) + `HootDeco6809` (6809 + YM2203 + YM3526), 19곡 모두
 - [x] SNK68 (snk 3812) 4 · 146곡 — v2.1.22: Z80 + YM3812 + uPD7759 (마스터 모드 → 보드가 ROM 바이트를 넣는 슬레이브 스트림), 부팅 뒤 명령 0Dh 두 번 = 음악 · 효과음 켬 (146곡 모두 소리, uPD7759 59곡)
 - [ ] SNK 3526_8950 6 (+ 3526x2 2 · chopper (Y8950 × 2) · fitegolf 2 · aso) — Z80 + YM3526 + Y8950: **VGM 재생기에 OPL 둘** (지금은 하나만 — 3526 + 8950이면 8950만 남)과 **Y8950 ADPCM** (델타-T, ROM 블록 88h)이 먼저 필요, 명령 = snk.cpp 사운드 상태 레지스터 (F800h, IRQ 원인 비트)
 - [x] 니치부츠 terracre 6 · terraf 4 · 164곡 — v2.1.23: Z80 + YM3526/YM3812 + DAC 둘 (VGM YM2612 DAC로), 7812.5Hz 주기 IRQ, 명령 = (코드 << 1) | 1 폴링 (10 / 10, 곡 161 / 161 + 구분 줄 1)
@@ -100,7 +100,7 @@
 - [ ] 코나미 hornet 8 · gticlub 4 — RF5C400 (CPU 68000)
 
 ### 3.3 새 CPU가 필요
-- [ ] **6809**: 남코 System 2 (C140) 26 · System 1 22 · system86 5 · wsg6809 11, 후지쯔 FM77AV 22 · FM-7 7 — 6809 하나로 약 100항목 (+ C140 칩)
+- [ ] **6809 (CPU는 v2.1.32에 있음)**: 남코 System 2 (C140) 26 · System 1 22 · system86 5 · wsg6809 11, 후지쯔 FM77AV 22 · FM-7 7 — 6809 하나로 약 100항목 (+ C140 칩)
 - [ ] **M6803 / HD63701**: 아이렘 M62 15 · 남코 wsg63701 6
 - [ ] 남코 System 11 · 12 · 22 · NA-1 · NB-1 (C352 · M37702 / H8) 약 80항목 — 큼
 - [ ] 세가 Model 2A (SCSP + 68000) 24 · Model 3 9 — SCSP 큼

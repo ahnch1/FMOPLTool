@@ -31,6 +31,7 @@
 | 2.0.4 | 8-6 (메가드라이브) | hoot megadrive generic_z80 · iyinc: `Audio/HootMegaDrive.cs` (Z80 사운드 쪽 · 카트리지의 Z80 드라이버를 RAM에, 요청 주소) |
 | 2.0.5 | 8-7 (X68000) | MC68000 `Audio/Cpu/M68000.cs` + hoot x68k generic: `Audio/HootX68k.cs` (OPM · ADPCM · DMA · MFP, E00010h = hoot가 대신 하는 IOCS · DOS) |
 | 2.0.6 | 8-7 (X68000 MIDI) | x68k MIDI 판: YM3802 MIDI 보드 (EAFA00h) → 살아 있는 MIDI 곡 (`HootX68k.LoadMidi`) |
+| 2.1.32 | 8-8u (6809 CPU · 데이터 이스트 6809) | 새 CPU 6809: `Audio/Cpu/Cpu6809.cs`, hoot dataeast brkthru · exprraid (Break Thru · Darwin 4078 · Express Raider): `Audio/HootDeco6809.cs` (6809 + YM2203 + YM3526) |
 | 2.1.31 | 8-8t 더함 (POKEY) | 새 칩 POKEY: `Audio/Chips/Pokey.cs`, VGM 머리말 B0h · 명령 BBh (읽기 · 재생 · 쓰기), 아타리 System 1 효과음 |
 | 2.1.30 | 8-8t (아타리 System 1) | hoot atari system1 (Marble Madness · Peter Pack-Rat · Indiana Jones · Road Runner): `Audio/HootAtariSys1.cs` (6502 + YM2151, POKEY · TMS5220 없음) |
 | 2.1.29 | 8-8s (캡콤 YM2203 × 2) | hoot capcom opn2 · rushcrsh · tigerroad (Ghosts'n Goblins · Gun.Smoke · Section Z · Legendary Wings · Trojan · 1943 · 1943 Kai · Avengers · Speed Rumbler · Tiger Road · F-1 Dream): `Audio/HootCapcomOpn.cs` (Z80 + YM2203 × 2) |
@@ -90,6 +91,7 @@
 | SNK68 (snk 3812) | 4 / 4, 146곡 모두 (키온 또는 uPD7759) | `--test hootsnk` (HOOT_SONGS=1, HOOT_SNKINIT=16진,… 부팅 명령 바꾸기, HOOT_SNKSCAN=곡 = 부팅 명령 00h~FFh 훑기, HOOT_PC · HOOT_PCQ=주소,…) |
 | 토아플랜 1 · Twin Cobra (generic) | 9 / 9, 125곡 모두 (키온) | `--test hoottoaplan` (HOOT_SONGS=1 = 곡마다, HOOT_PROBE=1 = I/O 포트 · 68000 쪽 RAM 후보) |
 | 타이토 YM2151 보드 (fullt) | 9 / 9, 147곡 모두 (FM 키온 또는 MSM 바이트) | `--test hoottaitoopm` (HOOT_SONGS=1 = 곡마다, HOOT_REGS · HOOT_PC · HOOT_PCQ · HOOT_RAM · HOOT_MSMLOG) |
+| 데이터 이스트 6809 (brkthru · exprraid) | 3 / 3, 19곡 모두 (YM3526 키온) | `--test hootdeco69` (6809 합성 시험 둘 포함, HOOT_SONGS=1) |
 | 아타리 System 1 (system1) | 4 / 4 (Road Blasters는 곡 목록 없음), 179 / 275곡 — 무음 96 = TMS5220 음성 (Indy 92 · Road Runner 3 · 음성칩 시험 1) | `--test hootatari1` (HOOT_SONGS=1, HOOT_DEBUG=1, HOOT_PCS=1 = PC 분포 · RAM 0200h~) |
 | 캡콤 YM2203 × 2 (opn2 · rushcrsh · tigerroad) | 12 / 12, 281 / 282곡 (남은 하나 = Gun.Smoke 정지 명령) | `--test hootcapopn` (HOOT_SONGS=1, HOOT_DEBUG=1 = 많이 쓴 레지스터) |
 | 테크모 YM3812 + MSM5205 (rygar · gemini) | 4 / 4, 122곡 모두 (MSM5205 23곡) | `--test hoottecmo` (HOOT_SONGS=1) |
@@ -320,7 +322,12 @@
   - YM2151 같은 값 다시 쓰기는 VGM에 안 넣음 (08h · 01h는 늘) — 8초에 3만 → 수백
   - v2.1.31 POKEY (`Chips/Pokey.cs`): 1.79MHz 사이클마다 돌림 (분주기 4, poly 4 · 5 · 9 · 17 LFSR, AUDCTL 64k / 15k · 1.79MHz · 16비트 연결 · 고역 필터, SKCTL 0 = 멈춤), 출력 = 샘플 동안 평균. 다시 채움 = AUDF + 1 / + 4 (1.79MHz) / 16비트 + 7. 소리 레지스터 0~9 · Fh만 VGM에 (같은 값 다시 쓰기 버림, STIMER는 늘), RANDOM (187Ah) 읽기는 LFSR — 효과음 · 칩 시험 49곡이 소리를 냄
   - 남은 것: TMS5220 (음성 96곡, VIA 6522 뒤) — VGM에 TMS5220 명령이 없어 새 칩 + 이 프로그램 안 명령이 필요
-- 다음 (8-8u): Z80 + YM2151 + OKIM6295 작은 보드 (tecmo16 · raizing mahou · bgaregga · banpresto dbz · dooyong …) — MAME 배치를 하나씩 확인해 `HootOpmBoard.Layout`에, atari system1 (6502), 그 뒤 새 칩
+- **8-8u. 6809 CPU + 데이터 이스트 6809 (brkthru · exprraid) — ✅ v2.1.32 (3 / 3)** — `Audio/Cpu/Cpu6809.cs`, `Audio/HootDeco6809.cs`
+  - 6809: 페이지 1 · 2 (10h) · 3 (11h) 전부 (6309 확장 없음), 색인 포스트바이트 전부 (5비트 · 8 · 16 · A/B/D,R · 자동 증감 · PC 기준 · [간접]), NMI · FIRQ · IRQ · SWI1~3 · CWAI · SYNC, 사이클 = 모토로라 표 근사. 합성 시험: 합 루프 · MUL · DAA · ,X+ 베끼기 · JSR · IRQ/RTI
+  - 배치 (MAME brkthru · exprraid sound_map, ROM 스캔으로 확인): 6809 1.5MHz, RAM 0000h~1FFFh, ROM 8000h~, 래치 = NMI, YM3526 타이머 = IRQ. brkthru (Break Thru · Darwin 4078) = YM3526 2000h (3MHz) · 래치 4000h · YM2203 6000h, exprraid = YM2203 2000h · YM3526 4000h (3.58MHz) · 래치 6000h
+  - 음악은 YM3526만 (ROM에 YM2203 쓰기가 두 곳뿐)
+- 다음: 남코 System 1 (6809 + YM2151 + CUS30, 22항목 · 818곡) — 공유 RAM 7000h 요청 칸 · 뱅크 C000h를 디스어셈블로 확인, 그 뒤 wsg6809 (매피 계열) · system86 (HD63701)
+- 그 다음 (8-8v): Z80 + YM2151 + OKIM6295 작은 보드 (tecmo16 · raizing mahou · bgaregga · banpresto dbz · dooyong …) — MAME 배치를 하나씩 확인해 `HootOpmBoard.Layout`에, atari system1 (6502), 그 뒤 새 칩
   - 남은 것 (8-8a): "소리 남" 기준이 처음 6초에 키온 하나라 몇 항목은 ADPCM 하나뿐 (driftout · liquidk · megablst 등 첫 곡이 짧은 효과음일 수 있음) — 귀로 확인, bshark (code0 · code1 둘), taito z 계열 다른 보드
 
 ### 남은 문제 (단계와 따로)

@@ -15,7 +15,7 @@ public interface ICpu6801Bus
 
 /// <summary>
 /// 모토로라 6801 / 6803 · 히타치 HD6301 / HD63701 (6800 + 6801 확장 + 6301 확장): 남코 System 86 · 아이렘 M62 사운드 CPU.
-/// <para>6801 확장: LSRD · ASLD · PULX · PSHX · ABX · MUL · LDD · STD · ADDD · SUBD · BRN, CPX는 모든 깃발. 6301 확장: XGDX · SLP, AIM · OIM · EIM · TIM (바로 값 + 직접 / 색인).</para>
+/// <para>6801 확장: LSRD · ASLD · PULX · PSHX · ABX · MUL · LDD · STD · ADDD · SUBD · BRN, CPX는 모든 깃발. 6301 확장: XGDX · SLP, AIM · OIM · EIM · TIM (바로 값 + 직접 / 색인), 문서 밖 12h · 13h (X += [S+1], 남코 MCU OS가 씀).</para>
 /// <para>내부: 00h~1Fh 레지스터 (포트 1~4 방향 · 자료, TCSR 08h, FRC 09h~0Ah, OCR 0Bh~0Ch, …), 타이머 = E 클럭마다 FRC +1, FRC = OCR → OCF (TCSR bit6, EOCI bit3 → 벡터 FFF4h),
 /// 넘침 → TOF (bit5, ETOI bit2 → FFF2h). 벡터: 리셋 FFFEh, NMI FFFCh, SWI FFFAh, IRQ1 FFF8h, ICF FFF6h, OCF FFF4h, TOF FFF2h, SCI FFF0h, TRAP FFEEh.
 /// 사이클은 HD6301 표 근사.</para>
@@ -30,6 +30,8 @@ public sealed class Cpu6801
     public bool Waiting;
     private bool waiStacked;
     public int UnknownOps;
+    /// <summary>처음 만난 정의 안 된 명령의 자리 (진단).</summary>
+    public int FirstUnknownPc = -1;
 
     public const int FlagH = 0x20, FlagI = 0x10, FlagN = 0x08, FlagZ = 0x04, FlagV = 0x02, FlagC = 0x01;
 
@@ -334,6 +336,7 @@ public sealed class Cpu6801
             case 0x0F: CC |= FlagI; return;
             case 0x10: A = Sub8(A, B, 0); return;                                               // SBA
             case 0x11: Sub8(A, B, 0); return;                                                   // CBA
+            case 0x12: case 0x13: X = (X + Read((SP + 1) & 0xFFFF)) & 0xFFFF; Cycles += 2; return;   // ASX1 · ASX2 (HD6301 문서 밖: X += [S+1] — PSHA 다음 표 찾기에 씀)
             case 0x16: B = Logic(A); return;                                                    // TAB
             case 0x17: A = Logic(B); return;                                                    // TBA
             case 0x18: { int t = X; X = D; D = t; return; }                                     // XGDX (6301)
@@ -368,6 +371,7 @@ public sealed class Cpu6801
         }
         // 00h (6301 TRAP) 그 밖의 정의 안 된 명령
         UnknownOps++;
+        if (UnknownOps == 1) FirstUnknownPc = (PC - 1) & 0xFFFF;
         PushAll(); CC |= FlagI; PC = Read16(0xFFEE);
     }
 

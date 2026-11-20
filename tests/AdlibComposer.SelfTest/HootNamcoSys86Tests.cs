@@ -10,7 +10,7 @@ namespace AdlibComposer.SelfTest;
 /// <summary>6801 계열 CPU (합성) · hoot 남코 System 86 (HootNamcoSys86): 실제 zip, 진단 (HOOT_SONGS = 곡마다).</summary>
 public static class HootNamcoSys86Tests
 {
-    public static readonly string[] Archives = { "skykiddx", "roishtar", "genpeitd", "rthunder", "wndrmomo" };
+    public static readonly string[] Archives = { "skykiddx", "roishtar", "genpeitd", "rthunder", "wndrmomo", "drgnbstr", "pacland", "aliensec", "metrocrs", "skykid", "hopmappy" };
 
     private sealed class FlatBus : ICpu6801Bus
     {
@@ -66,6 +66,16 @@ public static class HootNamcoSys86Tests
         }
     }
 
+    private static string SlotList(HootNamcoSys86.Machine m)
+    {
+        int ae = (m.Mem[0xAE] << 8) | m.Mem[0xAF];
+        int lst = (m.Mem[(ae + 0x46) & 0xFFFF] << 8) | m.Mem[(ae + 0x47) & 0xFFFF];
+        int typ = (m.Mem[(ae + 0x42) & 0xFFFF] << 8) | m.Mem[(ae + 0x43) & 0xFFFF];
+        var sb = new System.Text.StringBuilder();
+        for (int i = 0; i < 64 && m.Mem[(lst + i) & 0xFFFF] != 0xFF; i++) { int b = m.Mem[(lst + i) & 0xFFFF]; sb.Append(b.ToString("X2") + ":" + m.Mem[(typ + b) & 0xFFFF] + ","); }
+        return "ae " + ae.ToString("X4") + " [" + sb + "]";
+    }
+
     public static (bool sound, string note) Measure(HootArchive.Entry e, string dir, int code, double seconds)
     {
         var m = HootNamcoSys86.Boot(e, name => { string f = HootArchive.FindFile(dir, name); return f != null ? File.ReadAllBytes(f) : null; });
@@ -73,10 +83,11 @@ public static class HootNamcoSys86Tests
         m.RunSeconds(seconds);
         int keyOn = m.Log.Count(x => x.t > 0 && x.chip == 0 && x.reg == 0x08 && (x.val & 0x78) != 0);
         int wsg = m.Log.Count(x => x.t > 0 && x.chip == 1 && x.reg >= 0x100 && ((x.reg & 7) == 0 || (x.reg & 7) == 4) && (x.val & 15) != 0);
-        string note = "opm " + keyOn + " cus30 vol " + wsg + ", writes " + m.Log.Count + ", irq " + m.Irqs + " ocf " + m.TimerIrqs + ", opm@" + m.Opm.ToString("X4") + " PC " + m.Cpu.PC.ToString("X4") + " unk " + m.Cpu.UnknownOps
+        string note = "opm " + keyOn + " cus30 vol " + wsg + ", writes " + m.Log.Count + ", irq " + m.Irqs + " ocf " + m.TimerIrqs + ", opm@" + m.Opm.ToString("X4") + " PC " + m.Cpu.PC.ToString("X4") + " unk " + m.Cpu.UnknownOps + (m.Cpu.FirstUnknownPc >= 0 ? "@" + m.Cpu.FirstUnknownPc.ToString("X4") : "")
             + (m.OtherWrites.Count > 0 ? ", other " + string.Join(" ", m.OtherWrites.OrderByDescending(x => x.Value).Take(5).Select(x => x.Key.ToString("X4") + ":" + x.Value)) : "")
             + (m.OtherReads.Count > 0 ? ", reads " + string.Join(" ", m.OtherReads.OrderByDescending(x => x.Value).Take(5).Select(x => x.Key.ToString("X4") + ":" + x.Value)) : "")
             + (m.Missing.Count > 0 ? ", missing " + string.Join(" ", m.Missing) : "") + (m.Unsupported.Count > 0 ? ", unsupported " + string.Join(" ", m.Unsupported) : "");
+        if (Environment.GetEnvironmentVariable("HOOT_DEBUG") != null) note += " 12C5.. " + BitConverter.ToString(m.Mem, 0x12C5, 4) + " req " + BitConverter.ToString(m.Mem, 0x1285, 8) + " bd " + ((m.Mem[0xBD] << 8) | m.Mem[0xBE]).ToString("X4") + " shared " + string.Join(" ", m.SharedReads.OrderByDescending(x => x.Value).Take(10).Select(x => x.Key.ToString("X4") + ":" + x.Value));
         return (keyOn + wsg > 0, note);
     }
 }

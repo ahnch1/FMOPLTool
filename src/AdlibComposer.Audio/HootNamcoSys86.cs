@@ -14,7 +14,7 @@ namespace AdlibComposer.Audio;
 /// <para>기계 (MAME namcos86 MCU + Sky Kid DX 디스어셈블): HD63701 (E = 1.536MHz), 00h~1Fh 내부 레지스터, 80h~FFh 내부 RAM, 1000h~13FFh = CUS30 (파형 · 레지스터 · 메인과 나누는 RAM),
 /// 1400h~1FFFh = RAM, YM2151 = hoot 옵션 opmaddr (Sky Kid DX · Rolling Thunder 2000h, Wonder Momo 3800h, Ishtar 6000h — 없으면 ROM의 STA 확장 쓰기로 찾음, Genpei 2800h),
 /// 4000h~BFFFh = 외부 ROM (8000h에 A6h 머리 → 진입점 [8001h], hoot가 2000h~에도 올리면 그 자리도 롬), F000h~FFFFh = 내부 ROM (cus60, 남코 MCU 공용 OS). IRQ = 화면 60Hz, OCF 타이머 = 작업 전환.</para>
-/// <para>요청: 1380h에 곡 번호 (드라이버가 받으면 FFh로). 63701X 음성 (rom pcm)은 아직 없음.</para>
+/// <para>요청: System 86 = 1380h에 곡 번호 (드라이버가 받으면 FFh로). wsg63701 = 슬롯 [00BDh] (= 1285h) + 코드에 1 (118Ch bit0 = 게임 중 → +41h 데모 목록 꺼짐). 63701X 음성 (rom pcm)은 아직 없음.</para>
 /// <para>곡: 부팅 1초 뒤 요청, 180초를 YM2151 + CUS30 VGM으로 (CUS30 = 이 프로그램 안 명령 D8h).</para>
 /// </summary>
 public static class HootNamcoSys86
@@ -24,9 +24,13 @@ public static class HootNamcoSys86
 
     public static bool Handles(string driver, string type)
     {
-        return string.Equals((driver ?? "").Trim(), "namco", StringComparison.OrdinalIgnoreCase)
-            && string.Equals((type ?? "").Trim(), "system86", StringComparison.OrdinalIgnoreCase);
+        if (!string.Equals((driver ?? "").Trim(), "namco", StringComparison.OrdinalIgnoreCase)) return false;
+        string t = (type ?? "").Trim().ToLowerInvariant();
+        return t == "system86" || t == "wsg63701";
     }
+
+    /// <summary>wsg63701 (Pac-Land · Dragon Buster · Baraduke · Metro-Cross · Sky Kid · Hopping Mappy): 같은 MCU · OS, YM2151 없음, RAM C000h~C7FFh.</summary>
+    public static bool IsWsgOnly(string type) { return string.Equals((type ?? "").Trim(), "wsg63701", StringComparison.OrdinalIgnoreCase); }
 
     public static VgmSong Render(HootArchive.Entry e, string dir, int code, double seconds = DefaultSeconds, double fade = DefaultFade)
     {
@@ -37,17 +41,25 @@ public static class HootNamcoSys86
     }
 
     /// <summary>YM2151 자리 찾기: 외부 ROM (4000h~BFFFh)의 STAA · STAB 확장 쓰기 중 2000h~7FFFh에서 짝 (a, a+1)이 가장 많은 것.</summary>
-    public static int FindOpm(byte[] mem)
+    public static int FindOpm(byte[] mem) { return FindOpm(mem, 0); }
+
+    /// <summary>찾은 짝의 쓰기 수가 minWrites보다 적으면 −1 (YM2151 없음).</summary>
+    public static int FindOpm(byte[] mem, int minWrites)
     {
         var n = new Dictionary<int, int>();
+        var odd = new HashSet<int>();
         for (int i = 0x4000; i < 0xBFFD; i++)
         {
             if (mem[i] != 0xB7 && mem[i] != 0xF7) continue;
             int a = (mem[i + 1] << 8) | mem[i + 2];
             if (a < 0x2000 || a >= 0x8000) continue;
             n.TryGetValue(a & ~1, out int c); n[a & ~1] = c + 1;
+            if ((a & 1) != 0) odd.Add(a & ~1);
         }
-        return n.Count == 0 ? 0x2000 : n.OrderByDescending(x => x.Value).First().Key;
+        if (minWrites > 0) foreach (var k in n.Keys.Where(k => !odd.Contains(k)).ToList()) n.Remove(k);   // 자료 자리 (a + 1)도 써야 YM2151
+        if (n.Count == 0) return minWrites > 0 ? -1 : 0x2000;
+        var best = n.OrderByDescending(x => x.Value).First();
+        return best.Value < minWrites ? -1 : best.Key;
     }
 
     public static Machine Boot(HootArchive.Entry e, Func<string, byte[]> file)
@@ -76,8 +88,10 @@ public static class HootNamcoSys86
             ov = ov.Trim();
             try { opm = ov.StartsWith("0x", StringComparison.OrdinalIgnoreCase) ? int.Parse(ov.Substring(2), NumberStyles.HexNumber) : int.Parse(ov); } catch (FormatException) { }
         }
-        if (opm < 0) opm = FindOpm(mem);
-        var m = new Machine(mem, opm);
+        bool slots = IsWsgOnly(e.Type);
+        if (slots) { opm = FindOpm(mem, 3); if (opm < 0) opm = 0x2000; }   // Hopping Mappy는 hoot 형식이 wsg63701이지만 System 86 보드 (YM2151 2000h, 색인으로 써서 못 찾음) — 다른 게임은 2000h에 와치독만 써서 해 없음
+        else if (opm < 0) opm = FindOpm(mem);
+        var m = new Machine(mem, opm, slots);
         for (int p = 0x20; p < 0x100; p++) m.RomPage[p] = loaded[p];
         m.Missing.AddRange(missing);
         foreach (var u in unsupported) m.Unsupported.Add(u);
@@ -97,6 +111,8 @@ public static class HootNamcoSys86
         /// <summary>칩 쓰기: chip 0 = YM2151, 1 = CUS30 (reg = 0~13Fh, 바뀐 것만).</summary>
         public readonly List<(double t, int chip, int reg, int val)> Log = new List<(double, int, int, int)>();
         public int Irqs, TimerIrqs;
+        /// <summary>진단: 요청 뒤 MCU가 읽은 공유 RAM 자리 (1140h~13FFh).</summary>
+        public readonly Dictionary<int, int> SharedReads = new Dictionary<int, int>();
         public readonly Dictionary<int, int> OtherWrites = new Dictionary<int, int>(), OtherReads = new Dictionary<int, int>();
 
         private int opmAddr;
@@ -106,9 +122,12 @@ public static class HootNamcoSys86
         private bool irqLine;
         private readonly int[] last = Enumerable.Repeat(-1, 0x100).ToArray();
 
-        public Machine(byte[] mem, int opm)
+        /// <summary>wsg63701: 슬롯 요청 (1285h + 코드), RAM C000h~C7FFh.</summary>
+        public readonly bool Slots;
+
+        public Machine(byte[] mem, int opm, bool slots = false)
         {
-            Mem = mem; Opm = opm;
+            Mem = mem; Opm = opm; Slots = slots;
             Cpu = new Cpu6801(this);
             Cpu.Reset();
             nextIrq = irqCycles;
@@ -120,7 +139,15 @@ public static class HootNamcoSys86
             Log.Clear();
             Log.AddRange(init);
             playStart = Cpu.Cycles;
-            Mem[0x1380] = (byte)code;
+            if (Slots)
+            {
+                int bd = (Mem[0xBD] << 8) | Mem[0xBE];   // OS가 정한 요청 기준 (모두 1285h)
+                if (bd < 0x1000 || bd >= 0x1400) bd = 0x1285;
+                Mem[0x118C] |= 1;     // 메인 CPU의 "게임 중" 표시: 없으면 Baraduke 드라이버가 [BD+41h] = 1 (데모 목록 — 동전 소리만)을 화면마다 다시 세움
+                Mem[bd + 0x41] = 0;
+                Mem[bd + (code & 0x3F)] = 1;   // 슬롯 요청 (0 아니면 울림)
+            }   // wsg63701: 슬롯 요청 (OS의 기준 [00BDh] = 1285h + 슬롯, 0 아니면 울림)
+            else Mem[0x1380] = (byte)code;
         }
 
         public void RunSeconds(double s) { Run((long)(CpuClock * s)); }
@@ -150,7 +177,8 @@ public static class HootNamcoSys86
             if ((a >= 0x4000 && a < 0xC000) || RomPage[a >> 8]) return Mem[a];
             if (a >= 0xF000) return Mem[a];
             if (a >= 0x80 && a < 0x100) return Mem[a];
-            if (a >= 0x1000 && a < 0x2000) return Mem[a];
+            if (a >= 0x1000 && a < 0x2000) { if (a >= 0x1140 && a < 0x1400 && playStart >= 0) { SharedReads.TryGetValue(a, out int sr); SharedReads[a] = sr + 1; } return Mem[a]; }
+            if (Slots && a >= 0xC000 && a < 0xC800) return Mem[a];
             OtherReads.TryGetValue(a, out int c); OtherReads[a] = c + 1;
             return 0xFF;
         }
@@ -161,7 +189,7 @@ public static class HootNamcoSys86
             if (a == Opm) { opmAddr = v; return; }
             if (a == Opm + 1) { OpmWrite(opmAddr, v); return; }
             if (a >= 0x1000 && a < 0x1140) { if (Mem[a] != v) Emit(1, a - 0x1000, v); Mem[a] = v; return; }
-            if ((a >= 0x80 && a < 0x100) || (a >= 0x1000 && a < 0x2000)) { Mem[a] = v; return; }
+            if ((a >= 0x80 && a < 0x100) || (a >= 0x1000 && a < 0x2000) || (Slots && a >= 0xC000 && a < 0xC800)) { Mem[a] = v; return; }
             if (a >= 0x4000 && a < 0xC000 || a >= 0xF000 || RomPage[a >> 8]) return;
             OtherWrites.TryGetValue(a, out int c); OtherWrites[a] = c + 1;
         }

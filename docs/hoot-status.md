@@ -31,6 +31,7 @@
 | 2.0.4 | 8-6 (메가드라이브) | hoot megadrive generic_z80 · iyinc: `Audio/HootMegaDrive.cs` (Z80 사운드 쪽 · 카트리지의 Z80 드라이버를 RAM에, 요청 주소) |
 | 2.0.5 | 8-7 (X68000) | MC68000 `Audio/Cpu/M68000.cs` + hoot x68k generic: `Audio/HootX68k.cs` (OPM · ADPCM · DMA · MFP, E00010h = hoot가 대신 하는 IOCS · DOS) |
 | 2.0.6 | 8-7 (X68000 MIDI) | x68k MIDI 판: YM3802 MIDI 보드 (EAFA00h) → 살아 있는 MIDI 곡 (`HootX68k.LoadMidi`) |
+| 2.1.59 | 8-9k 더함 (Y8950 ADPCM) | 새 칩 Y8950 ADPCM (`Audio/Chips/Y8950Adpcm.cs`, delta-T, 이 프로그램 안 명령 DCh) — hoot snk 3526_8950 목소리 항목 |
 | 2.1.58 | 8-9k 더함 (SNK fitegolf) | hoot snk fitegolf (Fighting Golf · Country Club): `HootSnkOpl` YM3812 하나 (VGM 5Ah 그대로) |
 | 2.1.57 | 8-9k (SNK OPL × 2) | hoot snk 3526_8950 · 3526x2 (Victory Road · Psycho Soldier · Bermuda Triangle · TouchDown Fever · Guerrilla War · Athena · Ikari Warriors): `Audio/HootSnkOpl.cs` — YM3526 + Y8950 / YM3526 × 2를 YMF262 하나로 |
 | 2.1.56 | 8-9i 더함 (코나미 battlantis) | hoot konami battlantis (Battlantis · Rack 'em Up): `HootKonamiK007232` 배치 — YM3812 × 2를 YMF262 하나로 (#1 = 뱅크 0, #2 = 뱅크 1, C0h 왼 · 오 bit, 01h 파형 허락 → E0h 가림) |
@@ -127,7 +128,7 @@
 | 타이토 SJ (taitosj) | 12 / 12, 285곡 모두 | `--test hootsj` (HOOT_SONGS=1) |
 | 코나미 Z80 + AY (scramble · timeplt · pooyan · frogger) | 15 / 15, 139 / 200 (pooyan 18 / 18, frogger 34 / 40) — 무음 41 = 한 곡을 채널마다 나눈 ch2 · ch3 파트와 일부 BGM (혼자 보내면 AY 쓰기 없음) | `--test hootkonay` (HOOT_SONGS=1) |
 | 코나미 Z80 + YM2203 (ironhors) | 2 / 2, 40곡 모두 | `--test hootih` (HOOT_SONGS=1) |
-| SNK OPL (3526_8950 · 3526x2 · fitegolf) | 10 / 10, 372곡 중 295 (fitegolf 60 모두) (무음 77 = Y8950 ADPCM 목소리 · 머리 줄) | `--test hootsnkopl` (HOOT_SONGS=1) |
+| SNK OPL (3526_8950 · 3526x2 · fitegolf) | 10 / 10, 372곡 중 347 (무음 25 = 머리 줄 · Victory Road 목소리 D2h~DBh) (무음 77 = Y8950 ADPCM 목소리 · 머리 줄) | `--test hootsnkopl` (HOOT_SONGS=1) |
 | 아이렘 M62 / M52 (m62) | 15 / 15, 137 / 145 (남은 8 = Traverse USA 효과음 — MSM #2로 보임) | `--test hootm62` (HOOT_SONGS=1) |
 | 남코 Pac-Land 계열 (wsg63701) | 6 / 6, 157곡 모두 | `--test hootns86` (HOOT_SONGS=1, HOOT_DEBUG=1 = 슬롯 · 요청 바이트) |
 | 남코 System 86 (system86) | 5 / 5, 71곡 모두 (63701X 음성은 없음) | `--test hootns86` (6801 합성 둘 포함, HOOT_SONGS=1) |
@@ -446,7 +447,8 @@
   - MAME snk.cpp YM3526_YM3526 · YM3526_Y8950 사운드 맵: Z80 4MHz, ROM ~BFFFh, RAM C000h, E000h 명령, E800h · EC00h YM3526 #1, F000h · F400h YM #2, F800h 상태 (bit0 · 1 = YM IRQ, bit2 바쁨, bit3 명령 IRQ, 쓰기 bit4~7 = 0이면 지움), IRQ 줄 = 상태 & 0Bh (레벨)
   - 드라이버는 켤 때 받는 설정 명령 0Dh (00h~0Fh: bit0 켬 · bit1 끔, bit2 음악, bit3 효과음) 전에는 곡 명령을 버림 (C100h bit2 · 3) → 부팅 뒤 0Dh를 먼저. 박자 = YM #1 타이머 2 (4h bit5 = 가림을 곡 시작 때 풂)
   - v2.1.58 fitegolf (MAME YM3812_sound_map): 같은 배치에 YM #2 없음, YM3812 4MHz → VGM YM3812 그대로 (01h 파형 허락 남김)
-  - OPL 둘 → YMF262 (16MHz) 뱅크 0 · 1 (리듬 쓰는 칩이 뱅크 0), 파형 0, C0h 왼 · 오. Y8950 ADPCM (rom pcm)은 아직 → 목소리 항목 무음
+  - OPL 둘 → YMF262 (16MHz) 뱅크 0 · 1 (리듬 쓰는 칩이 뱅크 0), 파형 0, C0h 왼 · 오
+  - v2.1.59 Y8950 ADPCM (MAME ymdeltat): 07h 제어 (bit7 시작 · bit4 되풀이 · bit0 리셋), 09h~0Ch 시작 · 끝 × 32바이트, 10h · 11h 델타-N (속도 = 4MHz ÷ 72 × N ÷ 65536), 12h 음량 → 칩 `Y8950Adpcm`, 이 프로그램 안 명령 DCh rr vv 00, ROM = rom pcm. Victory Road 목소리 D2h~DBh는 아직 무음 (리셋 줄 뒤 항목 — 앞 명령이 필요할 수 있음)
 - 다음: 타이토 F3 (ES5505 + MC68681, 36항목), 아이렘 M92 (V35 + GA20), 코나미 K007232 보드 (매피 계열, 6809 + 남코 WSG 15xx) · system86 (HD63701)
 - 그 다음 (8-8v): Z80 + YM2151 + OKIM6295 작은 보드 (tecmo16 · raizing mahou · bgaregga · banpresto dbz · dooyong …) — MAME 배치를 하나씩 확인해 `HootOpmBoard.Layout`에, atari system1 (6502), 그 뒤 새 칩
   - 남은 것 (8-8a): "소리 남" 기준이 처음 6초에 키온 하나라 몇 항목은 ADPCM 하나뿐 (driftout · liquidk · megablst 등 첫 곡이 짧은 효과음일 수 있음) — 귀로 확인, bshark (code0 · code1 둘), taito z 계열 다른 보드

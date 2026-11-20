@@ -14,7 +14,7 @@ namespace AdlibComposer.Audio;
 /// E800h 상태 · 주소 / EC00h 자료 = YM3526 #1, F000h · F400h = YM #2 (YM3526 또는 Y8950), F800h = 사운드 상태 (bit0 = YM1 IRQ, bit1 = YM2 IRQ, bit2 = 바쁨, bit3 = 명령 IRQ;
 /// 쓰기 bit4 · 5 · 6 · 7이 0이면 각각 지움). IRQ 줄 = 상태 &amp; 0Bh (레벨).</para>
 /// <para>VGM 재생기에 OPL이 하나라 YMF262 (16MHz) 하나로 옮긴다: 리듬 (BDh)을 쓰는 칩 = 뱅크 0, 다른 칩 = 뱅크 1, C0h에 왼 · 오 bit, 파형 = 0 (YM3526 · Y8950에 없음).
-/// Y8950 ADPCM은 아직 (FM만). 곡: 부팅 1초 뒤 명령, 180초.</para>
+/// Y8950 ADPCM (rom pcm) = 칩 <see cref="Chips.Y8950Adpcm"/>, 이 프로그램 안 명령 DCh. 곡: 부팅 1초 뒤 명령, 180초.</para>
 /// </summary>
 public static class HootSnkOpl
 {
@@ -41,10 +41,11 @@ public static class HootSnkOpl
         var rom = new byte[0xC000];
         var missing = new List<string>();
         var unsupported = new HashSet<string>();
+        var pcm = new List<(long off, byte[] d)>();
         bool any = false;
         foreach (var (type, off, text) in e.Roms)
         {
-            if (type == "pcm") { unsupported.Add("pcm (Y8950 ADPCM)"); continue; }
+            if (type == "pcm") { var pd = file(text); if (pd == null) missing.Add(text); else pcm.Add((off, pd)); continue; }
             if (type != "code") { unsupported.Add(type); continue; }
             if (off < 0 || off >= 0xC000) { unsupported.Add(type + " offset " + off); continue; }
             var d = file(text);
@@ -53,7 +54,9 @@ public static class HootSnkOpl
             any = true;
         }
         if (!any) missing.Add("(code)");
-        var m = new Machine(rom) { Single3812 = (e.Type ?? "").Trim().ToLowerInvariant() == "fitegolf" };
+        var p = new byte[pcm.Count == 0 ? 0 : (int)pcm.Max(x => x.off + x.d.Length)];
+        foreach (var (off, d) in pcm) Array.Copy(d, 0, p, off, d.Length);
+        var m = new Machine(rom) { Pcm = p, Single3812 = (e.Type ?? "").Trim().ToLowerInvariant() == "fitegolf" };
         m.Missing.AddRange(missing);
         foreach (var u in unsupported) m.Unsupported.Add(u);
         m.RunSeconds(1);
@@ -81,6 +84,8 @@ public static class HootSnkOpl
         public int Irqs, LatchReads;
         /// <summary>fitegolf: YM3812 하나 (YM #2 없음) → VGM YM3812 (5Ah) 그대로.</summary>
         public bool Single3812;
+        /// <summary>Y8950 ADPCM ROM (rom pcm).</summary>
+        public byte[] Pcm = new byte[0];
         /// <summary>진단: 타이머 상태.</summary>
         public string TimerState { get { return string.Join(" ", ym.Select((y, i) => "ym" + (i + 1) + " ctl " + y.Ctl.ToString("X2") + " t1 " + y.T1.ToString("X2") + " t2 " + y.T2.ToString("X2") + " fl " + y.Flags.ToString("X2"))) + " st " + status.ToString("X2") + " c100 " + Ram[0x100].ToString("X2") + " c002 " + Ram[2].ToString("X2"); } }
         public readonly Dictionary<int, int> OtherWrites = new Dictionary<int, int>(), OtherReads = new Dictionary<int, int>();
@@ -208,6 +213,13 @@ public static class HootSnkOpl
                         return;
                     }
             }
+            if (c == 1 && Pcm.Length > 0 && ((reg >= 0x07 && reg <= 0x0C) || (reg >= 0x10 && reg <= 0x12)))
+            {
+                // Y8950 ADPCM → 이 프로그램 안 명령 DCh (chip 2)
+                if (playStart < 0) playStart = Cpu.Cycles;
+                Log.Add((Math.Max(0, (Cpu.Cycles - playStart) * VgmSong.Rate / CpuClock), 2, reg, v));
+                return;
+            }
             if (reg < 0x20 && reg != 0x08 && !(Single3812 && reg == 0x01)) return;   // 시험 · Y8950 ADPCM · 키보드 · I/O (YM3812 하나면 01h 파형 허락은 남김)
             bool keep = (reg >= 0xB0 && reg <= 0xB8) || reg == 0xBD;
             if (!keep) { if (last[c, reg] == v) return; last[c, reg] = v; }
@@ -231,6 +243,7 @@ public static class HootSnkOpl
             {
                 long ts = (long)Math.Min(total, Math.Max(0, x.t));
                 if (ts > at) { w.Wait(ts - at); at = ts; }
+                if (x.chip == 2) { w.Write(new byte[] { 0xDC, (byte)x.reg, (byte)x.val, 0 }); continue; }
                 int bank = x.chip == bank0 ? 0 : 1, r = x.reg, v = x.val;
                 if (r >= 0xE0 && r <= 0xF5) v = 0;
                 if (r >= 0xC0 && r <= 0xC8) v = (v & 0x0F) | 0x30;
@@ -240,6 +253,7 @@ public static class HootSnkOpl
             if ((long)total > at) w.Wait((long)total - at);
             var song = VgmFormat.Read(w.ToArray());
             song.FadeSeconds = Math.Max(0, Math.Min(fade, seconds / 2));
+            if (Log.Any(x => x.chip == 2 && x.reg == 0x07 && (x.val & 0x80) != 0)) { song.Y8950AdpcmClock = OplClock; song.Y8950Rom = Pcm; }
             if (Log.Count == 0) song.UnsupportedChips.Add("(칩 쓰기 없음)");
             return song;
         }

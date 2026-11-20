@@ -82,6 +82,9 @@ public sealed class VgmSong
     /// <summary>코나미 K007232 — VGM에 없음: hoot 렌더가 읽은 뒤 세우고 (ROM은 <see cref="K007232Rom"/>), 이 프로그램 안 명령 DBh rr vv 00.</summary>
     public double K007232Clock;
     public byte[] K007232Rom;
+    /// <summary>Y8950 ADPCM (delta-T) — hoot SNK 렌더만: FM은 OPL로, ADPCM은 이 프로그램 안 명령 DCh rr vv 00 (ROM = <see cref="Y8950Rom"/>).</summary>
+    public double Y8950AdpcmClock;
+    public byte[] Y8950Rom;
     public int C140Type;
     /// <summary>true = <see cref="Cus30Clock"/>의 칩이 15XX (매피 계열: 레지스터 00h~3Fh, 파형 PROM 200h~).</summary>
     public bool Cus30Is15xx;
@@ -120,7 +123,7 @@ public sealed class VgmSong
     public bool HasOpl { get { return Ym3812Clock > 0 || Ym3526Clock > 0 || Y8950Clock > 0 || Ymf262Clock > 0; } }
     public bool IsOpl3 { get { return Ymf262Clock > 0; } }
     /// <summary>PSG · SCC · OPL 말고 다른 칩 (공통 칩 경로로 내는 것).</summary>
-    public bool HasOther { get { return Sn76489Clock > 0 || Ym2413Clock > 0 || Ym2612Clock > 0 || Ym2151Clock > 0 || Ym2203Clock > 0 || Ym2608Clock > 0 || Okim6295Clock > 0 || NesApuClock > 0 || Huc6280Clock > 0 || Ym2610Clock > 0 || Okim6258Clock > 0 || Saa1099Clock > 0 || GbDmgClock > 0 || Upd7759Clock > 0 || QsoundClock > 0 || SegaPcmClock > 0 || PokeyClock > 0 || Cus30Clock > 0 || C140Clock > 0 || K053260Clock > 0 || K054539Clock > 0 || Rf5c68Clock > 0 || K007232Clock > 0 || SpcImage != null || SelfRunning != null; } }
+    public bool HasOther { get { return Sn76489Clock > 0 || Ym2413Clock > 0 || Ym2612Clock > 0 || Ym2151Clock > 0 || Ym2203Clock > 0 || Ym2608Clock > 0 || Okim6295Clock > 0 || NesApuClock > 0 || Huc6280Clock > 0 || Ym2610Clock > 0 || Okim6258Clock > 0 || Saa1099Clock > 0 || GbDmgClock > 0 || Upd7759Clock > 0 || QsoundClock > 0 || SegaPcmClock > 0 || PokeyClock > 0 || Cus30Clock > 0 || C140Clock > 0 || K053260Clock > 0 || K054539Clock > 0 || Rf5c68Clock > 0 || K007232Clock > 0 || Y8950AdpcmClock > 0 || SpcImage != null || SelfRunning != null; } }
     /// <summary>소리 낼 수 있는 칩이 하나라도 있는가.</summary>
     public bool IsPlayable { get { return HasPsg || HasScc || HasOpl || HasOther; } }
     public bool AyIsYm { get { return AyType >= 0x10; } }
@@ -168,6 +171,7 @@ public sealed class VgmSong
             if (K053260Clock > 0) l.Add("K053260");
             if (Rf5c68Clock > 0) l.Add("RF5C68");
             if (K007232Clock > 0) l.Add("K007232");
+            if (Y8950AdpcmClock > 0) l.Add("Y8950 ADPCM");
             if (K054539Clock > 0) l.Add(K054539Clock2 > 0 ? "K054539 ×2" : "K054539");
             if (Cus30Clock > 0) l.Add(Cus30Is15xx ? "Namco 15XX" : "CUS30");
             if (Okim6258Clock > 0) l.Add("OKIM6258");

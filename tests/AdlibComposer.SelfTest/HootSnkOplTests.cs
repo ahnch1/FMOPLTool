@@ -32,6 +32,15 @@ public static class HootSnkOplTests
                 foreach (var t in hoot.Titles) Console.WriteLine("  " + arc + " 0x" + t.Code.ToString("X2") + " " + Measure(hoot, dir, t.Code, 8).note + " | " + t.Title);
                 continue;
             }
+            if (arc == "psychos")
+            {
+                // Y8950 ADPCM 목소리 (C0h "Athena's name is magic"): 재생기에서 실제 소리
+                var song = HootSnkOpl.Render(hoot, dir, 0xC0, 4, 0);
+                var pl = new VgmPlayer(); pl.Start(song, 0, null);
+                double peak = 0;
+                for (int i = 0; i < 44100 * 3; i++) { pl.Step(); pl.Generate(out double l, out double rr); peak = Math.Max(peak, Math.Abs(l)); }
+                check("hoot snk psychos voice 0xC0: Y8950 ADPCM sounds in the player", song.Y8950AdpcmClock > 0 && peak > 0.01, "peak " + peak.ToString("0.000") + ", chips " + song.ChipSummary);
+            }
             var r = (sound: false, note: "");
             int code = 0;
             foreach (var t in hoot.Titles.Take(4)) { code = t.Code; r = Measure(hoot, dir, code, 8); if (r.sound) break; }
@@ -45,11 +54,12 @@ public static class HootSnkOplTests
         m.Play(code);
         m.RunSeconds(seconds);
         int keyOn = m.Log.Count(x => x.t > 0 && ((x.reg >= 0xB0 && x.reg <= 0xB8 && (x.val & 0x20) != 0) || (x.reg == 0xBD && (x.val & 0x1F) != 0)));
+        int adpcm = m.Log.Count(x => x.t > 0 && x.chip == 2 && x.reg == 0x07 && (x.val & 0x80) != 0);
         int k2 = m.Log.Count(x => x.t > 0 && x.chip == 1 && x.reg >= 0xB0 && x.reg <= 0xBD && (x.val & 0x20) != 0);
-        string note = "key " + keyOn + " (ym2 " + k2 + "), " + m.TimerState + ", writes " + m.Log.Count + ", irq " + m.Irqs + " latch " + m.LatchReads + ", PC " + m.Cpu.PC.ToString("X4")
+        string note = "key " + keyOn + " (ym2 " + k2 + ") adpcm " + adpcm + ", " + m.TimerState + ", writes " + m.Log.Count + ", irq " + m.Irqs + " latch " + m.LatchReads + ", PC " + m.Cpu.PC.ToString("X4")
             + (m.OtherWrites.Count > 0 ? ", other " + string.Join(" ", m.OtherWrites.OrderByDescending(x => x.Value).Take(5).Select(x => x.Key.ToString("X4") + ":" + x.Value)) : "")
             + (m.OtherReads.Count > 0 ? ", reads " + string.Join(" ", m.OtherReads.OrderByDescending(x => x.Value).Take(5).Select(x => x.Key.ToString("X4") + ":" + x.Value)) : "")
             + (m.Missing.Count > 0 ? ", missing " + string.Join(" ", m.Missing) : "") + (m.Unsupported.Count > 0 ? ", unsupported " + string.Join(" ", m.Unsupported) : "");
-        return (keyOn > 0, note);
+        return (keyOn + adpcm > 0, note);
     }
 }

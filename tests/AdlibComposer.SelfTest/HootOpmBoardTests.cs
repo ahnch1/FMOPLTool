@@ -61,7 +61,7 @@ public static class HootOpmBoardTests
         string root = SopTests.FindDir("_incoming");
         string folder = root == null ? null : Path.Combine(root, "Hootarchive", "roms");
         if (folder == null || !Directory.Exists(folder)) { Console.WriteLine("SKIP  hoot opm board real files (_incoming/Hootarchive/roms not found)"); return; }
-        foreach (var arc in new[] { "forgottn", "ddragon2", "ddragon3", "fstarfrc", "ginkun", "riot" })
+        foreach (var arc in new[] { "forgottn", "ddragon2", "ddragon3", "fstarfrc", "ginkun", "riot", "bionicc" })
         {
             string zip = Path.Combine(folder, arc + ".zip");
             if (!File.Exists(zip)) { Console.WriteLine("SKIP  hoot opm board " + arc + " (zip not found)"); continue; }

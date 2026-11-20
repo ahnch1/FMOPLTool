@@ -40,10 +40,14 @@ public static class HootOpmBoard
     public static readonly Layout Tecmo16 = new Layout { Name = "Tecmo 16", FixedEnd = 0xF000, RamStart = 0xF000, RamEnd = 0xFC00, Ym = 0xFC04, Oki = 0xFC00, Latch = 0xFC08, LatchNmi = true, CpuClock = 4000000, YmClock = 4000000, OkiClock = 1000000, BootSeconds = 3 };
     public static readonly Layout DoubleDragon3 = new Layout { Name = "Double Dragon 3", FixedEnd = 0xC000, RamStart = 0xC000, RamEnd = 0xC800, Ym = 0xC800, Oki = 0xD800, Latch = 0xE000, LatchNmi = true, OkiBankReg = 0xE800 };
 
+    // MAME bionicc: ROM ~7FFFh, 8000h · 8001h YM2151 (상태 폴링, IRQ 안 씀), A000h 명령 (NMI), RAM C000h~C7FFh, OKI 없음
+    public static readonly Layout BionicCommando = new Layout { Name = "Capcom Bionic Commando", FixedEnd = 0x8000, RamStart = 0xC000, RamEnd = 0xC800, Ym = 0x8000, Oki = 0x10000, Latch = 0xA000, LatchNmi = true };
+
     public static Layout LayoutOf(string driver, string type)
     {
         string d = (driver ?? "").Trim().ToLowerInvariant(), t = (type ?? "").Trim().ToLowerInvariant();
         if (d == "capcom" && t == "cps1") return Cps1;
+        if (d == "capcom" && t == "bionicc") return BionicCommando;
         if (d == "technos" && (t == "ddragon2" || t == "ctribe")) return DoubleDragon2;   // Combatribes = DD2와 같은 사운드 배치 (MAME ctribe_sound_map)
         if (d == "technos" && t == "ddragon3") return DoubleDragon3;
         if (d == "tecmo" && t == "tecmo16") return Tecmo16;

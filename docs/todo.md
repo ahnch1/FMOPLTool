@@ -97,7 +97,9 @@
 - [x] 코나미 K054539 Z80 판 (054539 4 · 054539x2 6) · 267곡 — v2.1.44 `HootKonami54539` + K054539 칩, 266곡
 - [ ] 코나미 System GX 17 (68000 사운드 + K054539 × 2)
 - [ ] 아이렘 M92 (m92) 16 — V35 (x86 계열) + YM2151 + **GA20**
-- [ ] 세가 System 18 6 · System 32 9 — Z80 + YM3438 × 2 + **RF5C68**
+- [x] 세가 System 18 6 · 251곡 — v2.1.45 `HootSegaSystem18` + RF5C68 칩 + VGM 둘째 YM2612, 246곡
+- [ ] 세가 System 32 9 — 같은 칩, 명령 자리 다름
+- [ ] 코나미 System GX 17 — 시도함 (68000 부팅이 기다리는 것 모름, hoot-status 참고)
 - [ ] 코나미 twin16 5 (K007232 + uPD7759) 등 K007232 보드 (aliens · scontra · gradius3 …)
 - [ ] 세가 model2 4 · system_multi 4 (315-5560 = MultiPCM)
 - [ ] 코나미 hornet 8 · gticlub 4 — RF5C400 (CPU 68000)

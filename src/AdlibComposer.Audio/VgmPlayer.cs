@@ -45,7 +45,7 @@ public sealed class VgmPlayer
     }
 
     private readonly List<ExtraChip> extras = new List<ExtraChip>();
-    private ExtraChip xSn2, xOki2, xUpd, xQs, xSpcm, xOpn2203b, xPokey, xCus30, xAy2, xAy3, xC140, xK53260, xK54539, xK54539b;
+    private ExtraChip xSn2, xOki2, xUpd, xQs, xSpcm, xOpn2203b, xPokey, xCus30, xAy2, xAy3, xC140, xK53260, xK54539, xK54539b, xOpn2b, xRf;
     private ExtraChip xSn, xOpll, xOpn2, xOpm, xOpn, xOpna, xOpnb, xOki, xNes, xPce, xNsfx, xMsm, xSaa, xGb;
     /// <summary>YM2612 PCM 데이터 뱅크 (블록 0x00) · 읽는 위치.</summary>
     private byte[] pcmBank = new byte[0];
@@ -91,6 +91,8 @@ public sealed class VgmPlayer
         if (s.Sn76489Clock > 0 && s.Sn76489Clock2 > 0) l.Add(new Sn76489(s.Sn76489Clock2, Rate, s.SnFeedback, s.SnWidth));
         if (s.Ym2413Clock > 0) l.Add(new Ym2413(s.Ym2413Clock, s.Vrc7));
         if (s.Ym2612Clock > 0) l.Add(new OpnChip(OpnChip.Variant.Ym2612, s.Ym2612Clock));
+        if (s.Ym2612Clock > 0 && s.Ym2612Clock2 > 0) l.Add(new OpnChip(OpnChip.Variant.Ym2612, s.Ym2612Clock2));   // 둘째 YM2612 (명령 A2h · A3h)
+        if (s.Rf5c68Clock > 0) l.Add(new Rf5c68(s.Rf5c68Clock, Rate));
         if (s.Ym2151Clock > 0) l.Add(new Ym2151(s.Ym2151Clock));
         if (s.Ym2203Clock > 0) l.Add(new OpnChip(OpnChip.Variant.Ym2203, s.Ym2203Clock));
         if (s.Ym2203Clock > 0 && s.Ym2203Clock2 > 0) l.Add(new OpnChip(OpnChip.Variant.Ym2203, s.Ym2203Clock2));   // 둘째 YM2203 (명령 A5h)
@@ -257,7 +259,7 @@ public sealed class VgmPlayer
         }
 
         extras.Clear();
-        xSn2 = null; xOki2 = null; xUpd = null; xQs = null; xSpcm = null; xOpn2203b = null; xPokey = null; xCus30 = null; xAy2 = null; xAy3 = null; xC140 = null; xK53260 = null; xK54539 = null; xK54539b = null;
+        xSn2 = null; xOki2 = null; xUpd = null; xQs = null; xSpcm = null; xOpn2203b = null; xPokey = null; xCus30 = null; xAy2 = null; xAy3 = null; xC140 = null; xK53260 = null; xK54539 = null; xK54539b = null; xOpn2b = null; xRf = null;
         xSn = xOpll = xOpn2 = xOpm = xOpn = xOpna = xOpnb = xOki = xNes = xPce = xNsfx = xMsm = xSaa = xGb = null;
         foreach (var chip in CreateOtherChips(s))
         {
@@ -283,7 +285,8 @@ public sealed class VgmPlayer
             else if (chip is K053260) xK53260 = x;
             else if (chip is K054539) { if (xK54539 == null) xK54539 = x; else xK54539b = x; }
             else if (chip is GbApu) xGb = x;
-            else if (chip is OpnChip o) { if (o.Type == OpnChip.Variant.Ym2612) xOpn2 = x; else if (o.Type == OpnChip.Variant.Ym2203) { if (xOpn == null) xOpn = x; else xOpn2203b = x; } else if (o.Type == OpnChip.Variant.Ym2608) xOpna = x; else xOpnb = x; }
+            else if (chip is Rf5c68) xRf = x;
+            else if (chip is OpnChip o) { if (o.Type == OpnChip.Variant.Ym2612) { if (xOpn2 == null) xOpn2 = x; else xOpn2b = x; } else if (o.Type == OpnChip.Variant.Ym2203) { if (xOpn == null) xOpn = x; else xOpn2203b = x; } else if (o.Type == OpnChip.Variant.Ym2608) xOpna = x; else xOpnb = x; }
         }
         pcmLen = 0; pcmPos = 0;
         banks.Clear(); streams.Clear(); anyStream = false;
@@ -434,6 +437,10 @@ public sealed class VgmPlayer
             case 0x51: Other(xOpll, 0, d[pos + 1], d[pos + 2]); break;
             case 0x52: Other(xOpn2, 0, d[pos + 1], d[pos + 2]); break;
             case 0x53: Other(xOpn2, 1, d[pos + 1], d[pos + 2]); break;
+            case 0xA2: Other(xOpn2b, 0, d[pos + 1], d[pos + 2]); break;   // 둘째 YM2612
+            case 0xA3: Other(xOpn2b, 1, d[pos + 1], d[pos + 2]); break;
+            case 0xB0: Other(xRf, 0, d[pos + 1], d[pos + 2]); break;   // RF5C68 레지스터
+            case 0xC1: Other(xRf, 1, d[pos + 1] | (d[pos + 2] << 8), d[pos + 3]); break;   // RF5C68 메모리
             case 0x54: Other(xOpm, 0, d[pos + 1], d[pos + 2]); break;
             case 0x55: Other(xOpn, 0, d[pos + 1], d[pos + 2]); break;
             case 0xA5: Other(xOpn2203b, 0, d[pos + 1], d[pos + 2]); break;   // 둘째 YM2203
@@ -502,6 +509,14 @@ public sealed class VgmPlayer
                 Array.Copy(d, at, pcmBank, pcmLen, size);
                 pcmLen += size;
             }
+            return;
+        }
+        if (type == 0xC0 && size > 2 && xRf != null)
+        {
+            // RF5C68 RAM: 시작 2바이트 + 바이트
+            var rf = (Rf5c68)xRf.Chip;
+            int st = d[at] | (d[at + 1] << 8);
+            for (int i = 0; i < size - 2; i++) rf.Ram[(st + i) & 0xFFFF] = d[at + 2 + i];
             return;
         }
         if (type == 0xC2 && size > 2 && xNes != null)

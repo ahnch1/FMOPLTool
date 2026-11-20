@@ -35,7 +35,7 @@ public static class HootSegaSystem16Tests
         w.Write(0xB6, 0, 1); w.Wait(10);
         var v = VgmFormat.Read(w.ToArray());
         check("VGM uPD7759 (8Ch, slave) read", v.Upd7759Clock == 640000 && v.IsPlayable && v.ChipSummary.Contains("uPD7759") && !v.UnsupportedChips.Contains("uPD7759"), v.ChipSummary);
-        check("hoot sega system16: playable types", HootArchive.Playable("sega", "system16b") && HootArchive.Playable("sega", "system16a") && !HootArchive.Playable("sega", "system18"), "");
+        check("hoot sega system16: playable types", HootArchive.Playable("sega", "system16b") && HootArchive.Playable("sega", "system16a") && !HootArchive.Playable("sega", "system24"), "");
 
         string root = SopTests.FindDir("_incoming");
         string folder = root == null ? null : Path.Combine(root, "Hootarchive", "roms");

@@ -57,7 +57,7 @@ public static class HootDecoTests
         w.Write(0xB8, 0x80, 0x78); w.Wait(100);
         var dual = VgmFormat.Read(w.ToArray());
         check("VGM dual OKIM6295 (clock bit30) read", dual.Okim6295Clock2 == 1000000 && dual.OkiPin7 && dual.ChipSummary.Contains("×2"), dual.ChipSummary);
-        check("hoot deco: playable types", HootArchive.Playable("dataeast", "thndzone") && HootArchive.Playable("dataeast", "deco32") && !HootArchive.Playable("dataeast", "nslasher"), "");
+        check("hoot deco: playable types", HootArchive.Playable("dataeast", "thndzone") && HootArchive.Playable("dataeast", "deco32") && HootDeco.Handles("dataeast", "midres") && !HootArchive.Playable("dataeast", "nslasher"), "");
     }
 
     private static void Real(Action<string, bool, string> check)
@@ -65,16 +65,30 @@ public static class HootDecoTests
         string root = SopTests.FindDir("_incoming");
         string folder = root == null ? null : Path.Combine(root, "Hootarchive", "roms");
         if (folder == null || !Directory.Exists(folder)) { Console.WriteLine("SKIP  hoot deco real files (_incoming/Hootarchive/roms not found)"); return; }
-        foreach (var arc in new[] { "darkseal", "supbtime", "mutantf" })
+        foreach (var arc in new[] { "darkseal", "supbtime", "mutantf", "midres" })
         {
             string zip = Path.Combine(folder, arc + ".zip");
             if (!File.Exists(zip)) { Console.WriteLine("SKIP  hoot deco " + arc + " (zip not found)"); continue; }
             string dir = ZipFolder.Extract(zip);
             var hoot = Directory.GetFiles(dir, "*" + HootArchive.Extension).Select(HootArchive.Load).FirstOrDefault(x => HootDeco.Handles(x.Driver, x.Type));
             if (hoot == null) { check("hoot deco " + arc + ": .hoot entry", false, "none"); continue; }
+            if (Environment.GetEnvironmentVariable("HOOT_SONGS") != null)
+            {
+                foreach (var t in hoot.Titles) Console.WriteLine("  " + arc + " 0x" + t.Code.ToString("X2") + " " + Measure(hoot, dir, t.Code, 8).note + " | " + t.Title);
+                continue;
+            }
             var r = (sound: false, cause: "", note: "");
             int code = 0;
             foreach (var t in hoot.Titles.Take(6)) { code = t.Code; r = Measure(hoot, dir, code, 8); if (r.sound) break; }
+            if (arc == "midres")
+            {
+                // YM3812 + YM2203 + OKI: 렌더한 VGM을 VgmPlayer로 재생하면 들린다
+                var vgm = HootDeco.Render(hoot, dir, code, 6, 0);
+                var p = new VgmPlayer(); p.Start(vgm, 0, null);
+                double peak = 0;
+                for (int i = 0; i < 6 * VgmSong.Rate; i++) { p.Step(); p.Generate(out double l, out _); peak = Math.Max(peak, Math.Abs(l)); }
+                check("hoot deco midres: audible through VGM (YM3812 + YM2203 + OKIM6295)", peak > 0.02 && vgm.ChipSummary.Contains("OPL"), "peak " + peak.ToString("0.000") + ", " + vgm.ChipSummary);
+            }
             check("hoot deco " + arc + " (" + hoot.Type + "): song 0x" + code.ToString("X2") + " makes sound in 8 s", r.sound, r.note);
         }
     }
@@ -87,7 +101,8 @@ public static class HootDecoTests
         m.RunSeconds(seconds);
         if (m.PcCount != null) Console.WriteLine("  PC: " + string.Join(" ", m.PcCount.OrderByDescending(x => x.Value).Take(24).Select(x => x.Key.ToString("X4") + ":" + x.Value)));
         int fm = m.Log.Count(x => x.chip == 0 && x.reg == 0x08 && (x.val & 0x78) != 0);
-        int opn = m.Log.Count(x => x.chip == 1 && x.reg == 0x28 && (x.val & 0xF0) != 0);
+        int opn = m.Log.Count(x => x.chip == 1 && x.reg == 0x28 && (x.val & 0xF0) != 0)
+            + m.Log.Count(x => x.chip == 4 && ((x.reg >= 0xB0 && x.reg <= 0xB8 && (x.val & 0x20) != 0) || (x.reg == 0xBD && (x.val & 0x1F) != 0)));   // midres YM3812 키온도
         int pcm = m.Oki1.Starts + m.Oki2.Starts;
         bool sound = fm + opn >= 16 || pcm >= 2;
         string cause = sound ? "sound" : m.Missing.Count > 0 ? "missing-file" : m.Log.Count == 0 ? (m.YmIrqs + m.TimerIrqs == 0 ? "no-irq" : "no-chip-writes") : "writes-no-keyon";

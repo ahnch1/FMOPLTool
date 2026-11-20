@@ -31,6 +31,7 @@
 | 2.0.4 | 8-6 (메가드라이브) | hoot megadrive generic_z80 · iyinc: `Audio/HootMegaDrive.cs` (Z80 사운드 쪽 · 카트리지의 Z80 드라이버를 RAM에, 요청 주소) |
 | 2.0.5 | 8-7 (X68000) | MC68000 `Audio/Cpu/M68000.cs` + hoot x68k generic: `Audio/HootX68k.cs` (OPM · ADPCM · DMA · MFP, E00010h = hoot가 대신 하는 IOCS · DOS) |
 | 2.0.6 | 8-7 (X68000 MIDI) | x68k MIDI 판: YM3802 MIDI 보드 (EAFA00h) → 살아 있는 MIDI 곡 (`HootX68k.LoadMidi`) |
+| 2.1.21 | 8-8b 더함 (midres) | hoot dataeast midres (Midnight Resistance): `Audio/HootDeco.cs` midres 배치 — YM3812 (타이머 = IRQ2) · YM2203 · OKIM6295 · 명령 138000h |
 | 2.1.20 | — (UI) | **Hoot 페이지** (PLAY, Jukebox 옆): 같은 `JukeboxView` + 왼쪽 `Shell/HootBrowser.cs` (목록 고르기 · 설정 · `HootTree`), 왼쪽 목록 접점 `ISongList`, 설정 Preferences → Hoot (HootXmlFolders · HootDataFolder), 처음 열 때 읽음. 왼쪽 목록 [hoot] 버튼은 없앰 |
 | 2.1.19 | 8-8l (데이터 이스트 6502) | hoot dataeast cobracom · drgninja · karnov · triothep · lastmisn · makyosen: `Audio/HootDeco6502.cs` (6502 + YM2203 + YM3812/YM3526 + OKIM6295), 6502 `DecimalMode` · `OpcodeMap` |
 | 2.1.18 | 8-8k (토아플랜 1 · generic) | hoot toaplan generic (Flying Shark · Twin Cobra · Rally Bike · Truxton · Hellfire · Zero Wing · Demon's World · Out Zone · Gulf War 2): `Audio/HootToaplan.cs` (Z80 + YM3812, 같이 쓰는 RAM 명령) |
@@ -255,6 +256,7 @@
   - hoot 옵션 decrypt (ghostb · srdarwin · oscar) = DECO222: 8000h 이상의 명령 바이트만 bit5 · bit6 바꿈 → `Cpu6502.OpcodeMap`. 10진 모드는 2A03에 없어 `Cpu6502.DecimalMode`를 새로 (기본 꺼짐, NES · HuC6280 그대로)
   - OPL은 바뀐 레지스터만 VGM에 (토아플랜과 같음). 곡 코드 위 바이트 (extcode, gondo 0x10A 등)는 버림
   - 빠진 것: midres (HuC6280 사운드 CPU), brkthru · darwin · exprraid (6809 사운드 CPU — 스캔하면 벡터가 엉뚱함)
+- **midres (v2.1.21, 1 / 1 · 12곡)**: HuC6280 보드인데 YM2151 대신 YM3812. 칩 자리는 ROM이 TAM으로 MPR2에 넣는 쪽 번호 (84h = 108000h YM3812, 8Ch = 118000h YM2203, 98h = 130000h OKI, 9Ch = 138000h 명령)로 확인 — MAME dec0 midres_s_map과 같음. 벡터: IRQ1 = NMI = E111h (명령 처리), IRQ2 = 타이머 = E0CAh (음악 틱, YM3812 타이머 1을 다시 건다) → YM3812 타이머 = IRQ2. 클럭 YM3812 3MHz · YM2203 1.5MHz · OKI 1MHz (MAME 기억). 0x5A (Intermission)는 8초에 OKI 하나 — 짧은 징글일 수 있음
 - 다음 (8-8m): Z80 + YM2151 + OKIM6295 작은 보드 (tecmo16 · raizing mahou · bgaregga · banpresto dbz · dooyong …) — MAME 배치를 하나씩 확인해 `HootOpmBoard.Layout`에, atari system1 (6502), 그 뒤 새 칩
   - 남은 것 (8-8a): "소리 남" 기준이 처음 6초에 키온 하나라 몇 항목은 ADPCM 하나뿐 (driftout · liquidk · megablst 등 첫 곡이 짧은 효과음일 수 있음) — 귀로 확인, bshark (code0 · code1 둘), taito z 계열 다른 보드
 

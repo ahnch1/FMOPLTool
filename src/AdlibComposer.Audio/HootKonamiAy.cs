@@ -12,6 +12,7 @@ namespace AdlibComposer.Audio;
 /// type timeplt: Time Pilot · Tutankham · Jungler · Chiki Chiki Boys): 사운드 CPU를 흉내 낸다.
 /// <para>기계 (MAME galaxian / scramble sound · timeplt_audio): Z80 1.79MHz, AY × 2 1.79MHz. 명령 = AY #1 포트 A (레지스터 14), AY #1 포트 B = 코나미 타이머 (표 [(사이클 ÷ 512) mod 10]),
 /// 메인이 쓰면 IRQ (IM 1). scramble = ROM 0000h~, RAM 8000h~83FFh (거울 ~9FFFh), I/O 포트 bit6 = AY #1 주소 · bit7 = 자료, bit4 = AY #2 주소 · bit5 = 자료 (MAME konami_ay8910_r/w).
+/// frogger (Frogger · Hustler, MAME galaxian frogger_sound_map): ROM 0000h~1FFFh (앞 800h는 bit0 · bit1이 바뀌어 있음 → 되돌림), RAM 4000h~43FFh (거울 ~5FFFh), 6000h~ 필터, AY 하나 — I/O bit6 = 자료 (읽기도), bit7 = 주소.
 /// timeplt = ROM 0000h~, RAM 3000h~33FFh (거울 ~3FFFh — locomotn 배치 Jungler는 RAM 2000h~ · 3000h = 필터, ROM이 가리키는 쪽으로 고름), 4000h AY #1 자료 · 5000h 주소 · 6000h AY #2 자료 · 7000h 주소 (각 거울 ~FFFh), 8000h~ = RC 필터 (버림).</para>
 /// <para>곡: 부팅 1초 뒤 명령, 180초를 AY × 2 VGM으로.</para>
 /// </summary>
@@ -25,7 +26,7 @@ public static class HootKonamiAy
     {
         if (!string.Equals((driver ?? "").Trim(), "konami", StringComparison.OrdinalIgnoreCase)) return false;
         string t = (type ?? "").Trim().ToLowerInvariant();
-        return t == "scramble" || t == "timeplt" || t == "pooyan";
+        return t == "scramble" || t == "timeplt" || t == "pooyan" || t == "frogger";
     }
 
     public static VgmSong Render(HootArchive.Entry e, string dir, int code, double seconds = DefaultSeconds, double fade = DefaultFade)
@@ -57,7 +58,8 @@ public static class HootKonamiAy
         if (!any) missing.Add("(code)");
         string ty = (e.Type ?? "").Trim().ToLowerInvariant();
         bool timeplt = ty == "timeplt" || ty == "pooyan";   // pooyan = timeplt 보드 (Pooyan · Loco-Motion · Tactician)
-        var m = new Machine(rom, timeplt);
+        if (ty == "frogger") for (int i = 0; i < 0x800; i++) rom[i] = (byte)((rom[i] & 0xFC) | ((rom[i] & 1) << 1) | ((rom[i] >> 1) & 1));   // MAME init_frogger
+        var m = new Machine(rom, timeplt) { Frogger = ty == "frogger" };
         m.ClearBit7 = ty == "pooyan";   // Pooyan 계열: 드라이버가 bit7 = 멈춤으로 봄 — hoot 코드 (86h · 92h …)는 bit7을 빼고 보냄
         if (timeplt)
         {
@@ -82,6 +84,8 @@ public static class HootKonamiAy
         public readonly byte[] Rom;
         public readonly bool TimePilot;
         public bool ClearBit7;
+        /// <summary>frogger 배치 (AY 하나, RAM 4000h).</summary>
+        public bool Frogger;
         public readonly byte[] Ram = new byte[0x400];
         /// <summary>timeplt 배치의 RAM 자리: 3000h (Time Pilot · Tutankham) 또는 2000h (locomotn: Jungler).</summary>
         public int RamBase = 0x3000;
@@ -150,7 +154,11 @@ public static class HootKonamiAy
         {
             int r = ayAddr[chip];
             if (chip == 0 && r == 14) { LatchReads++; return latch; }
-            if (chip == 0 && r == 15) return Timer[(int)(Cpu.Cycles / 512 % 10)];
+            if (chip == 0 && r == 15)
+            {
+                int t = Timer[(int)(Cpu.Cycles / 512 % 10)];
+                return Frogger ? (t & 0xD7) | ((t & 8) << 2) | ((t & 0x20) >> 2) : t;   // frogger: bit3 · bit5 바꿈 (MAME frogger_sound_timer_r)
+            }
             return ayReg[chip, r];
         }
 
@@ -169,6 +177,13 @@ public static class HootKonamiAy
         {
             a &= 0xFFFF;
             if (TimePilot && a >= RamBase && a < RamBase + 0x1000) return Ram[a & 0x3FF];
+            if (Frogger)
+            {
+                if (a < 0x2000) return Rom[a];
+                if (a >= 0x4000 && a < 0x6000) return Ram[a & 0x3FF];
+                OtherReads.TryGetValue(a, out int c0); OtherReads[a] = c0 + 1;
+                return 0xFF;
+            }
             if (a < 0x3000) return Rom[a];
             if (TimePilot)
             {
@@ -185,6 +200,11 @@ public static class HootKonamiAy
         {
             a &= 0xFFFF;
             if (TimePilot && a >= RamBase && a < RamBase + 0x1000) { Ram[a & 0x3FF] = v; return; }
+            if (Frogger)
+            {
+                if (a >= 0x4000 && a < 0x6000) Ram[a & 0x3FF] = v;
+                return;   // ROM · 6000h~ 필터
+            }
             if (a < 0x4000 && (TimePilot || a < 0x3000)) return;   // ROM · 필터 (locomotn 3000h~)
             if (TimePilot)
             {
@@ -209,6 +229,7 @@ public static class HootKonamiAy
         {
             port &= 0xFF;
             if (TimePilot) return 0xFF;
+            if (Frogger) return (byte)((port & 0x40) != 0 ? AyRead(0) : 0xFF);
             int v = 0xFF;
             if ((port & 0x80) != 0) v &= AyRead(0);
             if ((port & 0x20) != 0) v &= AyRead(1);
@@ -219,6 +240,7 @@ public static class HootKonamiAy
         {
             port &= 0xFF;
             if (TimePilot) return;
+            if (Frogger) { if ((port & 0x40) != 0) AyWrite(0, v); else if ((port & 0x80) != 0) ayAddr[0] = v & 15; return; }   // MAME frogger_ay8910_w
             // MAME konami_ay8910_w: bit6 · bit7 = AY #1 (명령 · 타이머가 있는 칩) 주소 · 자료, bit4 · bit5 = AY #2 — 주소가 자료보다 먼저
             if ((port & 0x40) != 0) ayAddr[0] = v & 15; else if ((port & 0x80) != 0) AyWrite(0, v);
             if ((port & 0x10) != 0) ayAddr[1] = v & 15; else if ((port & 0x20) != 0) AyWrite(1, v);
@@ -226,8 +248,8 @@ public static class HootKonamiAy
 
         public VgmSong ToVgm(double seconds, double fade)
         {
-            var w = new VgmWriter { System = (TimePilot ? "Konami Time Pilot" : "Konami Scramble") + " (hoot)", Notes = "hoot konami" };
-            w.SetClock(VgmWriter.ClockAy8910, AyClock, 0x40000000u);   // bit30 = AY 둘
+            var w = new VgmWriter { System = (TimePilot ? "Konami Time Pilot" : Frogger ? "Konami Frogger" : "Konami Scramble") + " (hoot)", Notes = "hoot konami" };
+            w.SetClock(VgmWriter.ClockAy8910, AyClock, Frogger ? 0u : 0x40000000u);   // bit30 = AY 둘
             double total = seconds * VgmSong.Rate;
             long at = 0;
             foreach (var x in Log.OrderBy(x => x.t))

@@ -31,6 +31,7 @@
 | 2.0.4 | 8-6 (메가드라이브) | hoot megadrive generic_z80 · iyinc: `Audio/HootMegaDrive.cs` (Z80 사운드 쪽 · 카트리지의 Z80 드라이버를 RAM에, 요청 주소) |
 | 2.0.5 | 8-7 (X68000) | MC68000 `Audio/Cpu/M68000.cs` + hoot x68k generic: `Audio/HootX68k.cs` (OPM · ADPCM · DMA · MFP, E00010h = hoot가 대신 하는 IOCS · DOS) |
 | 2.0.6 | 8-7 (X68000 MIDI) | x68k MIDI 판: YM3802 MIDI 보드 (EAFA00h) → 살아 있는 MIDI 곡 (`HootX68k.LoadMidi`) |
+| 2.1.54 | 8-9a 더함 (코나미 frogger) | hoot konami frogger (Frogger · Hustler): `HootKonamiAy` frogger 배치 (AY 하나, I/O bit6 자료 · bit7 주소, RAM 4000h, 사운드 ROM 앞 800h bit0 · 1 되돌림, 타이머 bit3 · 5 바꿈) |
 | 2.1.53 | 8-9e 더함 (코나미 lethal) | hoot konami lethal (Lethal Enforcers · G.I. Joe): `HootKonami54539` lethal 배치 (ROM ~EFFFh, RAM F000h, K054539 F800h, K054321 FC00h, YM2151 없음) |
 | 2.1.52 | 8-9i 더함 (코나미 Twin16) | uPD7759 마스터 모드 (칩이 ROM 머리 표에서 직접, VGM 8Ch bit31 · ROM 블록 92h · 뱅크 레지스터 3) + hoot konami twin16 (Devil World · Vulcan Venture · Final Round · Cue Brick · M.I.A.): `HootKonamiK007232` 배치 |
 | 2.1.51 | 8-9i 더함 (코나미 K007232 보드 셋) | hoot konami salamander (Salamander · Life Force) · hcastle (Haunted Castle · City Bomber · Kitten Kaboodle — YM3812 + SCC + K007232) · crimfght (Crime Fighters · Aliens): `HootKonamiK007232` 배치 표 |
@@ -120,7 +121,7 @@
 | 코나미 K053260 (053260) | 11 / 11, 606 / 616곡 (남은 10 = 정지 명령 7 · 효과음 3) | `--test hootk53` (K053260 합성 포함, HOOT_SONGS=1) |
 | 남코 System 2 (system2) | 25 / 26항목, 827 / 870곡 (C140 키온 498곡) — 무음 43 = Four Trax 27 (옵션 foutrax) · Final Lap 9 · Rolling Thunder 2 4 · 그 밖 3 | `--test hootns2` (HOOT_SONGS=1, HOOT_DEBUG=1 = C140 레지스터 분포) |
 | 타이토 SJ (taitosj) | 12 / 12, 285곡 모두 | `--test hootsj` (HOOT_SONGS=1) |
-| 코나미 Z80 + AY × 2 (scramble · timeplt · pooyan) | 13 / 13, 105 / 160 (pooyan 18 / 18) — 무음 41 = 한 곡을 채널마다 나눈 ch2 · ch3 파트와 일부 BGM (혼자 보내면 AY 쓰기 없음) | `--test hootkonay` (HOOT_SONGS=1) |
+| 코나미 Z80 + AY (scramble · timeplt · pooyan · frogger) | 15 / 15, 139 / 200 (pooyan 18 / 18, frogger 34 / 40) — 무음 41 = 한 곡을 채널마다 나눈 ch2 · ch3 파트와 일부 BGM (혼자 보내면 AY 쓰기 없음) | `--test hootkonay` (HOOT_SONGS=1) |
 | 아이렘 M62 / M52 (m62) | 15 / 15, 137 / 145 (남은 8 = Traverse USA 효과음 — MSM #2로 보임) | `--test hootm62` (HOOT_SONGS=1) |
 | 남코 Pac-Land 계열 (wsg63701) | 6 / 6, 157곡 모두 | `--test hootns86` (HOOT_SONGS=1, HOOT_DEBUG=1 = 슬롯 · 요청 바이트) |
 | 남코 System 86 (system86) | 5 / 5, 71곡 모두 (63701X 음성은 없음) | `--test hootns86` (6801 합성 둘 포함, HOOT_SONGS=1) |

@@ -9,11 +9,11 @@ namespace AdlibComposer.SelfTest;
 /// <summary>hoot 코나미 Z80 + AY × 2 (HootKonamiAy, type scramble · timeplt): 실제 zip, 진단 (HOOT_SONGS = 곡마다).</summary>
 public static class HootKonamiAyTests
 {
-    public static readonly string[] Archives = { "theend", "amidar", "scobra", "scramble", "stratgyx", "turtles", "sfx", "jungler", "timeplt", "tutankhm", "pooyan", "locomotn", "tactcian" };
+    public static readonly string[] Archives = { "theend", "amidar", "scobra", "scramble", "stratgyx", "turtles", "sfx", "jungler", "timeplt", "tutankhm", "pooyan", "locomotn", "tactcian", "frogger", "hustler" };
 
     public static void Run(Action<string, bool, string> check)
     {
-        check("hoot konami scramble · timeplt: playable, own board", HootArchive.Playable("konami", "scramble") && HootArchive.Playable("Konami", "TimePlt") && HootKonamiAy.Handles("konami", "timeplt") && !HootKonamiAy.Handles("konami", "053260"), "");
+        check("hoot konami scramble · timeplt: playable, own board", HootArchive.Playable("konami", "scramble") && HootArchive.Playable("Konami", "TimePlt") && HootKonamiAy.Handles("konami", "timeplt") && HootArchive.Playable("konami", "frogger") && !HootKonamiAy.Handles("konami", "053260"), "");
 
         string root = SopTests.FindDir("_incoming");
         string folder = root == null ? null : Path.Combine(root, "Hootarchive", "roms");

@@ -93,6 +93,8 @@ public static class Program
             // 진단: --hootx68survey X68k폴더 [zip 수] [초]
             return HootX68kTests.Survey(args[1], args.Length > 2 ? int.Parse(args[2]) : 50, args.Length > 3 ? double.Parse(args[3], System.Globalization.CultureInfo.InvariantCulture) : 6);
         }
+        if (args.Length > 1 && args[0] == "--hootkoeitrace") return KoeiTrace.Run(args[1], args.Length > 2 ? double.Parse(args[2], System.Globalization.CultureInfo.InvariantCulture) : 10);
+        if (args.Length > 1 && args[0] == "--hootmdprobe") return HootMegaDriveTests.Probe(args[1], args.Length > 2 ? int.Parse(args[2]) : 0);
         if (args.Length > 1 && args[0] == "--hootmdsurvey")
         {
             // 진단: --hootmdsurvey smd폴더 [zip 수] [초]

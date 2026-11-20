@@ -42,9 +42,22 @@ public static class HootMegaDrive
         }
         var m = new Machine(rom ?? new byte[0x8000]);
         m.Missing.AddRange(missing);
+        if (string.Equals(e.Type, "koei", StringComparison.OrdinalIgnoreCase))
+        {
+            int maxCode = e.Titles.Count > 0 ? e.Titles.Max(t => t.Code) : 0;
+            return Koei.Boot(m.Rom, maxCode, missing);
+        }
         long top = e.Option("topaddr", 0);
         // 68000이 보통 Z80 뱅크를 사운드 데이터 쪽에 맞춰 둔다: 처음 뱅크 = 드라이버가 있는 32KB 칸 (verytex: 8000h 창의 곡 표를 읽음)
         m.Bank = (int)((top >> 15) & 0x1FF);
+        bool anyData = false;
+        for (int k = 1; k <= 4; k++) anyData |= e.Options.ContainsKey("data" + k) && e.Options.ContainsKey("size" + k);
+        if (!anyData)
+        {
+            // data · size가 없는 항목 (castlillj): topaddr부터 드라이버 칸 전부 (1c00 = 1C00h부터는 변수 칸이라 그 앞까지)
+            int size = string.Equals(e.Type, "1c00", StringComparison.OrdinalIgnoreCase) ? 0x1C00 : 0x2000;
+            for (int i = 0; i < size; i++) m.Ram[i] = top + i < m.Rom.Length ? m.Rom[top + i] : (byte)0;
+        }
         for (int k = 1; k <= 4; k++)
         {
             string dk = "data" + k, sk = "size" + k;
@@ -55,7 +68,15 @@ public static class HootMegaDrive
             top += size;
         }
         // reqaddr가 없으면 (iyinc · Falcom 드라이버 등) 1FFFh: lordmon 본 고리가 LD A,(1FFFh) · OR A · CALL NZ로 명령을 기다린다
-        m.ReqAddr = e.Option("reqaddr", 0x1FFF) & 0x1FFF;
+        // 1c00 = 세가 SMPS Z80 (변수 칸 1C00h~): 소리 큐 1C0Ah~1C0Ch (1C09h = 지금 소리), 68000이 곡 번호 (81h~)를 1C0Ah에 쓴다
+        // (ryukoken 68000 코드: move.b d7,$A01C0A). 곡 표 위치 1C02h~1C03h도 68000이 쓴다 (ryukoken = 8000h, 뱅크 창) → 비어 있으면 8000h.
+        bool smps = string.Equals(e.Type, "1c00", StringComparison.OrdinalIgnoreCase);
+        m.ReqAddr = e.Option("reqaddr", smps ? 0x1C0A : 0x1FFF) & 0x1FFF;
+        if (smps)
+        {
+            int ptr = m.Ram[0x1C02] | (m.Ram[0x1C03] << 8);
+            if (ptr == 0 || ptr == 0xFFFF) { m.Ram[0x1C02] = 0x00; m.Ram[0x1C03] = 0x80; }
+        }
         m.TrigAddr = e.Options.ContainsKey("trigadr") ? e.Option("trigadr", 0) & 0x1FFF : -1;
         m.TrigValue = e.Option("trigvalue", 1) & 0xFF;
         m.SubTrigAddr = e.Options.ContainsKey("trigsubadr") ? e.Option("trigsubadr", 0) & 0x1FFF : -1;
@@ -64,8 +85,126 @@ public static class HootMegaDrive
         return m;
     }
 
+    /// <summary>
+    /// 코에이 메가드라이브 사운드 (driver megadrive, type koei — hoot 옵션 없음): 카트리지에서 직접 찾는다.
+    /// <para>드라이버: 68000 적재 루틴 <c>lea end(pc),a0 · lea start(pc),a1 · suba.l a1,a0 · … move.b (a1)+,(a0)+ · dbf</c> (41FA · 43FA · 91C9)이 가리키는 ROM 조각 → Z80 RAM 0000h.
+    /// 두 세대: F3 31 00 20 C3 E0 00 (옛, 11게임) · F3 31 00 20 CD 00 05 (새: r3k2 · uw · gemfi).</para>
+    /// <para>우편함 (68000 코드의 가장 작은 <c>movea.l #$A000xx,a1</c> = 바탕: 옛 07h · 새 09h): 바탕 = 명령, +1 = 인자, +3~+5 = 24비트 ROM 주소 (위 바이트 먼저), +6 ← 02h (Z80이 받으면 지움).
+    /// 명령 (MD 버스를 흉내 낸 68000 부팅 추적으로 확인, --hootkoeitrace): 0 = 곡 주소 정하기, 1 = (새 세대 부팅 때 C8h), 2 = 멈춤, 3 = 연주 (인자 1).</para>
+    /// <para>곡 표: 68000 코드 안의 ROM 주소 (32비트) 줄 — 게임마다 모양이 달라 (곡 머리 · 채널 기록 · 곡 묶음 맨 앞) 길이가 hoot 곡 코드 최대값 ~ +2인 줄을 모두 후보로 두고,
+    /// 후보마다 첫 곡을 3초 돌려 키온이 가장 많은 줄을 고른다. 곡 코드 n = 표의 n−1번째.</para>
+    /// </summary>
+    public static class Koei
+    {
+        public static Machine Boot(byte[] rom, int maxCode, List<string> missing = null)
+        {
+            var (start, length) = FindDriver(rom);
+            int mailbox = FindMailbox(rom, start);
+            var tables = FindTables(rom, maxCode);
+            Machine best = null;
+            int bestKeys = -1;
+            foreach (var t in tables.Count > 0 ? tables : new List<long[]> { new long[0] })
+            {
+                var m = Create(rom, start, length, mailbox, t);
+                if (tables.Count <= 1 || t.Length == 0) { best = m; break; }
+                var probe = Create(rom, start, length, mailbox, t);
+                probe.Play(1);
+                probe.RunSeconds(3);
+                int keys = probe.Log.Count(x => x.chip == 0 && x.reg == 0x28 && (x.val & 0xF0) != 0) + probe.Log.Count(x => x.chip == 2 && (x.val & 0x90) == 0x90 && (x.val & 0x0F) != 0x0F);
+                if (keys > bestKeys) { bestKeys = keys; best = m; }
+            }
+            if (missing != null) best.Missing.AddRange(missing);
+            if (start < 0) best.Missing.Add("(코에이 드라이버를 찾지 못함)");
+            if (tables.Count == 0) best.Missing.Add("(코에이 곡 표를 찾지 못함)");
+            return best;
+        }
+
+        private static Machine Create(byte[] rom, int start, int length, int mailbox, long[] table)
+        {
+            var m = new Machine(rom) { KoeiMailbox = mailbox, KoeiTable = table };
+            if (start >= 0) Array.Copy(rom, start, m.Ram, 0, Math.Min(length, 0x2000));
+            // 새 세대: 부팅 때 68000이 명령 1 · 인자 C8h를 보낸다
+            if (start >= 0 && rom[start + 4] == 0xCD) m.KoeiSend(1, 0xC8, 0);
+            m.RunSeconds(0.5);
+            return m;
+        }
+
+        /// <summary>68000 적재 루틴이 Z80 RAM으로 옮기는 ROM 조각 (시작, 길이). 없으면 (−1, 0).</summary>
+        public static (int start, int length) FindDriver(byte[] rom)
+        {
+            for (int p = 0; p + 12 < rom.Length && p < 0x10000; p += 2)
+            {
+                if (rom[p] != 0x41 || rom[p + 1] != 0xFA || rom[p + 4] != 0x4E || rom[p + 5] != 0x71 || rom[p + 6] != 0x43 || rom[p + 7] != 0xFA
+                    || rom[p + 10] != 0x4E || rom[p + 11] != 0x71 || rom[p + 12] != 0x91 || rom[p + 13] != 0xC9) continue;
+                int end = p + 2 + (short)(rom[p + 2] << 8 | rom[p + 3]);
+                int start = p + 8 + (short)(rom[p + 8] << 8 | rom[p + 9]);
+                if (start <= 0 || end <= start || end > rom.Length) continue;
+                return (start, end - start + 1);   // dbf: 차이 + 1 바이트
+            }
+            return (-1, 0);
+        }
+
+        /// <summary>우편함 바탕: 드라이버 앞 68000 코드의 movea.l #$A000xx,a1 (227C 00A0 00xx) 중 가장 작은 xx. 없으면 세대로 (옛 07h · 새 09h).</summary>
+        public static int FindMailbox(byte[] rom, int driverStart)
+        {
+            int best = int.MaxValue;
+            int limit = driverStart > 0 ? driverStart : Math.Min(rom.Length, 0x10000);
+            for (int p = 0; p + 6 <= limit; p += 2)
+                if (rom[p] == 0x22 && rom[p + 1] == 0x7C && rom[p + 2] == 0x00 && rom[p + 3] == 0xA0 && rom[p + 4] == 0x00 && rom[p + 5] > 0 && rom[p + 5] < 0x20)
+                    best = Math.Min(best, rom[p + 5]);
+            if (best != int.MaxValue) return best;
+            return driverStart >= 0 && rom[driverStart + 4] == 0xCD ? 9 : 7;
+        }
+
+        /// <summary>곡 표 후보: 서로 다른 ROM 주소 (32비트, 서로 20000h 안) 줄 가운데 길이가 maxCode ~ maxCode + 2인 것 (앞에서부터 maxCode개).</summary>
+        public static List<long[]> FindTables(byte[] rom, int maxCode)
+        {
+            var list = new List<long[]>();
+            if (maxCode < 1) return list;
+            long Long(int p) { return (long)rom[p] << 24 | (long)rom[p + 1] << 16 | (long)rom[p + 2] << 8 | rom[p + 3]; }
+            for (int i = 0; i + 16 <= rom.Length;)
+            {
+                var vals = new List<long>();
+                int j = i;
+                while (j + 4 <= rom.Length)
+                {
+                    long v = Long(j);
+                    if (v < 0x200 || v >= rom.Length || (vals.Count > 0 && Math.Abs(v - vals[0]) > 0x20000) || vals.Contains(v)) break;
+                    vals.Add(v); j += 4;
+                }
+                if (vals.Count >= 4)
+                {
+                    if (vals.Count >= maxCode && vals.Count <= maxCode + 2) list.Add(vals.Take(maxCode).ToArray());
+                    i = j;
+                }
+                else i += 2;
+            }
+            return list;
+        }
+    }
+
     public sealed class Machine : IZ80Bus
     {
+        /// <summary>코에이: 우편함 바탕 (−1 = 코에이 아님), 곡 표 (곡 코드 n = n−1번째 ROM 주소).</summary>
+        public int KoeiMailbox = -1;
+        public long[] KoeiTable = new long[0];
+        private readonly Queue<(int cmd, int arg, long addr)> koeiQueue = new Queue<(int, int, long)>();
+
+        /// <summary>코에이 명령 하나를 줄에 (Z80이 앞 명령을 받은 뒤 우편함에 쓴다).</summary>
+        public void KoeiSend(int cmd, int arg, long addr) { koeiQueue.Enqueue((cmd, arg, addr)); KoeiPump(); }
+
+        private void KoeiPump()
+        {
+            if (KoeiMailbox < 0 || koeiQueue.Count == 0) return;
+            int b = KoeiMailbox;
+            if (Ram[b + 6] == 2) return;   // 앞 명령을 아직 안 받음
+            var (cmd, arg, addr) = koeiQueue.Dequeue();
+            Ram[b + 1] = (byte)arg;
+            Ram[b + 3] = (byte)(addr >> 16); Ram[b + 4] = (byte)(addr >> 8); Ram[b + 5] = (byte)addr;
+            Ram[b] = (byte)cmd;
+            Ram[b + 6] = 2;
+        }
+
         public readonly byte[] Rom;
         public readonly byte[] Ram = new byte[0x2000];
         public readonly Z80 Cpu;
@@ -97,6 +236,15 @@ public static class HootMegaDrive
             Log.Clear();
             Log.AddRange(init);
             playStart = Cpu.Cycles;
+            if (KoeiMailbox >= 0)
+            {
+                // 68000 순서 (uw 추적): 멈춤 → 곡 주소 → 연주
+                if (code < 1 || code > KoeiTable.Length) return;
+                KoeiSend(2, 0, 0);
+                KoeiSend(0, 0, KoeiTable[code - 1]);
+                KoeiSend(3, 1, 0);
+                return;
+            }
             if (ReqAddr >= 0) Ram[ReqAddr] = (byte)code;
             if (TrigAddr >= 0) Ram[TrigAddr] = (byte)TrigValue;
             if (SubTrigAddr >= 0) Ram[SubTrigAddr] = (byte)SubTrigValue;
@@ -113,7 +261,7 @@ public static class HootMegaDrive
             while (Cpu.Cycles < end)
             {
                 long now = Cpu.Cycles;
-                if (now >= nextFrame) { nextFrame += frameCycles; vblank = true; Frames++; }
+                if (now >= nextFrame) { nextFrame += frameCycles; vblank = true; Frames++; KoeiPump(); }
                 if (now >= nextTimerA) { nextTimerA += TimerAPeriod; if ((timerCtl & 4) != 0) timerFlags |= 1; }
                 if (now >= nextTimerB) { nextTimerB += TimerBPeriod; if ((timerCtl & 8) != 0) timerFlags |= 2; }
                 if (vblank && Cpu.Iff1)

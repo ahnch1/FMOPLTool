@@ -1,4 +1,4 @@
-# FMOPLTool 할 일 (2026-11-20, v2.1.15 기준)
+# FMOPLTool 할 일 (2026-11-20, v2.1.16 기준)
 
 - 이 파일 = **해야 할 일**과 **남겨 둔 일**(보류)을 체크박스로. 끝난 일의 자세한 내용 · 진단 명령 · 원인 분석은 [`hoot-status.md`](hoot-status.md), 사용법 · 구조는 [`../README.md`](../README.md).
 - 옛 할 일 기록(v1.x ~ v2.0 진행 일지)은 `_incoming/Todo.md`(git에 안 들어감)에 그대로 둔다.
@@ -12,8 +12,8 @@
 |---|---:|---:|
 | 목록 전체 | 9,489 | 221,712 |
 | 아카이브 zip이 있는 항목 | 8,432 | — |
-| **재생 규칙에 든 항목 (zip 있음)** | **7,340 (87.0%)** | **194,653** (그 형식 전체) |
-| 아직 재생 못 하는 항목 (zip 있음) | 1,092 | 약 27,060 (그 형식 전체) |
+| **재생 규칙에 든 항목 (zip 있음)** | **7,359 (87.3%)** | **195,049** (그 형식 전체) |
+| 아직 재생 못 하는 항목 (zip 있음) | 1,073 | 약 26,660 (그 형식 전체) |
 | zip이 없는 항목 | 1,057 | — |
 
 곡 수는 zip 유무와 상관없이 그 형식의 titlelist 전체. "재생 규칙에 듦" = 트리에서 두 번 클릭하면 기계 흉내로 곡을 만든다는 뜻. 그 안에서도 무음인 항목이 있다 (아래 2장 "소리 남" · 4장).
@@ -39,7 +39,7 @@
 | 슈퍼 패미컴 | spc 531 | 15,139 | SPC700 + S-DSP | 파일 있음 |
 | NES · 게임보이 | nsf 14 · gbs 13 | 633 | 6502 · LR35902 | 파일 있음 |
 | 네오지오 | generic 146 | 4,070 | `HootNeoGeo` | 137 / 146 |
-| 메가드라이브 | generic_z80 108 · iyinc 23 | 2,155 | `HootMegaDrive` | 93 / 131 |
+| 메가드라이브 | generic_z80 108 · iyinc 23 · koei 14 · 1c00 5 | 2,551 | `HootMegaDrive` (koei · 1c00 v2.1.16) | 112 / 150 |
 | 타이토 YM2610 | f2system 40 · bsystem 11 · dual68 10 · fx1a 3 · sonicb 2 · xsystem 1 | 2,491 | `HootTaito` (v2.1.6) | 67 / 67 |
 | 캡콤 CPS-1 · 테크노스 | cps1 29 · ddragon2 7 · ddragon3 2 · ctribe 1 | 약 2,600 | `HootOpmBoard` (v2.1.7) | 39 / 39 |
 | 세가 System 1 · 아이렘 M72 | system1 29 · m72 23 | 약 1,200 | `HootSegaSystem1` · `HootM72` (v2.1.8) | 52 / 52 |
@@ -59,7 +59,7 @@
 ### 3.1 CPU · 칩이 다 있음 — 보드 배치만 (먼저)
 - [x] 캡콤 ZN (capcom zn) 10 · 341곡 — v2.1.15, 래치 포트 00h + NMI, 16비트 코드 위 바이트 먼저 (14 / 14)
 - [x] 캡콤 CPS-1 QSound (capcom cps1qs) 4 · 697곡 — v2.1.15, Z80 ROM Kabuki 풀기 (열쇠는 ROM으로 고름)
-- [ ] 메가드라이브 Koei (megadrive koei) 14 · 330곡, 1c00 5 · 66곡 — `HootMegaDrive`의 요청 방식 변형
+- [x] 메가드라이브 Koei (megadrive koei) 14 · 330곡, 1c00 5 · 66곡 — v2.1.16: 1c00 = SMPS Z80 큐 1C0Ah, koei = 드라이버 · 우편함 · 곡 표를 카트리지에서 찾음 (19 / 19)
 - [ ] 타이토 fullt 9 · 147곡 — Z80 + YM2151 + MSM5205 (모두 있음)
 - [ ] 토아플랜 generic 9 · 125곡 — Z80 + YM3526 (OPL)
 - [ ] 데이터 이스트 cobracom 6 · drgninja 6 · karnov 3 · triothep 2 · midres 1 · brkthru · lastmisn · exprraid · makyosen — 6502 + YM2203 + YM3812/YM3526 (+ OKI), 약 25항목

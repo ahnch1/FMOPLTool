@@ -67,7 +67,25 @@ public static class HootMegaDriveTests
         string root = SopTests.FindDir("_incoming");
         string folder = root == null ? null : Path.Combine(root, "Hootarchive", "smd");
         if (folder == null || !Directory.Exists(folder)) { Console.WriteLine("SKIP  hoot megadrive real files (_incoming/Hootarchive/smd not found)"); return; }
-        foreach (var arc in new[] { "zoopu_smd", "lordmon_smd" })   // generic_z80 · iyinc (reqaddr 없음 → 1FFFh)
+        check("hoot megadrive: 1c00 · koei playable", HootArchive.Playable("megadrive", "1c00") && HootArchive.Playable("megadrive", "koei"), "");
+        // 코에이: 드라이버 · 우편함 · 곡 표를 카트리지에서 — 68000 부팅 추적 (--hootkoeitrace)에서 본 곡 주소와 맞는지
+        foreach (var (arc, mailbox, song, seen) in new[] { ("g_r3k2", 9, 1, 0x05C000L), ("g_nobu", 7, 1, 0x07C0C8L), ("g_uw", 9, 22, 0x0F81CAL) })
+        {
+            string zip = Path.Combine(folder, arc + ".zip");
+            if (!File.Exists(zip)) { Console.WriteLine("SKIP  hoot megadrive koei " + arc + " (zip not found)"); continue; }
+            string dir = ZipFolder.Extract(zip);
+            var hoot = Directory.GetFiles(dir, "*" + HootArchive.Extension).Select(HootArchive.Load).FirstOrDefault(x => x.Driver == "megadrive" && x.Type == "koei");
+            if (hoot == null) { check("hoot megadrive koei " + arc + ": .hoot entry", false, "none"); continue; }
+            var m = HootMegaDrive.Boot(hoot, n => { string f = HootArchive.FindFile(dir, n); return f != null ? File.ReadAllBytes(f) : null; });
+            var rom = m.Rom;
+            var (start, len) = HootMegaDrive.Koei.FindDriver(rom);
+            check("hoot megadrive koei " + arc + ": driver · mailbox " + mailbox.ToString("X2") + "h · table entry " + song + " = traced " + seen.ToString("X6") + "h",
+                start > 0 && m.KoeiMailbox == mailbox && m.KoeiTable.Length >= song && m.KoeiTable[song - 1] == seen,
+                "driver " + start.ToString("X") + "+" + len.ToString("X") + ", mailbox " + m.KoeiMailbox.ToString("X2") + ", entry " + (m.KoeiTable.Length >= song ? m.KoeiTable[song - 1].ToString("X6") : "-"));
+            var r = Measure(hoot, dir, song, 6);
+            check("hoot megadrive koei " + arc + ": song " + song + " makes sound in 6 s", r.sound, r.note);
+        }
+        foreach (var arc in new[] { "zoopu_smd", "lordmon_smd", "castlillj_smd", "ryukoken_smd" })   // generic_z80 · iyinc (reqaddr 없음 → 1FFFh) · 1c00 (SMPS Z80, 1C0Ah · 곡 표 8000h)
         {
             string zip = Path.Combine(folder, arc + ".zip");
             if (!File.Exists(zip)) { Console.WriteLine("SKIP  hoot megadrive " + arc + " (zip not found)"); continue; }
@@ -96,6 +114,28 @@ public static class HootMegaDriveTests
         return (sound, cause, note);
     }
 
+    /// <summary>진단: --hootmdprobe zip [곡 순번] — 곡 번호를 쓸 주소를 1C00h~1C3Fh에서 하나씩 바꿔 보며 소리 (요청 주소 찾기).</summary>
+    public static int Probe(string zip, int songIndex)
+    {
+        string dir = ZipFolder.Extract(zip);
+        var e = Directory.GetFiles(dir, "*" + HootArchive.Extension).Select(HootArchive.Load).FirstOrDefault(x => x.Driver == "megadrive");
+        if (e == null) { Console.WriteLine("no megadrive .hoot entry"); return 1; }
+        int code = e.Titles.Count > songIndex ? e.Titles[songIndex].Code : 0x81;
+        Console.WriteLine(e.Name + " | " + e.Type + " | code 0x" + code.ToString("X2"));
+        for (int a = 0x1C00; a < 0x1C40; a++)
+        {
+            var m = HootMegaDrive.Boot(e, name => { string f = HootArchive.FindFile(dir, name); return f != null ? File.ReadAllBytes(f) : null; });
+            m.ReqAddr = a; m.TrigAddr = -1;
+            m.Play(code);
+            m.RunSeconds(6);
+            int fm = m.Log.Count(x => x.chip == 0 && x.reg == 0x28 && (x.val & 0xF0) != 0);
+            int psg = m.Log.Count(x => x.chip == 2 && (x.val & 0x90) == 0x90 && (x.val & 0x0F) != 0x0F);
+            int dac = m.Log.Count(x => x.chip == 0 && x.reg == 0x2A);
+            if (fm + psg + dac > 0) Console.WriteLine("  " + a.ToString("X4") + ": fm " + fm + " psg " + psg + " dac " + dac + " writes " + m.Log.Count + " PC " + m.Cpu.PC.ToString("X4"));
+        }
+        return 0;
+    }
+
     /// <summary>진단: --hootmdsurvey smd폴더 [zip 수] [초].</summary>
     public static int Survey(string folder, int count, double seconds)
     {
@@ -112,6 +152,14 @@ public static class HootMegaDriveTests
                 var e = HootArchive.Load(h);
                 if (!e.Driver.Equals("megadrive", StringComparison.OrdinalIgnoreCase) || e.Titles.Count == 0) continue;
                 string key = e.Type.ToLowerInvariant();
+                string only = Environment.GetEnvironmentVariable("HOOT_TYPE");
+                if (!string.IsNullOrWhiteSpace(only) && !only.Split(',').Any(t => t.Trim().Equals(key, StringComparison.OrdinalIgnoreCase))) continue;
+                if (int.TryParse(Environment.GetEnvironmentVariable("HOOT_SONGS"), out int nSongs))
+                    foreach (var t in e.Titles.Take(nSongs))
+                    {
+                        var s = Measure(e, dir, t.Code, seconds);
+                        Console.WriteLine("  0x" + t.Code.ToString("X2") + " " + (s.sound ? "OK  " : "MUTE") + " " + t.Title + " | " + s.note);
+                    }
                 stats.TryGetValue(key, out var st); st.total++;
                 (bool ok, string cause, string note) r = (false, "none", "");
                 try

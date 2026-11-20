@@ -31,6 +31,7 @@
 | 2.0.4 | 8-6 (메가드라이브) | hoot megadrive generic_z80 · iyinc: `Audio/HootMegaDrive.cs` (Z80 사운드 쪽 · 카트리지의 Z80 드라이버를 RAM에, 요청 주소) |
 | 2.0.5 | 8-7 (X68000) | MC68000 `Audio/Cpu/M68000.cs` + hoot x68k generic: `Audio/HootX68k.cs` (OPM · ADPCM · DMA · MFP, E00010h = hoot가 대신 하는 IOCS · DOS) |
 | 2.0.6 | 8-7 (X68000 MIDI) | x68k MIDI 판: YM3802 MIDI 보드 (EAFA00h) → 살아 있는 MIDI 곡 (`HootX68k.LoadMidi`) |
+| 2.1.16 | 8-6 더함 (메가드라이브 1c00 · koei) | hoot megadrive 1c00 (세가 SMPS Z80) · koei (드라이버 · 우편함 · 곡 표를 카트리지에서 찾음): `Audio/HootMegaDrive.cs`, 진단 `--hootkoeitrace` (MD 버스 68000 부팅) |
 | 2.1.15 | 8-8i (CPS-1 QSound · ZN) | hoot capcom cps1qs · zn: `Audio/HootCps2.cs` (Kabuki 풀기 · 래치 + NMI), Z80 `OpcodeRead` (명령 바이트 따로 읽기) |
 | 2.1.14 | — (도구) | hoot 목록의 없는 zip 목록 · 폴더 구성 CSV: `Formats/HootMissing.cs` (트리 오른쪽 클릭, `--hootmissing`) |
 | 2.1.13 | 8-8h (세가 PCM 보드 · 새 칩 SegaPCM) | hoot sega outrun · X · Y · hangon 계열: `Audio/HootSegaPcmBoard.cs`, 새 칩 `Audio/Chips/SegaPcm.cs` (VGM C0h) |
@@ -74,7 +75,7 @@
 | 세가 System 16A · 16B | 37 / 38 (eswat = zip에 사운드 ROM 없음), uPD7759는 처음 10곡 안에서 쓰는 8개에서 확인 | `--hoots16survey roms 100 4` |
 | 캡콤 CPS-2 (QSound HLE) | 38 / 38 | `--hootcps2survey roms 100 6` |
 | 세가 PCM 보드 (Out Run · X · Y · Hang-On 계열) | 20 / 24 | `--hootspcmsurvey roms 100 6` |
-| 메가드라이브 (generic_z80 · iyinc) | 93 / 131 (smd zip에 있는 것) — generic_z80 70/108 · iyinc 23/23 | `--hootmdsurvey smd 400 6` |
+| 메가드라이브 (generic_z80 · iyinc · 1c00 · koei) | 112 / 150 (smd zip에 있는 것) — generic_z80 70/108 · iyinc 23/23 · 1c00 5/5 · koei 14/14 | `--hootmdsurvey smd 400 6` (HOOT_TYPE · HOOT_SONGS) |
 | X68000 generic (OPM · ADPCM) | 499 / 553 — generic 328/370 · mfp 171/183 | `--hootx68survey X68k 1000 6` |
 | MIDI 판 X68000 | 141 / 166 (노트) | `--hootx68midisurvey X68k 1000 10` |
 | SPC · KSS · NSF · GBS | 717항목 파일 있음 (KSS 71항목은 zip에 .kss 없음) | — |
@@ -150,7 +151,13 @@
   - Z80 3.58MHz, 0000h~1FFFh Z80 RAM (거울 ~3FFFh), 4000h~4003h YM2612 (읽기 = 타이머 플래그 — 메가드라이브는 YM2612 IRQ가 없어 드라이버가 상태를 봄, A = 144 × (1024 − TA), B = 2304 × (256 − TB) / 7.67MHz), 6000h 뱅크 (bit0을 9비트로 밀어 넣음), 7F11h PSG, 8000h~ = 카트리지 32KB 창, 수직 귀선 60Hz INT (IM 1)
   - hoot 옵션: 카트리지 ROM의 topaddr부터 size1 (· size2 …) 바이트를 Z80 RAM data1 (· data2 …)에 올리고 0.5초 돌린 뒤, 곡 번호를 reqaddr에 (**없으면 1FFFh** — iyinc · lordmon 본 고리가 1FFFh를 봄), trigadr · trigvalue (trigsubadr · trigsubval)를 씀. 처음 뱅크 = topaddr의 32KB 칸. VGM = YM2612 + SN76489 (세가 되먹임)
   - reqaddr = 1FFFh 항목은 모두 소리 남. 남은 무음 38은 다른 요청 주소를 쓰는 generic_z80 (드라이버마다 요청 방식이 다름 — verytex는 Z80 안에 사운드 테스트 UI가 있어 버튼 입력 0104h로 고름, madoumon은 곡 0 = 요청 없음): advdaisn · arrow · bahamuts · columns1 · columns3j · dahna · ddanpei · djboyj · dynduke · earnest · elvientoj · eswatj · f1circus · kujaku2 · leynos · magichat · mazinsagj · miracle9 · nhktaidr · nikkan · rastan2j · runark · sangoret · shikinjo · shougi · shuramon · smasters · soldeace · sswordj · supermanu · surging · topgear2 · verytex · volfied · waniwani · wboy3 · wimbled · zoom
-  - 아직 없음: koei 15 (Z80 드라이버 위치 옵션이 없음), 게임별 형식 수십 개 (68000 드라이버: puyopuyo · sonic · gunstar …), smd 폴더에 없는 generic_z80 29 (g_* 아카이브)
+  - **1c00 — ✅ v2.1.16 (5 / 5)**: 세가 SMPS Z80 (변수 칸 1C00h~). 소리 큐 1C0Ah~1C0Ch (1C09h = 지금 소리) — ryukoken 68000 코드 `move.b d7,$A01C0A`. 곡 표 위치 1C02h~1C03h는 68000이 씀 (ryukoken = 8000h, 뱅크 창) → 올린 그림에서 0000h · FFFFh면 8000h로. data · size가 없는 castlillj는 topaddr부터 1C00h바이트. 진단 `--hootmdprobe zip`: 요청 주소를 1C00h~1C3Fh에서 바꿔 보기
+  - **koei — ✅ v2.1.16 (14 / 14)**: hoot 옵션이 하나도 없어 카트리지에서 찾는다. 진단 `--hootkoeitrace rom|zip [초]` = 작은 MD 버스 (ROM · 작업 RAM · Z80 창 · VDP 상태 · 패드)에서 MC68000으로 게임을 부팅해 68000이 Z80 RAM에 쓰는 것을 PC와 함께 적음 (r3k2 38초 · uw 26초 · nobu 25초에 첫 곡)
+    - 드라이버: 68000 적재 루틴 `lea end(pc),a0 · lea start(pc),a1 · suba.l a1,a0 · … dbf` (41FA · 43FA · 91C9) → ROM 조각을 Z80 0000h에. 두 세대: `F3 31 00 20 C3 E0 00` (옛, 11게임) · `F3 31 00 20 CD 00 05` (새: r3k2 · uw · gemfi)
+    - 우편함 = 68000 코드의 가장 작은 `movea.l #$A000xx,a1` (옛 07h · 새 09h): 바탕 = 명령, +1 = 인자, +3~+5 = 24비트 ROM 주소 (위 바이트 먼저), +6 ← 02h (Z80이 받으면 지움). 곡 = 명령 2 (멈춤) → 0 (주소) → 3 (인자 1, 연주). 새 세대는 부팅 때 명령 1 · C8h
+    - 곡 표: 68000 쪽 32비트 ROM 주소 줄 — 가리키는 것이 게임마다 다르다 (r3k2 = 곡 머리 `08 00 …`, uw = 8바이트 채널 기록, nobu = 곡 묶음 맨 앞의 표). 길이가 곡 코드 최대 ~ +2인 줄을 후보로, 후보마다 첫 곡을 3초 돌려 키온이 가장 많은 것. 추적과 맞음: r3k2 47E92h (1번 = 05C000h) · nobu 07C000h (1번 = 07C0C8h) · uw D0902h (22번 = 0F81CAh)
+    - g_nobbus (Bushou Fuuunroku)는 smd 폴더에 zip 없음
+  - 아직 없음: 게임별 형식 수십 개 (68000 드라이버: puyopuyo · sonic · gunstar …), smd 폴더에 없는 generic_z80 29 (g_* 아카이브)
 - 8-6 끝 (MSX · PC-88 · X1 · 네오지오 · 메가드라이브). 다음: 8-7 X68000 (MC68000 새로) — ✅ v2.0.5 · MIDI 판 v2.0.6. 다음: PCM8, 또는 8-8
 
 ### 8-7. X68000 — ✅ v2.0.5 (FM · ADPCM 판, `Audio/HootX68k.cs`, 499 / 553)

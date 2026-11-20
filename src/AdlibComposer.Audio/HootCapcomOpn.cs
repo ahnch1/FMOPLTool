@@ -35,6 +35,10 @@ public static class HootCapcomOpn
     /// <summary>Section Z · Legendary Wings · Trojan · Avengers (MAME lwings: 222Hz).</summary>
     public static readonly Layout Lwings = new Layout { Name = "Capcom Legendary Wings", CpuClock = 3000000, OpnClock = 1500000, Latch = 0xC800, Opn1 = 0xE000, Opn2 = 0xE002, IrqHz = 222, Echo = 0xE006 };
     public static readonly Layout Srumbler = new Layout { Name = "Capcom Speed Rumbler", CpuClock = 3000000, OpnClock = 4000000, Latch = 0xE000, Opn1 = 0x8000, Opn2 = 0xA000, IrqHz = 240 };
+    // MAME sidearms: D000h 명령, F000h · F002h YM2203 × 2 (4MHz), IRQ = YM #1
+    public static readonly Layout SideArms = new Layout { Name = "Capcom Side Arms", CpuClock = 4000000, OpnClock = 4000000, Latch = 0xD000, Opn1 = 0xF000, Opn2 = 0xF002, IrqHz = 0 };
+    // MAME blktiger: C800h 명령, E000h · E002h YM2203 × 2 (3.58MHz), IRQ = YM #1
+    public static readonly Layout BlackTiger = new Layout { Name = "Capcom Black Tiger", CpuClock = 3579545, OpnClock = 3579545, Latch = 0xC800, Opn1 = 0xE000, Opn2 = 0xE002, IrqHz = 0 };
     public static readonly Layout TigerRoad = new Layout { Name = "Capcom Tiger Road", CpuClock = 3579545, OpnClock = 3579545, Latch = 0xE000, Opn1 = 0x8000, Opn2 = 0xA000, IrqHz = 0 };
 
     private static readonly string[] LwingsGames = { "Section Z", "Legendary Wings", "Trojan", "Avengers" };
@@ -47,6 +51,8 @@ public static class HootCapcomOpn
             case "opn2": return name != null && LwingsGames.Any(g => name.IndexOf(g, StringComparison.OrdinalIgnoreCase) >= 0) ? Lwings : Gng;
             case "rushcrsh": return Srumbler;
             case "tigerroad": return TigerRoad;
+            case "sidearms": return SideArms;
+            case "blktiger": return BlackTiger;
         }
         return null;
     }

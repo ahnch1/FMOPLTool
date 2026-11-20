@@ -31,6 +31,7 @@
 | 2.0.4 | 8-6 (메가드라이브) | hoot megadrive generic_z80 · iyinc: `Audio/HootMegaDrive.cs` (Z80 사운드 쪽 · 카트리지의 Z80 드라이버를 RAM에, 요청 주소) |
 | 2.0.5 | 8-7 (X68000) | MC68000 `Audio/Cpu/M68000.cs` + hoot x68k generic: `Audio/HootX68k.cs` (OPM · ADPCM · DMA · MFP, E00010h = hoot가 대신 하는 IOCS · DOS) |
 | 2.0.6 | 8-7 (X68000 MIDI) | x68k MIDI 판: YM3802 MIDI 보드 (EAFA00h) → 살아 있는 MIDI 곡 (`HootX68k.LoadMidi`) |
+| 2.1.66 | 캡콤 YM2203 × 2 더함 | hoot capcom sidearms (Side Arms) · blktiger (Black Tiger): `HootCapcomOpn` 배치 둘 더 |
 | 2.1.65 | 8-9h 더함 (비디오시스템 welltris · fromanc2) | hoot videosystem welltris (Welltris · Quiz 18-Kin) · fromanc2 (Final Romance 2 · R): `HootYm2610Board` 배치 둘 더 |
 | 2.1.64 | 8-9n (윤성) | hoot yunsung nmg5 · pclubys (Multi 5 · Search Eye · Wonder Stick · Puzzle Club · Garogun Seroyang · 7 Ordi): `Audio/HootYunsung.cs` (Z80 + YM3812 + OKIM6295) |
 | 2.1.63 | 8-9m 더함 (세이부 raiden2) | hoot seibu raiden2 (Raiden II · Raiden DX): `HootSeibu` YM2151 + OKIM6295 × 2 변형 |
@@ -145,7 +146,7 @@
 | 남코 System 1 (system1) | 22 / 22, 799 / 818곡 (남은 19 = 정지 명령) — FM 또는 CUS30 | `--test hootns1` (HOOT_SONGS=1) |
 | 데이터 이스트 6809 (brkthru · exprraid) | 3 / 3, 19곡 모두 (YM3526 키온) | `--test hootdeco69` (6809 합성 시험 둘 포함, HOOT_SONGS=1) |
 | 아타리 System 1 (system1) | 4 / 4 (Road Blasters는 곡 목록 없음), 179 / 275곡 — 무음 96 = TMS5220 음성 (Indy 92 · Road Runner 3 · 음성칩 시험 1) | `--test hootatari1` (HOOT_SONGS=1, HOOT_DEBUG=1, HOOT_PCS=1 = PC 분포 · RAM 0200h~) |
-| 캡콤 YM2203 × 2 (opn2 · rushcrsh · tigerroad) | 12 / 12, 281 / 282곡 (남은 하나 = Gun.Smoke 정지 명령) | `--test hootcapopn` (HOOT_SONGS=1, HOOT_DEBUG=1 = 많이 쓴 레지스터) |
+| 캡콤 YM2203 × 2 (opn2 · rushcrsh · tigerroad · sidearms · blktiger) | 14 / 14, 353 / 354곡 (남은 하나 = Gun.Smoke 정지 명령; sidearms · blktiger 72곡 모두) | `--test hootcapopn` (HOOT_SONGS=1, HOOT_DEBUG=1 = 많이 쓴 레지스터) |
 | 테크모 YM3812 + MSM5205 (rygar · gemini) | 4 / 4, 122곡 모두 (MSM5205 23곡) | `--test hoottecmo` (HOOT_SONGS=1) |
 | 테크모 Ninja Gaiden (gaiden) | 4 / 4, 231 / 300 (곡은 모두 — 무음 = Strato Fighter 효과음 · 목소리 65, 龍剣伝 Round Clear 3 · 4, 코드 모름 1) | `--test hoottecmo` (HOOT_SONGS=1) |
 | 테크모 16 (tecmo16, HootOpmBoard) | 3 / 3, 112곡 모두 (8곡 = OKI 효과음 하나) | `--test hootopm` (HOOT_SONGS=1, HOOT_PCQ=주소,… · HOOT_PCR=시작,끝 — PCR은 부팅부터 셈) |

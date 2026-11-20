@@ -9,7 +9,7 @@ namespace AdlibComposer.SelfTest;
 /// <summary>hoot 캡콤 YM2203 × 2 (HootCapcomOpn, type opn2 · rushcrsh · tigerroad): 실제 zip, 진단 (HOOT_SONGS = 곡마다).</summary>
 public static class HootCapcomOpnTests
 {
-    public static readonly string[] Archives = { "gng", "gunsmoke", "sectionz", "lwings", "trojan", "1943", "1943kai", "avengers", "srumbler", "rushcrsh", "tigeroad", "f1dream" };
+    public static readonly string[] Archives = { "gng", "gunsmoke", "sectionz", "lwings", "trojan", "1943", "1943kai", "avengers", "srumbler", "rushcrsh", "tigeroad", "f1dream", "sidearms", "blktiger" };
 
     public static void Run(Action<string, bool, string> check)
     {

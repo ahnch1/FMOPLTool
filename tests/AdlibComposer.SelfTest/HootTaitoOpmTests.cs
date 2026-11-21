@@ -10,7 +10,7 @@ namespace AdlibComposer.SelfTest;
 /// <summary>hoot 타이토 YM2151 보드 (HootTaitoOpm, type fullt): 만든 Z80 프로그램으로 명령 · MSM5205 시작 / 멈춤 시험, 실제 zip 9개.</summary>
 public static class HootTaitoOpmTests
 {
-    public static readonly string[] Archives = { "rastan", "topspeed", "asuka", "mofflott", "cadash", "exzisus", "galmedes", "earthjkr", "eto", "masterw", "tetrista", "champwr", "viofight", "hitice", "cameltrya", "rainbow", "twinhawk", "opwolf", "volfied" };
+    public static readonly string[] Archives = { "rastan", "topspeed", "asuka", "mofflott", "cadash", "exzisus", "galmedes", "earthjkr", "eto", "masterw", "tetrista", "champwr", "viofight", "hitice", "cameltrya", "rainbow", "twinhawk", "opwolf", "volfied", "darius" };
 
     public static void Run(Action<string, bool, string> check)
     {
@@ -62,6 +62,14 @@ public static class HootTaitoOpmTests
             int code = 0;
             foreach (var t in hoot.Titles.Take(4)) { code = t.Code; r = Measure(hoot, dir, code, 8); if (r.sound) break; }
             check("hoot taito fullt " + arc + ": song 0x" + code.ToString("X2") + " makes sound in 8 s", r.sound, r.note);
+            if (arc == "darius")
+            {
+                // YM2203 둘 (9000h · A000h): 둘째 칩도 VGM (A5h)에
+                var vd = HootTaitoOpm.Render(hoot, dir, 0x07, 6, 0);
+                int second = 0;
+                for (int p = vd.DataOffset; p + 2 < vd.Data.Length && vd.Data[p] != 0x66; p += Math.Max(1, VgmFormat.CommandLength(vd.Data, p))) if (vd.Data[p] == 0xA5) second++;
+                check("hoot taito darius: two YM2203 (second chip at A000h → VGM A5h)", vd.Ym2203Clock > 0 && second > 100, second + " writes, " + vd.ChipSummary);
+            }
             if (arc == "topspeed")
             {
                 // Accel #1 (09h) = MSM5205 드럼만: 렌더한 VGM을 VgmPlayer로 재생하면 OKIM6258이 소리를 낸다

@@ -32,7 +32,7 @@ public static class HootTaitoOpm
         if (!string.Equals((driver ?? "").Trim(), "taito", StringComparison.OrdinalIgnoreCase)) return false;
         string t = (type ?? "").Trim().ToLowerInvariant();
         return t == "fullt" || t == "masterw" || t == "viofight"
-            || t == "rainbow" || t == "daisenpuu" || t == "opwolf" || t == "volfied";   // MAME rainbow · taito_x (twinhawk) · opwolf: Rastan과 같은 사운드 맵 (9000h YM2151 · A000h TC0140SYT)
+            || t == "rainbow" || t == "daisenpuu" || t == "opwolf" || t == "volfied" || t == "darius";   // MAME rainbow · taito_x (twinhawk) · opwolf: Rastan과 같은 사운드 맵 (9000h YM2151 · A000h TC0140SYT)
     }
 
     public static VgmSong Render(HootArchive.Entry e, string dir, int code, double seconds = DefaultSeconds, double fade = DefaultFade)
@@ -67,7 +67,7 @@ public static class HootTaitoOpm
             return r;
         }
         string ty = (e.Type ?? "").Trim().ToLowerInvariant();
-        var m = new Machine(Join(code, 0x8000), Join(pcm, 0), (e.Name ?? "").IndexOf("Top Speed", StringComparison.OrdinalIgnoreCase) >= 0) { Opn = ty == "masterw" || ty == "viofight" || ty == "volfied", Oki = ty == "viofight", XSystem = ty == "daisenpuu", Volfied = ty == "volfied" };
+        var m = new Machine(Join(code, 0x8000), Join(pcm, 0), (e.Name ?? "").IndexOf("Top Speed", StringComparison.OrdinalIgnoreCase) >= 0) { Opn = ty == "masterw" || ty == "viofight" || ty == "volfied" || ty == "darius", Oki = ty == "viofight", XSystem = ty == "daisenpuu", Volfied = ty == "volfied", Darius = ty == "darius", OpnHz = ty == "darius" ? 4000000 : OpnClock };
         m.Missing.AddRange(missing);
         foreach (var u in unsupported) m.Unsupported.Add(u);
         m.RunSeconds(1);
@@ -97,6 +97,9 @@ public static class HootTaitoOpm
         public bool XSystem;
         /// <summary>Volfied 배치 (MAME volfied_sound_map): Taito B와 같고 TC0140SYT만 8800h · 8801h (RAM 8000h~87FFh).</summary>
         public bool Volfied;
+        /// <summary>Darius 배치 (MAME darius_sound_map): YM2203 둘 (9000h = IRQ · A000h), TC0140SYT B000h · B001h, 뱅크 DC00h, 4MHz. ADPCM Z80 (MSM5205)은 빠짐.</summary>
+        public bool Darius;
+        public double OpnHz = OpnClock;
         public readonly byte[] Ram = new byte[0x2000];
         public readonly Z80 Cpu;
         public readonly List<string> Missing = new List<string>();
@@ -182,8 +185,8 @@ public static class HootTaitoOpm
         }
 
         // YM2151 타이머: A = 64 × (1024 − TA) / 클럭, B = 1024 × (256 − TB) / 클럭. YM2203 (3MHz): A = 72 × (1024 − TA), B = 1152 × (256 − TB)
-        private long TimerAPeriod { get { return Math.Max(1, Opn ? (long)(72.0 * (1024 - timerA) / OpnClock * CpuClock) : (long)(64.0 * (1024 - timerA) / YmClock * CpuClock)); } }
-        private long TimerBPeriod { get { return Math.Max(1, Opn ? (long)(1152.0 * (256 - timerB) / OpnClock * CpuClock) : (long)(1024.0 * (256 - timerB) / YmClock * CpuClock)); } }
+        private long TimerAPeriod { get { return Math.Max(1, Opn ? (long)(72.0 * (1024 - timerA) / OpnHz * CpuClock) : (long)(64.0 * (1024 - timerA) / YmClock * CpuClock)); } }
+        private long TimerBPeriod { get { return Math.Max(1, Opn ? (long)(1152.0 * (256 - timerB) / OpnHz * CpuClock) : (long)(1024.0 * (256 - timerB) / YmClock * CpuClock)); } }
 
         public void RunSeconds(double s) { Run((long)(CpuClock * s)); }
 
@@ -263,6 +266,12 @@ public static class HootTaitoOpm
             if (a < 0x4000) return a < Rom.Length ? Rom[a] : (byte)0xFF;
             if (a < 0x8000) return Rom.Length <= 0x8000 ? Rom[a % Rom.Length] : Rom[((long)bank * 0x4000 + (a - 0x4000)) % Rom.Length];
             if (Volfied && a == 0x8801) return CommRead();
+            if (Darius)
+            {
+                if (a == 0xB001) return CommRead();
+                if (a == 0xA000 || a == 0xA001) return 0;   // 둘째 YM2203 상태
+                if (a == 0xA001 || a >= 0xB000) return 0;
+            }
             if (a < 0x9000) return Ram[a - 0x8000];
             if (a == 0x9000 || a == 0x9001) return (byte)(timerFlags & 3);   // YM2151 · YM2203 상태 (바쁨 없음)
             if (Oki && (a == 0xB000 || a == 0xB001)) return 0;   // OKIM6295 상태: 모두 쉼
@@ -287,6 +296,18 @@ public static class HootTaitoOpm
                 return;
             }
             if (Volfied && a == 0x8800) { subMode = v & 15; return; }
+            if (Darius)
+            {
+                switch (a)
+                {
+                    case 0xA000: ym2Addr = v; return;
+                    case 0xA001: Opn2Write(ym2Addr, v); return;
+                    case 0xB000: subMode = v & 15; return;
+                    case 0xB001: CommWrite(v & 15); return;
+                    case 0xDC00: bank = v & 3; return;
+                }
+                if (a >= 0xB000) return;   // 좌우 · ADPCM 명령: 빠짐
+            }
             if (Volfied && a == 0x8801) { CommWrite(v & 15); return; }
             if (a >= 0x8000 && a < 0x9000) { Ram[a - 0x8000] = v; return; }
             switch (a)
@@ -391,11 +412,23 @@ public static class HootTaitoOpm
 
         private readonly int[] opnLast = Enumerable.Repeat(-1, 0x100).ToArray();
 
+        private int ym2Addr;
+        private readonly int[] opn2Last = Enumerable.Repeat(-1, 256).ToArray();
+
+        /// <summary>Darius 둘째 YM2203 (VGM A5h): 타이머 · 포트는 안 씀.</summary>
+        private void Opn2Write(int reg, int v)
+        {
+            if (reg == 0x0E || reg == 0x0F || (reg >= 0x24 && reg <= 0x27)) return;
+            bool keep = reg == 0x28 || reg == 0x0D || (reg >= 0xA0 && reg <= 0xAE);
+            if (!keep) { if (opn2Last[reg] == v) return; opn2Last[reg] = v; }
+            Emit(3, reg, v);
+        }
+
         private void OpnWrite(int reg, int v)
         {
             switch (reg)
             {
-                case 0x0E: bank = v & 3; return;   // 포트 A = 뱅크
+                case 0x0E: if (!Darius) bank = v & 3; return;   // 포트 A = 뱅크 (Taito B)
                 case 0x0F: return;
                 case 0x24: timerA = (timerA & 3) | (v << 2); return;
                 case 0x25: timerA = (timerA & 0x3FC) | (v & 3); return;
@@ -447,7 +480,8 @@ public static class HootTaitoOpm
         private VgmSong ToVgmOpn(double seconds, double fade)
         {
             var w = new VgmWriter { System = "Taito B YM2203 (hoot)", Notes = "hoot taito b" };
-            w.SetClock(VgmWriter.ClockYm2203, OpnClock);
+            bool two = Log.Any(x => x.chip == 3);
+            w.SetClock(VgmWriter.ClockYm2203, OpnHz, two ? 0x40000000u : 0);   // bit30 = YM2203 둘
             bool oki = Oki && Pcm.Length > 0 && Log.Any(x => x.chip == 2);
             if (oki)
             {
@@ -470,6 +504,7 @@ public static class HootTaitoOpm
                 long ts = (long)Math.Min(total, Math.Max(0, x.t));
                 if (ts > at) { w.Wait(ts - at); at = ts; }
                 if (x.chip == 0) w.Write(0x55, (byte)x.reg, (byte)x.val);
+                else if (x.chip == 3) w.Write(0xA5, (byte)x.reg, (byte)x.val);
                 else w.Write((byte)0xB8, 0, x.val);
             }
             if ((long)total > at) w.Wait((long)total - at);

@@ -31,6 +31,7 @@
 | 2.0.4 | 8-6 (메가드라이브) | hoot megadrive generic_z80 · iyinc: `Audio/HootMegaDrive.cs` (Z80 사운드 쪽 · 카트리지의 Z80 드라이버를 RAM에, 요청 주소) |
 | 2.0.5 | 8-7 (X68000) | MC68000 `Audio/Cpu/M68000.cs` + hoot x68k generic: `Audio/HootX68k.cs` (OPM · ADPCM · DMA · MFP, E00010h = hoot가 대신 하는 IOCS · DOS) |
 | 2.0.6 | 8-7 (X68000 MIDI) | x68k MIDI 판: YM3802 MIDI 보드 (EAFA00h) → 살아 있는 MIDI 곡 (`HootX68k.LoadMidi`) |
+| 2.3.27 | 타이토 darius | `HootTaitoOpm` Darius 배치 (MAME darius_sound_map): Z80 4MHz, YM2203 4MHz 둘 (9000h = IRQ · A000h → VGM A5h), TC0140SYT B000h · B001h, 뱅크 DC00h. 18 / 19 (Credit = ADPCM만 — 둘째 Z80 · MSM5205는 아직). 푼 zip 표시 66 |
 | 2.3.26 | 타이토 volfied | `HootTaitoOpm` Volfied 배치 (MAME volfied_sound_map: Z80 + YM2203 9000h, RAM 8000h~87FFh, TC0140SYT 8800h · 8801h) 12 / 12. 푼 zip 표시 65 |
 | 2.3.25 | 타이토 rainbow · opwolf · daisenpuu | `HootTaitoOpm`: rainbow · opwolf = Rastan 사운드 맵 그대로 (Rainbow Islands 28 / 28, Operation Wolf 곡 소리 — ADPCM 칩 자리 다름, 효과음 일부만), daisenpuu (Twin Hawk) = 새 `XSystem` 배치 (MAME taito_x: RAM C000h~DFFFh, YM2151 E000h, TC0140SYT E200h · E201h, 뱅크 F200h) 8 / 8. 틱마다 모든 레지스터를 다시 쓰는 드라이버를 위해 같은 값 YM2151 쓰기는 VGM에서 뺌 (08h · 01h · 19h 빼고) — Twin Hawk 8초 쓰기 144k → 600. 푼 zip 표시 64 |
 | 2.3.24 | 타이토 F3 게임 형식 | taito ringrage · ridingf · gseeker = F3 사운드 보드 (rom main0~3 · sub0~1 · pcm, 옵션 없음) → `HootTaitoF3`: Ring Rage 10 / 10, Riding Fight 18 / 19, Grid Seeker 15 / 17. galastrm은 zip의 표본 ROM (c99-06~09)이 목록 (c99-07~10)과 달라 뺌. 푼 zip 표시 63 |

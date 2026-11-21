@@ -117,6 +117,7 @@ public static class HootMsx
         public int Loads, Commands;
 
         private int psgAddr, opllAddr, audioAddr, slot;
+        private readonly byte[] psgReg = new byte[16];
         private bool sccOn, sccPlusMode;
         private int command;
         private int code;
@@ -154,11 +155,16 @@ public static class HootMsx
         /// <summary>작은 BIOS (곡 코드가 덮어쓸 수 있다: 시작 코드가 0038h · 93h 등을 고친다).</summary>
         public void InstallBios()
         {
+            // hoot kss.cpp: BIOS 영역을 RET (C9h)으로 채운 뒤 필요한 것만 — 없는 BIOS를 부르면 NOP으로 미끄러져 시작 코드를 다시 돌던 문제
+            for (int i = 0; i < 0x4000; i++) Ram[i] = 0xC9;
+            Ram[0x06] = 0x98; Ram[0x07] = 0x98;                  // BIOS 자료: VDP 읽기 · 쓰기 포트
+            for (int i = 0x2B; i <= 0x2F; i++) Ram[i] = 0;       // 문자 · 60Hz · MSX 판 등
             // 0038h: JP 0060h — 처리기: 모든 레지스터 저장, IN A,(99h), CALL FD9Ah, CALL FD9Fh, 되돌리기, EI, RET
             Put(0x38, new byte[] { 0xC3, 0x60, 0x00 });
             Put(0x60, new byte[]
             {
                 0xF5, 0xC5, 0xD5, 0xE5, 0x08, 0xD9, 0xF5, 0xC5, 0xD5, 0xE5, 0xDD, 0xE5, 0xFD, 0xE5,
+                0x2A, 0x9E, 0xFC, 0x23, 0x22, 0x9E, 0xFC,   // JIFFY (FC9Eh) += 1 (BIOS KEYINT)
                 0xDB, 0x99, 0xCD, 0x9A, 0xFD, 0xCD, 0x9F, 0xFD,
                 0xFD, 0xE1, 0xDD, 0xE1, 0xE1, 0xD1, 0xC1, 0xF1, 0xD9, 0x08, 0xE1, 0xD1, 0xC1, 0xF1,
                 0xFB, 0xC9,
@@ -168,9 +174,18 @@ public static class HootMsx
             Put(0x1C, new byte[] { 0xDD, 0xE9 });                // CALSLT: JP (IX)
             Put(0x24, new byte[] { 0xC9 });                      // ENASLT
             Put(0x90, new byte[] { 0xC9 });                      // GICINI
-            Put(0x93, new byte[] { 0xC3, 0xA0, 0x00 });          // WRTPSG → A0h
+            Put(0x93, new byte[] { 0xC3, 0x90, 0x03 });          // WRTPSG → 0390h (A0h~A7h는 CHPUT · LPTOUT 자리)
             Put(0x96, new byte[] { 0xD3, 0xA0, 0xDB, 0xA2, 0xC9 });   // RDPSG
-            Put(0xA0, new byte[] { 0xD3, 0xA0, 0xF5, 0x7B, 0xD3, 0xA1, 0xF1, 0xC9 });
+            Put(0x0390, new byte[] { 0xD3, 0xA0, 0xF5, 0x7B, 0xD3, 0xA1, 0xF1, 0xC9 });
+            Put(0xD5, new byte[] { 0xAF, 0xC9 });                // GTSTCK: 0
+            Put(0xD8, new byte[] { 0xAF, 0xC9 });                // GTTRIG: 안 눌림
+            Put(0x0138, new byte[] { 0xDB, 0xA8, 0xC9 });        // RSLREG
+            Put(0x013B, new byte[] { 0xD3, 0xA8, 0xC9 });        // WSLREG
+            Put(0x013E, new byte[] { 0xDB, 0x99, 0xC9 });        // RDVDP
+            Put(0x0141, new byte[] { 0x3E, 0xFF, 0xC9 });        // SNSMAT: 키 없음
+            // CALLF (RST 30h + 슬롯 바이트 + 주소): 슬롯은 무시하고 주소로 (CALSLT처럼 IX를 씀)
+            Put(0x30, new byte[] { 0xC3, 0x80, 0x03 });
+            Put(0x0380, new byte[] { 0xE3, 0x23, 0xD5, 0x5E, 0x23, 0x56, 0x23, 0xD5, 0xDD, 0xE1, 0xD1, 0xE3, 0xDD, 0xE9 });
             Put(0xFD9A, new byte[] { 0xC9, 0xC9, 0xC9, 0xC9, 0xC9 });   // H.KEYI
             Put(0xFD9F, new byte[] { 0xC9, 0xC9, 0xC9, 0xC9, 0xC9 });   // H.TIMI
         }
@@ -263,7 +278,7 @@ public static class HootMsx
             }
             if (a >= 0x9000 && a <= 0x97FF) sccOn = (v & 0x3F) == 0x3F;
             else if (a == 0xBFFE || a == 0xBFFF) sccPlusMode = (v & 0x20) != 0;
-            if ((sccOn || SccAlways) && !sccPlusMode && a >= 0x9800 && a <= 0x988F) { UsedScc = true; Emit(0xD2, SccPort(a - 0x9800, out int r), (byte)r, v); }
+            if ((sccOn || SccAlways) && !sccPlusMode && a >= 0x9800 && a <= 0x989F) { UsedScc = true; Emit(0xD2, SccPort(a - 0x9800, out int r), (byte)r, v); }
             else if (sccPlusMode && a >= 0xB800 && a <= 0xB8AF) { UsedSccPlus = true; Emit(0xD2, SccPlusPort(a - 0xB800, out int r), (byte)r, v); }
             Ram[a] = v;
         }
@@ -305,7 +320,7 @@ public static class HootMsx
                 case 0x06: return (byte)(code >> 24);
                 case 0x07: return (byte)(Opll ? 1 : 0);
                 case 0x99: vdpPending = false; return 0x80;   // VDP 상태: 수직 귀선
-                case 0xA2: return 0;                          // PSG 읽기
+                case 0xA2: return psgAddr == 14 ? (byte)0xFF : psgReg[psgAddr];   // PSG 읽기 = 레지스터 값 (hoot ssAY8910), R14 = 조이스틱 안 눌림
                 case 0xA8: return (byte)slot;
                 default: return 0xFF;
             }
@@ -319,7 +334,7 @@ public static class HootMsx
                 case 0x02: command = 0; break;
                 case 0x03: Load(v); break;
                 case 0xA0: psgAddr = v & 0x0F; break;
-                case 0xA1: UsedPsg = true; Emit(0xA0, (byte)psgAddr, v); break;
+                case 0xA1: UsedPsg = true; psgReg[psgAddr] = v; Emit(0xA0, (byte)psgAddr, v); break;
                 case 0x7C: opllAddr = v; break;
                 case 0x7D: UsedOpll = true; Emit(0x51, (byte)opllAddr, v); break;
                 case 0xC0: audioAddr = v; break;

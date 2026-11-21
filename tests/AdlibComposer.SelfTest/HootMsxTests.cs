@@ -63,6 +63,16 @@ public static class HootMsxTests
         check("hoot msx generic: H.TIMI driver runs every frame (~30 in 0.5 s)", vol >= 25 && vol <= 35, vol + " volume writes");
         var v = m.ToVgm(1, 0);
         check("hoot msx generic: VGM with PSG", v.HasPsg && v.IsPlayable, v.ChipSummary);
+        // hoot kss.cpp · ssAY8910: BIOS 영역 = RET, PSG 읽기 = 레지스터 값 (R14 = FFh), 인터럽트가 JIFFY를 올림
+        m.Out(0xA0, 7); m.Out(0xA1, 0xB8);
+        int r7 = m.In(0xA2);
+        m.Out(0xA0, 14);
+        int r14 = m.In(0xA2);
+        check("hoot msx generic: unused BIOS entries are RET (00D8h GTTRIG · 013Eh RDVDP · 0141h), VDP port bytes 0006h/0007h = 98h",
+            m.Ram[0x00D5] == 0xAF && m.Ram[0x0138] == 0xDB && m.Ram[0x0180] == 0xC9 && m.Ram[0x0006] == 0x98 && m.Ram[0x0007] == 0x98, m.Ram[0x0180].ToString("X2"));
+        check("hoot msx generic: PSG read-back returns the register (R7 = B8h), R14 = FFh (no joystick)", r7 == 0xB8 && r14 == 0xFF, r7.ToString("X2") + " " + r14.ToString("X2"));
+        int jiffy = m.Ram[0xFC9E] | m.Ram[0xFC9F] << 8;
+        check("hoot msx generic: interrupt handler counts JIFFY (FC9Eh)", jiffy >= 25, jiffy.ToString());
     }
 
     private static void Real(Action<string, bool, string> check)
@@ -70,7 +80,7 @@ public static class HootMsxTests
         string root = SopTests.FindDir("_incoming");
         string folder = root == null ? null : Path.Combine(root, "Hootarchive", "msx");
         if (folder == null || !Directory.Exists(folder)) { Console.WriteLine("SKIP  hoot msx generic real files (_incoming/Hootarchive/msx not found)"); return; }
-        foreach (var (arc, what) in new[] { ("crescent_msx", "Alice Soft PSG"), ("kubikiri_msx", "OPLL"), ("dante2_msx", "PSG") })
+        foreach (var (arc, what) in new[] { ("crescent_msx", "Alice Soft PSG"), ("kubikiri_msx", "OPLL"), ("dante2_msx", "PSG"), ("sgolveli_msx", "BIOS call before load"), ("herzog_msx", "GTTRIG") })
         {
             string zip = Path.Combine(folder, arc + ".zip");
             if (!File.Exists(zip)) { Console.WriteLine("SKIP  hoot msx " + arc + " (zip not found)"); continue; }

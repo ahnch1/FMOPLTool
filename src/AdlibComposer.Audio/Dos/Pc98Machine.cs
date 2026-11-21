@@ -263,7 +263,7 @@ public sealed class Pc98Machine : DosMachine, IHootMachine
         if (port == 0 && reg == 0xFF) return Sound == Board.Opna ? 0x01 : 0x00;   // YM2608 ID
         if (port == 0 && reg == 0x0E) return (opnRegs[reg] & 0x3F) | JumperBits;   // SSG 포트 A = 보드 INT 점퍼
         if (port == 0 && reg < 0x10) return opnRegs[reg];
-        return opnRegs[port * 0x100 + reg];
+        return 0;   // fmgen (hoot) GetReg: FM 레지스터는 읽을 수 없음 = 0
     }
 
     private void TimerOverflow(int which)

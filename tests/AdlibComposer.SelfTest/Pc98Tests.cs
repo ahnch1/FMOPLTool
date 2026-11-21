@@ -79,6 +79,8 @@ public static class Pc98Tests
             0xEB, 0xFE,
         }), Pc98Machine.Board.Opn, 0.05);
         check("PC-98 OPN timer B flag (188h bit1) set by LOAD alone, without IRQ enable (hoot)", (mf.In(0x188) & 2) != 0, mf.In(0x188).ToString("X2"));
+        mf.Out(0x188, 0x30); mf.Out(0x18A, 0x71); mf.Out(0x188, 0x02); mf.Out(0x18A, 0x5A);
+        check("PC-98 OPN register read-back: FM registers read 0, SSG registers read back (fmgen / hoot GetReg)", ReadReg(mf, 0x30) == 0 && ReadReg(mf, 0x02) == 0x5A, ReadReg(mf, 0x30).ToString("X2") + " " + ReadReg(mf, 0x02).ToString("X2"));
         check("PC-98 board INT jumper read from SSG port A (reg 0Eh bits 6-7 = 11 → INT5)", (ReadReg(m, 0x0E) & 0xC0) == 0xC0, ReadReg(m, 0x0E).ToString("X2"));
         // 26K 보드에는 OPNA가 없다: 18Ch 읽기 = FF, YM2608 ID 없음
         check("PC-98 26K board: no OPNA extension port, OPN ID register = 0", m.In(0x18C) == 0xFF && ReadReg(m, 0xFF) == 0, m.In(0x18C).ToString("X2"));

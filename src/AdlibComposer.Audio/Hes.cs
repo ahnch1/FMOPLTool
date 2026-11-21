@@ -153,6 +153,8 @@ public static class Hes
         public int TimerLoad = 1;
         public long NextTimer = long.MaxValue;
         public int VdcLatch, VdcControl;
+        /// <summary>VDC 레지스터 5를 쓴 적이 있는가 (안 쓴 곡은 hoot hes.cpp처럼 VBlank IRQ1을 늘 낸다).</summary>
+        public bool VdcWritten;
 
         public Machine(byte[] rom) { this.rom = rom; }
 
@@ -203,7 +205,7 @@ public static class Hes
             if (o < 0x400)
             {
                 if ((o & 3) == 0) VdcLatch = v & 0x1F;
-                else if ((o & 3) == 2 && VdcLatch == 5) VdcControl = v;
+                else if ((o & 3) == 2 && VdcLatch == 5) { VdcControl = v; VdcWritten = true; }
                 return;
             }
             if (o >= 0x800 && o < 0xC00)
@@ -272,7 +274,7 @@ public static class Hes
             if (!cpu.I)
             {
                 if (m.TimerPending && (m.Disables & 4) == 0) { m.TimerPending = false; m.Irqs++; cpu.Interrupt(0xFFFA); continue; }
-                if (m.VdcPending && (m.VdcControl & 0x08) != 0 && (m.Disables & 2) == 0) { m.Irqs++; cpu.Interrupt(0xFFF8); continue; }
+                if (m.VdcPending && ((m.VdcControl & 0x08) != 0 || !m.VdcWritten) && (m.Disables & 2) == 0) { m.Irqs++; cpu.Interrupt(0xFFF8); continue; }
             }
             if ((cpu.PC & 0xFFFF) == Idle)
             {

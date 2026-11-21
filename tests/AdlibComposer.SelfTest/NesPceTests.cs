@@ -380,7 +380,7 @@ public static class NesPceTests
         check("NSF FDS: modulation bends pitch (vibrato)", Rms(ma, 2205, Rate) > 300 && hi - lo > 100, lo.ToString("0") + " ~ " + hi.ToString("0") + " Hz");
     }
 
-    private static byte[] MakeHes()
+    private static byte[] MakeHes(bool vblankOnly = false)
     {
         var rom = new List<byte>();
         void A(params int[] b) { foreach (var x in b) rom.Add((byte)x); }
@@ -391,15 +391,20 @@ public static class NesPceTests
         for (int i = 0; i < 32; i++) A(0xA9, i < 16 ? 31 : 0, 0x8D, 0x06, 0x08);
         A(0xA9, 0xFE, 0x8D, 0x02, 0x08, 0xA9, 0x00, 0x8D, 0x03, 0x08);
         A(0xA9, 0xFF, 0x8D, 0x05, 0x08, 0xA9, 0x9F, 0x8D, 0x04, 0x08);
-        A(0xA9, 0x07, 0x8D, 0x00, 0x0C);            // 타이머 8 × 1024
-        A(0xA9, 0x01, 0x8D, 0x01, 0x0C);            // 켜기
-        A(0xA9, 0x03, 0x8D, 0x02, 0x14);            // IRQ2 · VDC 막고 타이머만
+        if (vblankOnly) A(0xA9, 0x05, 0x8D, 0x02, 0x14);   // 타이머 · IRQ2 막고 VDC (IRQ1)만 — VDC 레지스터 5는 안 씀
+        else
+        {
+            A(0xA9, 0x07, 0x8D, 0x00, 0x0C);        // 타이머 8 × 1024
+            A(0xA9, 0x01, 0x8D, 0x01, 0x0C);        // 켜기
+            A(0xA9, 0x03, 0x8D, 0x02, 0x14);        // IRQ2 · VDC 막고 타이머만
+        }
         A(0x58, 0x60);                              // CLI RTS
         while (rom.Count < 0x100) rom.Add(0xEA);
-        // 타이머 IRQ ($E100): PHA  LDA #0  STA $0800  STA $1403  PLA  RTI
-        A(0x48, 0xA9, 0x00, 0x8D, 0x00, 0x08, 0x8D, 0x03, 0x14, 0x68, 0x40);
+        // 타이머 IRQ ($E100): PHA  LDA #0  STA $0800  STA $1403  PLA  RTI  (VDC IRQ1도 여기: LDA $0000으로 VDC 상태 읽기)
+        A(0x48, 0xAD, 0x00, 0x00, 0xA9, 0x00, 0x8D, 0x00, 0x08, 0x8D, 0x03, 0x14, 0x68, 0x40);
         while (rom.Count < 0x2000) rom.Add(0xFF);
         rom[0x1FFA] = 0x00; rom[0x1FFB] = 0xE1;
+        rom[0x1FF8] = 0x00; rom[0x1FF9] = 0xE1;
         var d = new List<byte>();
         d.AddRange(Encoding.ASCII.GetBytes("HESM"));
         d.Add(0); d.Add(0); d.Add(0x00); d.Add(0xE0);
@@ -426,6 +431,11 @@ public static class NesPceTests
         double f = Freq(a, 4410, Rate);
         check("HES (synthetic): wave channel sounds at 440 Hz", Math.Abs(f - 440.4) < 5 && Rms(a, 4410, Rate) > 500, f.ToString("0.0"));
         check("HES probe: song sounds", Hes.Probe(hes, 0, 0.5), "");
+        // hoot hes.cpp: VBlank IRQ1은 VDC 레지스터 5를 안 쓴 곡에도 (VDC 설정을 뺀 립)
+        var vb = Hes.Render(MakeHes(true), 0, 1, 0);
+        int irq1 = 0;
+        for (int p = vb.DataOffset; p < vb.DataEnd; p += Math.Max(1, VgmFormat.CommandLength(vb.Data, p))) if (vb.Data[p] == 0xB9 && vb.Data[p + 1] == 0) irq1++;
+        check("HES (synthetic): VBlank IRQ1 runs even if VDC register 5 was never written (hoot) ≈ 60/s", irq1 >= 55 && irq1 <= 65, irq1.ToString());
     }
 
     // ------------------------------------------------------------ 실제 파일

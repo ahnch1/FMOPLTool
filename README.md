@@ -310,6 +310,7 @@ Mt32RomFolder=resource
 | `AdlibComposer.Nuked` | `NukedOpl3`: Nuked OPL3 1.8 (Nuke.YKT) C# 포팅. **LGPL-2.1 이상** (`src/AdlibComposer.Nuked/LICENSE`, 출력 폴더에 `LICENSE.Nuked-OPL3.txt`). 바꿔 끼울 수 있게 별도 어셈블리 |
 | `AdlibComposer.Notation` | `Score` 모델, `ScoreBuilder`(Song→마디/음표, 붙임줄), `NoteSpelling`(음표 나누기·셋잇단·음 이름), `MusicXmlExporter`, `MidiExporter`, 텍스트 내보내기, `OrgelComb` / `OrgelBuilder`(곡 → 30음 오르골 띠 구멍) |
 | `AdlibComposer.Audio.Windows` | Windows 구현: `WaveOutPlayer`(IAudioOutput, winmm), `WinMidiOut`(IMidiOutDevice, midiOut · SysEx), `MediaFoundationDecoder`(MP3 등 → 모노), `WindowsAudio.Register()` |
+| `AdlibComposer.Player` | 화면 없는 Jukebox 재생 묶음 (안드로이드 앱용, Windows 프로그램은 쓰지 않음): `JukeboxSession`(곡 열기 · 재생 · 일시정지 · 이동 · 끝 알림), `SongFolder`(폴더 · zip · 곡 여럿 든 파일 목록). [docs/android.md](docs/android.md) |
 | `AdlibComposer.App` | WinForms GUI: `MainForm`, `Shell/`(가로 페이지 메뉴 · 공용 폴더/파일 목록 · hoot 목록 `HootBrowser` · `HootTree` · 왼쪽 목록 접점 `ISongList` · 로그 · 셸 테마), `ComposerView`, `InstrumentView`, `JukeboxView`, `NoteView`, `OrganizerView`, `PianoRollControl`, `RetroSlider` 등 |
 | `tests/AdlibComposer.SelfTest` | 의존성 없는 자체 테스트 + 데모 WAV 렌더러 |
 

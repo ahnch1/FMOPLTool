@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- 플랫폼 없는 Jukebox 재생 묶음 (곡 열기 · 재생 · 위치 · 폴더 목록). 안드로이드 앱이 쓴다. Windows 프로그램(App)은 참조하지 않는다. -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>AdlibComposer.Player</RootNamespace>
+    <AssemblyName>AdlibComposer.Player</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\AdlibComposer.Core\AdlibComposer.Core.csproj" />
+    <ProjectReference Include="..\AdlibComposer.Formats\AdlibComposer.Formats.csproj" />
+    <ProjectReference Include="..\AdlibComposer.Audio\AdlibComposer.Audio.csproj" />
+  </ItemGroup>
+</Project>

@@ -10,6 +10,7 @@
     <ProjectReference Include="..\..\src\AdlibComposer.Audio\AdlibComposer.Audio.csproj" />
     <ProjectReference Include="..\..\src\AdlibComposer.Notation\AdlibComposer.Notation.csproj" />
     <ProjectReference Include="..\..\src\AdlibComposer.Audio.Windows\AdlibComposer.Audio.Windows.csproj" />
+    <ProjectReference Include="..\..\src\AdlibComposer.Player\AdlibComposer.Player.csproj" />
   </ItemGroup>
   <ItemGroup>
     <!-- MT-32 에뮬레이터 DLL이 빌드돼 있으면 테스트에서도 쓴다 -->

@@ -202,6 +202,15 @@
 
 ---
 
+### 안드로이드 Jukebox ([`android.md`](android.md))
+
+- [x] A1 화면 없는 재생 묶음 `AdlibComposer.Player` — v2.3.29
+- [ ] A2 앱 뼈대 + `AudioTrack` 출력 + 리소스 → 데모 곡 재생
+- [ ] A3 Jukebox 화면 최소판 (폴더 목록 · 재생 제어 · 위치 · 다음 곡)
+- [ ] A4 성능 · AOT · 서명한 릴리스 APK
+
+---
+
 ## 6. 남겨 둔 일 (보류 — 지금은 하지 않음)
 
 - [ ] XM · IT를 Tracker 화면에서 열기 · S3M으로 저장 — main은 다른 PC의 `ExtModule` (Jukebox 재생 전용)을 쓰기로 함. 이 세션의 다른 구현 (`XmItFormat` · `XmItPlayer`, Tracker 화면 · S3M 저장 · `SelfTest --tracker`)은 로컬 브랜치 `backup/xmit-2.0.11`에만 있음 (푸시 안 함)
@@ -210,7 +219,7 @@
 - [ ] YMF278B (OPL4) — 샘플 ROM 덤프 필요
 - [ ] OPNA 리듬 ROM 쓰기 (`2608_BD.wav` 등을 사용자가 넣으면), OPN SSG-EG · CSM, Y8950 ADPCM
 - [ ] Nuked-OPN2 · Nuked-OPM 급 정확도 (지금은 근사)
-- [ ] 안드로이드 이식 (Avalonia / MAUI 결정, `AudioTrack` 출력, 터치 피아노롤, SAF)
+- [ ] 안드로이드 편집 화면 (Composer · 악기 · 트래커 등 — 터치 UI). 재생(Jukebox)만 하는 앱은 5장 · [`android.md`](android.md)
 - [ ] 앱 시작 페이지 (지금 Jukebox) 바꾸기 여부
 
 ---

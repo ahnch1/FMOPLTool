@@ -38,6 +38,9 @@ public class MainActivity : Activity
     private FrameLayout listBox;
     /// <summary>가로 화면 데크 (Windows Jukebox 배치). 세로 화면은 deck.</summary>
     private WideDeck wide;
+    /// <summary>세로 화면 표시 묶음 (가사 · 표시 방식).</summary>
+    private JukeboxStage stageP;
+    private TextView speedValue, keyValue;
     private string status = "";
     private bool seekDragging;
 
@@ -68,7 +71,7 @@ public class MainActivity : Activity
         string err = AppEnv.OpenAudio();
         if (err != null) SetStatus("오디오 장치를 열 수 없습니다: " + err);
 
-        tick = () => { Refresh(); handler.PostDelayed(tick, wide.Parent != null ? 50 : 100); };
+        tick = () => { Refresh(); handler.PostDelayed(tick, 50); };
         handler.Post(tick);
 
         // 재생 알림 (안드로이드 13+는 알림 권한을 묻는다 — 거절해도 재생은 된다)
@@ -169,10 +172,24 @@ public class MainActivity : Activity
         opts.AddView(repeat);
         deck.AddView(opts);
 
+        // 속도 · 키, MIDI 신디 · 거친 음색 · 그 시절 스피커 (세로 화면)
+        var adjust = new FlowRow(this, Dp(16), 0);
+        adjust.AddView(PortraitStepper("속도", "느리게", "빠르게", out speedValue, d => { if (!busy) AppEnv.Session.SetSpeed(Math.Round(AppEnv.Session.Options.Speed * 100 + d * 5) / 100.0); }));
+        adjust.AddView(PortraitStepper("키", "♂", "♀", out keyValue, d => { if (!busy) AppEnv.Session.SetKey(AppEnv.Session.Options.Transpose + d); }));
+        deck.AddView(adjust, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.WrapContent) { TopMargin = Dp(4) });
+        var sound = new FlowRow(this, Dp(16), 0);
+        var syncPortraitSound = SoundControls.Add(this, sound, true);
+        JukeboxPrefs.Changed += () => syncPortraitSound();
+        deck.AddView(sound);
+
         statusText = DeckText(13, "#E0A060");
         deck.AddView(statusText);
         loadText = DeckText(12, "#6E7784");
         deck.AddView(loadText);
+        // 세로 화면 표시 묶음 (목록과 데크 사이): 표시 방식 단추 · 가사 · Implay / Ocplay / 노래방 / Cyberfunk
+        stageP = new JukeboxStage(this, () => busy, 92);
+        stageP.SetPadding(Dp(10), Dp(8), Dp(10), 0);
+        body.AddView(stageP);
         body.AddView(deck, new LinearLayout.LayoutParams(0, 0, 1) { Weight = 1 });
 
         // 가로 화면 데크 (ApplyOrientation이 deck과 바꿔 끼운다). 다음 곡 자동 · 반복은 두 데크가 같은 값
@@ -212,20 +229,52 @@ public class MainActivity : Activity
     /// <summary>
     /// 가로 화면 = 목록 | Windows Jukebox 배치 데크 (곡 정보 · 조작 / 채널 믹서 / 건반), 세로 화면 = 목록 위 · 기존 데크 아래.
     /// </summary>
+    /// <remarks>세로 화면: 목록 (곡 5줄 높이) / 표시 묶음 (남는 칸 전부) / 데크 (재생 · 속도 · 키 · 소리).</remarks>
     private void ApplyOrientation()
     {
         bool landscape = Resources.Configuration.Orientation == Android.Content.Res.Orientation.Landscape;
-        View want = landscape ? wide : deck, other = landscape ? deck : wide;
-        if (other.Parent != null) body.RemoveView(other);
-        if (want.Parent == null) body.AddView(want);
+        body.RemoveAllViews();
         body.Orientation = landscape ? Orientation.Horizontal : Orientation.Vertical;
-        listBox.LayoutParameters = landscape
-            ? new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 34)
-            : new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, 0, 1);
-        want.LayoutParameters = landscape
-            ? new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 66)
-            : new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.WrapContent);
+        if (landscape)
+        {
+            body.AddView(listBox, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 34));
+            body.AddView(wide, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 66));
+        }
+        else
+        {
+            body.AddView(listBox, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ListRowHeight() * 5));
+            body.AddView(stageP, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, 0, 1));
+            body.AddView(deck, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.WrapContent));
+        }
         Refresh();
+    }
+
+    /// <summary>목록 한 줄 높이 (EntryAdapter 줄: 위아래 12dp + 17sp 글자 한 줄 + 구분선).</summary>
+    private int ListRowHeight()
+    {
+        var probe = new TextView(this) { TextSize = 17, Text = "가" };
+        probe.Measure(View.MeasureSpec.MakeMeasureSpec(0, MeasureSpecMode.Unspecified), View.MeasureSpec.MakeMeasureSpec(0, MeasureSpecMode.Unspecified));
+        return probe.MeasuredHeight + Dp(24) + Math.Max(1, list.DividerHeight);
+    }
+
+    /// <summary>세로 데크의 [이름] [−] 값 [+].</summary>
+    private View PortraitStepper(string caption, string minus, string plus, out TextView value, Action<int> step)
+    {
+        var row = new LinearLayout(this) { Orientation = Orientation.Horizontal };
+        row.SetGravity(GravityFlags.CenterVertical);
+        var cap = DeckText(15, "#AEB6C2");
+        cap.Text = caption;
+        cap.SetPadding(0, 0, Dp(6), 0);
+        row.AddView(cap);
+        row.AddView(SmallButton(minus, delegate { step(-1); Refresh(); }));
+        var v = DeckText(16, "#5FD3C6");
+        v.Gravity = GravityFlags.Center;
+        v.SetMinWidth(Dp(60));
+        v.SetTypeface(Typeface.Monospace, TypefaceStyle.Bold);
+        row.AddView(v);
+        row.AddView(SmallButton(plus, delegate { step(1); Refresh(); }));
+        value = v;
+        return row;
     }
 
     /// <summary>상태 글 (여는 중 · zip 푸는 중 · 오류): 세로 데크 아래 줄, 가로 데크는 상태 줄 끝.</summary>
@@ -309,10 +358,10 @@ public class MainActivity : Activity
         Action showKar = () => karText.Text = "곡 폴더에 그림(JPG · PNG · BMP · GIF)이 없을 때 쓸 폴더: " + (JukeboxPrefs.KaraokeFolder == null ? "없음" : ShortPath(JukeboxPrefs.KaraokeFolder));
         showKar();
         var karRow = new FlowRow(this, P(8), 0);
-        var setKar = SmallButton("지금 목록 폴더로", delegate { if (CurrentFolder() != null) { JukeboxPrefs.SetKaraokeFolder(CurrentFolder()); showKar(); wide.ReloadKaraoke(); } });
+        var setKar = SmallButton("지금 목록 폴더로", delegate { if (CurrentFolder() != null) { JukeboxPrefs.SetKaraokeFolder(CurrentFolder()); showKar(); wide.ReloadKaraoke(); stageP.ReloadKaraoke(); } });
         setKar.Enabled = here != null;
         karRow.AddView(setKar);
-        karRow.AddView(SmallButton("없음", delegate { JukeboxPrefs.SetKaraokeFolder(null); showKar(); wide.ReloadKaraoke(); }));
+        karRow.AddView(SmallButton("없음", delegate { JukeboxPrefs.SetKaraokeFolder(null); showKar(); wide.ReloadKaraoke(); stageP.ReloadKaraoke(); }));
         box.AddView(karRow);
         Note(hereText);
 
@@ -624,6 +673,11 @@ public class MainActivity : Activity
         bool playing = s.State == PlayState.Playing;
         if (playing != servicePlaying) { servicePlaying = playing; PlaybackService.Update(this, playing, s.Title); }
         loadText.Text = LoadText(playing);
+
+        // 세로 화면: 속도 · 키 값, 표시 묶음 (가사 · 믹서 · 표시 방식)
+        speedValue.Text = (int)Math.Round(s.Options.Speed * 100) + "%";
+        keyValue.Text = WideDeck.KeyText(s.Options.Transpose);
+        if (stageP.Parent != null) stageP.Update();
     }
 
     private static string Clock(double sec)

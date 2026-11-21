@@ -52,15 +52,8 @@ internal sealed class WideDeck : LinearLayout
     private readonly TextView statusLine, statusRow, titleText, infoText, detailText, posText, lenText, speedValue, keyValue, volValue, noteText;
     private readonly Button playButton;
     private readonly SeekBar seek;
-    private readonly MixerView mixer;
     private readonly KeyboardView keys;
     public bool SeekDragging { get; private set; }
-
-    // 믹서 상태
-    private readonly VoiceState[] states = new VoiceState[PlaybackOptions.Voices];
-    private readonly float[] levels = new float[PlaybackOptions.Voices];
-    private readonly int[] lastCounts = new int[PlaybackOptions.Voices];
-    private string lastPath;
 
     public WideDeck(Context c, Func<bool> busy) : base(c)
     {
@@ -102,17 +95,6 @@ internal sealed class WideDeck : LinearLayout
         info.AddView(lyricsFileText);
         info.AddView(statusLine);
         info.AddView(noteText);
-        // 표시 방식 단추 (고른 것 = 청록)
-        var modes = new FlowRow(c, Dp(4), Dp(2));
-        modes.SetPadding(0, Dp(6), 0, 0);
-        modeButtons = new Button[JukeboxPrefs.ViewModeNames.Length];
-        for (int i = 0; i < modeButtons.Length; i++)
-        {
-            int m = i;
-            modeButtons[i] = DeckButton(c, JukeboxPrefs.ViewModeNames[i], delegate { JukeboxPrefs.SetViewMode(m); ApplyViewMode(); });
-            modes.AddView(modeButtons[i]);
-        }
-        info.AddView(modes);
         top.AddView(info, new LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1) { RightMargin = Dp(5) });
 
         var ctl = Box(c);
@@ -164,56 +146,23 @@ internal sealed class WideDeck : LinearLayout
 
         // ---------------------------------------------------------------- 가운데: 표시 묶음 (표시 방식에 따라)
         // Implay = 가사 + 채널 믹서, Ocplay = 가사 + 작은 악보 · 세로 음량 막대, 노래방 = 그림 + 가사, Cyberfunk = 별 · 도형 + 가사
-        var stage = new LinearLayout(c) { Orientation = Orientation.Vertical };
-        lyricsView = new LyricsView(c);
-        stage.AddView(lyricsView, new LayoutParams(ViewGroup.LayoutParams.MatchParent, Dp(92)) { BottomMargin = Dp(6) });
-        var screen = new FrameLayout(c);
-        mixer = new MixerView(c, this);
-        ocView = new OcplayView(c);
-        karaoke = new KaraokeView(c);
-        cyber = new CyberView(c);
-        foreach (var v in new View[] { mixer, ocView, karaoke, cyber }) screen.AddView(v, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.MatchParent));
-        stage.AddView(screen, new LayoutParams(ViewGroup.LayoutParams.MatchParent, 0, 1));
+        stage = new JukeboxStage(c, busy, 92);
         AddView(stage, new LayoutParams(ViewGroup.LayoutParams.MatchParent, 0, 1) { TopMargin = Dp(8), BottomMargin = Dp(8) });
 
         // ---------------------------------------------------------------- 아래: 건반
         keys = new KeyboardView(c);
         AddView(keys, new LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.WrapContent));
 
-        ApplyViewMode();
-        JukeboxPrefs.Changed += () => { syncSound(); ApplyViewMode(); };
+        JukeboxPrefs.Changed += () => syncSound();
     }
 
     public event Action SettingsRequested;
     private readonly Action syncSound;
-    private readonly Button[] modeButtons;
     private readonly TextView lyricsFileText;
-    private readonly LyricsView lyricsView;
-    private readonly OcplayView ocView;
-    private readonly KaraokeView karaoke;
-    private readonly CyberView cyber;
-    private int shownMode = -1;
-
-    /// <summary>표시 방식에 따라 보이는 것을 바꾼다. 가사 상자는 Implay · Ocplay에서, 가사를 쓸 수 없는 곡(VGM · MIDI · 트래커)이면 숨김.</summary>
-    private void ApplyViewMode()
-    {
-        int m = JukeboxPrefs.ViewMode;
-        var s = S;
-        bool lyricKind = s.Kind == SongKind.Adlib || s.Kind == SongKind.Sop || !s.HasSong;
-        lyricsView.Visibility = (m == JukeboxPrefs.Implay || m == JukeboxPrefs.Ocplay) && lyricKind ? ViewStates.Visible : ViewStates.Gone;
-        mixer.Visibility = m == JukeboxPrefs.Implay ? ViewStates.Visible : ViewStates.Gone;
-        ocView.Visibility = m == JukeboxPrefs.Ocplay ? ViewStates.Visible : ViewStates.Gone;
-        karaoke.Visibility = m == JukeboxPrefs.Karaoke ? ViewStates.Visible : ViewStates.Gone;
-        cyber.Visibility = m == JukeboxPrefs.Cyber ? ViewStates.Visible : ViewStates.Gone;
-        noteText.Visibility = m == JukeboxPrefs.Implay ? ViewStates.Visible : ViewStates.Gone;
-        for (int i = 0; i < modeButtons.Length; i++) modeButtons[i].SetBackgroundColor(i == m ? Accent : Color.ParseColor("#3A414B"));
-        if (m == JukeboxPrefs.Karaoke && shownMode != m) karaoke.Reload(s.Path);
-        if (m == JukeboxPrefs.Cyber) cyber.Invalidate();
-        shownMode = m;
-    }
+    private readonly JukeboxStage stage;
 
     /// <summary>노래방 그림 폴더 설정이 바뀐 뒤.</summary>
-    public void ReloadKaraoke() { karaoke.Reload(S.Path); }
+    public void ReloadKaraoke() { stage.ReloadKaraoke(); }
 
     // ================================================================ 갱신 (MainActivity.Refresh가 부른다)
 
@@ -229,15 +178,7 @@ internal sealed class WideDeck : LinearLayout
     {
         var s = S;
         bool playing = s.State == PlayState.Playing;
-        if (s.Path != lastPath)
-        {
-            lastPath = s.Path;
-            Array.Clear(levels, 0, levels.Length);
-            Array.Clear(lastCounts, 0, lastCounts.Length);
-            ocView.Clear();
-            karaoke.SetSong(s.Path);
-            ApplyViewMode();
-        }
+        noteText.Visibility = JukeboxPrefs.ViewMode == JukeboxPrefs.Implay ? ViewStates.Visible : ViewStates.Gone;
 
         titleText.Text = s.HasSong ? s.Title : "곡을 고르세요";
         string sound = s.SoundText;
@@ -247,16 +188,6 @@ internal sealed class WideDeck : LinearLayout
         bool lyricKind = s.Kind == SongKind.Adlib || s.Kind == SongKind.Sop;
         lyricsFileText.Text = "가사  " + (s.LyricsText ?? "없음");
         lyricsFileText.Visibility = lyricKind ? ViewStates.Visible : ViewStates.Gone;
-
-        // 가사 · 표시 방식
-        var lyr = s.Lyrics;
-        var lst = s.LyricStateNow();
-        lyricsView.Lyrics = lyr; lyricsView.State = lst;
-        karaoke.Lyrics = lyr; karaoke.State = lst; karaoke.Title = s.HasSong ? s.Title : "";
-        cyber.Lyrics = lyr; cyber.State = lst; cyber.Title = s.HasSong ? s.Title : "";
-        if (lyricsView.Visibility == ViewStates.Visible) lyricsView.Invalidate();
-        if (karaoke.Visibility == ViewStates.Visible) { karaoke.Tick(); karaoke.Invalidate(); }
-        if (cyber.Visibility == ViewStates.Visible) cyber.Invalidate();   // 화면을 돌려 다시 붙었을 때도 움직이게
 
         double len = s.LengthSeconds, pos = s.PositionSeconds;
         string state = playing ? "▶ 재생 중" : s.State == PlayState.Paused ? "❚❚ 일시정지" : s.State == PlayState.Stopped ? "■ 정지" : "";
@@ -276,48 +207,12 @@ internal sealed class WideDeck : LinearLayout
         keyValue.Text = KeyText(s.Options.Transpose);
         volValue.Text = Percent(s.Options.Gain);
 
-        // 믹서: 엔진 보이스 상태 → 줄. 음량 막대는 노트온에 볼륨만큼 올라가고 천천히 내려온다 (Windows와 같은 식)
-        if (!s.GetVoiceStates(states)) for (int v = 0; v < states.Length; v++) states[v] = new VoiceState { Note = -1 };
-        var chs = s.Channels;
-        var rows = mixer.Rows;
-        while (rows.Count < chs.Count) rows.Add(new MixerRow());
-        if (rows.Count > chs.Count) rows.RemoveRange(chs.Count, rows.Count - chs.Count);
+        // 표시 묶음 (가사 · 믹서 · 표시 방식) + 건반
+        stage.Update();
         keys.Lit.Clear();
-        for (int v = 0; v < chs.Count; v++)
-        {
-            var row = rows[v];
-            var vs = states[v];
-            row.Label = chs[v].Label;
-            row.Used = chs[v].Used;
-            row.Color = VoiceColor(v);
-            row.Muted = s.Options.VoiceMute[v];
-            row.Pitch = s.Options.VoiceTranspose[v];
-            row.Instrument = s.InstrumentOf(v, vs, playing);
-            row.Found = s.InstrumentFound(row.Instrument);
-            row.Note = playing ? vs.Note : -1;
-            float target = row.Note >= 0 ? Math.Max(0.15f, vs.Volume) : 0f;
-            if (playing && vs.NoteOnCount != lastCounts[v]) { levels[v] = Math.Max(levels[v], Math.Max(0.15f, vs.Volume)); lastCounts[v] = vs.NoteOnCount; }
-            else levels[v] = row.Note >= 0 ? Math.Max(target * 0.75f, levels[v] * 0.94f) : levels[v] * 0.7f;
-            if (!playing) levels[v] *= 0.5f;
-            row.Level = levels[v];
-        }
-        // 건반: 뒤 채널부터 칠해 같은 음이면 앞 채널 색
-        if (playing)
-            for (int v = chs.Count - 1; v >= 0; v--)
-            {
-                if (rows[v].Muted) continue;
-                int n = s.SoundingNote(v, states[v]);
-                if (n >= 0) keys.Lit[n] = rows[v].Color;
-            }
-        if (mixer.Visibility == ViewStates.Visible) mixer.Invalidate();
-        if (ocView.Visibility == ViewStates.Visible) ocView.Sample(rows, playing);
+        foreach (var kv in stage.Lit) keys.Lit[kv.Key] = kv.Value;
         keys.Invalidate();
     }
-
-    // 믹서 조작 (MixerView가 부른다)
-    internal void ToggleMute(int v) { if (!busy()) S.SetMute(v, !S.Options.VoiceMute[v]); }
-    internal void Solo(int v) { if (!busy()) S.Solo(v); }
-    internal void Pitch(int v, int d) { if (!busy()) S.SetVoicePitch(v, S.Options.VoiceTranspose[v] + d); }
 
     // ================================================================ 작은 도우미
 
@@ -448,14 +343,14 @@ internal sealed class MixerRow
 internal sealed class MixerView : View
 {
     public readonly List<MixerRow> Rows = new List<MixerRow>();
-    private readonly WideDeck deck;
+    private readonly JukeboxStage deck;
     private readonly GestureDetector gestures;
     private readonly Paint paint = new Paint(PaintFlags.AntiAlias);
     private readonly float d;
     private float scroll;
     private const int Segments = 40;
 
-    public MixerView(Context c, WideDeck deck) : base(c)
+    public MixerView(Context c, JukeboxStage deck) : base(c)
     {
         this.deck = deck;
         d = c.Resources.DisplayMetrics.Density;
@@ -708,7 +603,8 @@ internal sealed class KeyboardView : View
 internal static class SoundControls
 {
     /// <summary>parent에 상자들을 넣고, 설정에 맞추는 동작을 돌려준다.</summary>
-    public static Action Add(Context c, ViewGroup parent)
+    /// <param name="compact">세로 데크: MIDI 신디 · 거친 음색 · 그 시절 스피커만 (원래 소리 상자 · 모듈은 [⚙ 설정]에).</param>
+    public static Action Add(Context c, ViewGroup parent, bool compact = false)
     {
         float d = c.Resources.DisplayMetrics.Density;
         var labels = JukeboxSession.ChipStyles.Select(ChipMidiSynth.Label).ToList();
@@ -718,17 +614,31 @@ internal static class SoundControls
         var synth = NewSpinner(c, new[] { "OPL FM (GM 뱅크)" }.Concat(labels).ToList());
         var module = NewSpinner(c, new List<string> { "General MIDI (GM)", "Roland MT-32" });
 
-        var g1 = Group(c);
-        g1.AddView(raw);
-        g1.AddView(vintage);
-        g1.AddView(chip);
-        parent.AddView(g1);
-        var g2 = Group(c);
-        g2.AddView(Caption(c, "MIDI 신디", d));
-        g2.AddView(synth);
-        g2.AddView(Caption(c, "모듈", d));
-        g2.AddView(module);
-        parent.AddView(g2);
+        if (compact)
+        {
+            var gs = Group(c);
+            gs.AddView(Caption(c, "MIDI 신디", d));
+            gs.AddView(synth);
+            parent.AddView(gs);
+            var gt = Group(c);
+            gt.AddView(raw);
+            gt.AddView(vintage);
+            parent.AddView(gt);
+        }
+        else
+        {
+            var g1 = Group(c);
+            g1.AddView(raw);
+            g1.AddView(vintage);
+            g1.AddView(chip);
+            parent.AddView(g1);
+            var g2 = Group(c);
+            g2.AddView(Caption(c, "MIDI 신디", d));
+            g2.AddView(synth);
+            g2.AddView(Caption(c, "모듈", d));
+            g2.AddView(module);
+            parent.AddView(g2);
+        }
 
         Action sync = () =>
         {

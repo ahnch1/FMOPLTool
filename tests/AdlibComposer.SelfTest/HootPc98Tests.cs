@@ -332,10 +332,20 @@ public static class HootPc98Tests
                     int keyOns = opl ? m.Log.Count(x => x.kind <= 1 && x.reg >= 0xB0 && x.reg <= 0xB8 && (x.val & 0x20) != 0)   // OPL3 키온
                         : m.Log.Count(x => x.kind == 0 && ((x.reg == 0x28 && (x.val & 0xF0) != 0) || (x.reg == 0x10 && (x.val & 0xBF) != 0 && (x.val & 0x80) == 0) || (x.reg >= 8 && x.reg <= 10 && (x.val & 0x1F) != 0))), beeps = m.Log.Count(x => x.kind == 2 && x.val != 0);
                     int fmWrites = m.Log.Count(x => x.kind <= 1);
-                    bool sound = keyOns > 0 || beeps > 0;
+                    bool sound = keyOns > 0 || beeps > 0, later = false;
+                    // 첫 곡이 조용하면 (NOMUSIC.MUS 같은 "음악 없음" 곡) 다음 곡 2개까지
+                    for (int k = 1; !sound && k <= 2 && k < e.Titles.Count && Environment.GetEnvironmentVariable("HOOT_TITLE") == null; k++)
+                    {
+                        var m2 = HootPc98.BootDir(dir, e, out _);
+                        m2.Play(e.Titles[k].Code);
+                        m2.Run((long)(m2.CpuHz * seconds));
+                        int k2 = opl ? m2.Log.Count(x => x.kind <= 1 && x.reg >= 0xB0 && x.reg <= 0xB8 && (x.val & 0x20) != 0)
+                            : m2.Log.Count(x => x.kind == 0 && ((x.reg == 0x28 && (x.val & 0xF0) != 0) || (x.reg == 0x10 && (x.val & 0xBF) != 0 && (x.val & 0x80) == 0) || (x.reg >= 8 && x.reg <= 10 && (x.val & 0x1F) != 0)));
+                        if (k2 > 0 || m2.Log.Any(x => x.kind == 2 && x.val != 0)) { sound = later = true; keyOns = k2; }
+                    }
                     if (sound) st.sound++;
                     if (m.Cpu.UnknownOps > 0) st.halted++;
-                    string cause = sound ? "sound"
+                    string cause = later ? "sound-later" : sound ? "sound"
                         : m.Cpu.UnknownOps > 0 ? "unknown-op"
                         : shells.Any(r => r == DosMachine.ShellResult.NotFound) ? "shell-not-found"
                         : shells.Any(r => r == DosMachine.ShellResult.NoMemory) ? "no-memory"

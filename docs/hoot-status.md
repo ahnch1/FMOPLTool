@@ -31,6 +31,7 @@
 | 2.0.4 | 8-6 (메가드라이브) | hoot megadrive generic_z80 · iyinc: `Audio/HootMegaDrive.cs` (Z80 사운드 쪽 · 카트리지의 Z80 드라이버를 RAM에, 요청 주소) |
 | 2.0.5 | 8-7 (X68000) | MC68000 `Audio/Cpu/M68000.cs` + hoot x68k generic: `Audio/HootX68k.cs` (OPM · ADPCM · DMA · MFP, E00010h = hoot가 대신 하는 IOCS · DOS) |
 | 2.0.6 | 8-7 (X68000 MIDI) | x68k MIDI 판: YM3802 MIDI 보드 (EAFA00h) → 살아 있는 MIDI 곡 (`HootX68k.LoadMidi`) |
+| 2.3.20 | DOS 핸들 256 | MaxHandles 64 → 256: rom type="file" offset = 핸들 번호인데 xak_98은 40h~44h (곡 코드 0x0d0040 …) → 묶기가 조용히 실패해 첫 곡들이 무음. --hoot98survey: 첫 곡이 조용하면 다음 곡 2개까지 (sound-later — quizb 첫 곡 = NOMUSIC.MUS). 300 zip 표본 293 → 295 / 303 (xak · quizb) |
 | 2.3.19 | 8259 SFNM | `Pic8259.Sfnm` · `Cascade` (ICW4 bit4 · ICW3), PC-98 주 PIC 처음 값 = BIOS ICW4 1Dh (SFNM, 종 = IR7): 종 연결 입력이 들어가 있어도 종의 새 요청을 받음. Kuni's MDRV (pduo · charm)는 처리기에서 종에만 EOI → 주 ISR bit7이 남아 첫 IRQ 뒤 멈췄음. 300 zip 표본 291 → 293 / 303, emagic · dismix1 키온 크게 늘음, pc98vx writes-no-keyon 3 → 1 |
 | 2.3.18 | DOS 시작 DI = 0 | 프로그램 시작 레지스터 DI = 0 (예전 = 실제 MS-DOS처럼 SP). NIHON CREATE SS_98은 곡 이름 주소를 XOR DI,DX로 만들어 INT 41h에 넘김 → DI = FFFEh면 빈 이름. 300 zip 표본 289 → 291 / 303 (Super 野球道 × 2), 거의 무음이던 toge · giddy2 · kankin · egee16 키온 크게 늘음, PC/AT 그대로 |
 | 2.3.17 | PC-98 파일 이름 | rom type="file" 묶기: 목록의 폴더 경로 (DISC_1/AMUS.DAT)가 zip에 없으면 이름만 같은 파일 (예전엔 조용히 못 묶어 MAKO_98이 곡 파일을 못 읽음), fileNN.EXT가 없으면 zip 순서 NN번째 .EXT (koroshi: 원래 일본어 이름 zip). 300 zip 표본 286 → 289 / 303 (rance3h · xix · koroshi) |
@@ -146,7 +147,7 @@
 | 대상 | 소리 남 | 측정 |
 |---|---|---|
 | PC-98 pc9821dos (opn · opna · 86) | 12 / 12 (v2.1.74 386) | `--hoot98survey 폴더 50 8` |
-| PC-98 DOS FM (opn · opna · 86 · beep) | 300 zip 표본 293 / 303 (약 97%, v2.3.19) | `--hoot98survey pc98 300 6` |
+| PC-98 DOS FM (opn · opna · 86 · beep) | 300 zip 표본 295 / 303 (약 97%, v2.3.20) | `--hoot98survey pc98 300 6` |
 | PC-98 pc98vx · pc98 FM (opn · opna · 86 · beep) | 354항목 중 314 (약 89%) — vx opn 168/198 · opna 18/20 · 86 9/9 · beep 36/40, pc98 opn 77/81 | `--hoot98survey _vx 400 6` (pc98vx · pc98 항목이 든 zip 285개를 따로 모은 폴더) |
 | MIDI 판 pc98vx · pc98 | 97 / 109 | `--hootmidisurvey _vx 400 20` |
 | PC/AT DOS gameblaster · tandy | 8 / 8 · 4 / 4 | `--hootatsurvey 폴더 50 8` (HOOT_TITLE = 몇째 곡) |

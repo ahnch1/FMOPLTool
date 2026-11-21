@@ -162,6 +162,12 @@ public static class Pc98Tests
         var (n3, m3) = CountFor(Com(new[] { 0xFB, 0xF4 }), Pc98Machine.Board.Opna, 0.01);
         check("PC-98 OPNA extended status (18Ch): ADPCM BRDY always ready", (m3.In(0x18C) & 0x08) != 0, m3.In(0x18C).ToString("X2"));
 
+        // hoot rom file offset = 핸들 번호: 40h 넘는 핸들 (xak_98 40h~44h), 목록의 폴더가 zip에 없으면 같은 이름 파일
+        var fsh = new DosFileSystem();
+        fsh.Add("SONG.BGM", new byte[] { 1, 2, 3 });
+        var mh = new Pc98Machine(fsh, Pc98Machine.Board.Opn, 8);
+        check("DOS file bind: handle 44h (≥ 40h) and folder-less fallback (DEMO/SONG.BGM → SONG.BGM)", mh.BindFile(0x44, "DEMO/SONG.BGM") && mh.HandleOpen(0x44) && mh.SelectSongHandle(0x44), mh.HandleOpen(0x44).ToString());
+
         // 셸 프로그램이 끝나도 (재생 중) 멈추지 않는다: AutoIdle = 쉬는 고리에서 계속
         var fsx = new DosFileSystem();
         fsx.Add("X.COM", Com(new[] { 0xB8, 0x00, 0x4C, 0xCD, 0x21 }));

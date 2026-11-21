@@ -18,7 +18,7 @@ namespace AdlibComposer.Audio.Dos;
 /// </summary>
 public class DosMachine : IX86Bus
 {
-    public const int StubSeg = 0xF000, DosSeg = 0x0070, FirstMcb = 0x0800, MaxHandles = 64;
+    public const int StubSeg = 0xF000, DosSeg = 0x0070, FirstMcb = 0x0800, MaxHandles = 256;   // hoot rom file offset = 핸들 번호, 40h 넘는 것도 (xak_98 40h~44h)
     /// <summary>호스트 함정 번호: 0~255 = 그 벡터의 기본 처리기, 이 값 = 바깥(C#)이 부른 far call에서 돌아옴.</summary>
     private const int TrapReturn = 0x0100;
     private const int ReturnStubOff = 0x0400, IdleOff = 0x0410;

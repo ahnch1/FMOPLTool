@@ -35,6 +35,10 @@ public class MainActivity : Activity
     private SeekBar seek;
     private Button playButton;
     private CheckBox autoNext, repeat;
+    private FrameLayout listBox;
+    /// <summary>가로 화면 데크 (Windows Jukebox 배치). 세로 화면은 deck.</summary>
+    private WideDeck wide;
+    private string status = "";
     private bool seekDragging;
 
     // 목록 상태: 들어온 길 (폴더 · zip을 푼 폴더 · 곡 여럿 든 파일), 마지막이 지금 보는 곳
@@ -62,9 +66,9 @@ public class MainActivity : Activity
         ApplyOrientation();
 
         string err = AppEnv.OpenAudio();
-        if (err != null) statusText.Text = "오디오 장치를 열 수 없습니다: " + err;
+        if (err != null) SetStatus("오디오 장치를 열 수 없습니다: " + err);
 
-        tick = () => { Refresh(); handler.PostDelayed(tick, 100); };
+        tick = () => { Refresh(); handler.PostDelayed(tick, wide.Parent != null ? 50 : 100); };
         handler.Post(tick);
 
         // 재생 알림 (안드로이드 13+는 알림 권한을 묻는다 — 거절해도 재생은 된다)
@@ -89,6 +93,7 @@ public class MainActivity : Activity
         bar.AddView(SmallButton("▲ 위로", delegate { GoUp(); }));
         bar.AddView(SmallButton("저장소", delegate { if (HasStorageAccess()) OpenRoot(StorageRoot, "저장소"); else RequestStorageAccess(); }));
         bar.AddView(SmallButton("데모", delegate { OpenRoot(AppEnv.DemoDir, "데모 곡"); }));
+        bar.AddView(SmallButton("⚙ 설정", delegate { ShowSettings(); }));
         pathText = new TextView(this) { TextSize = 14 };
         pathText.SetTextColor(Color.ParseColor("#AEB6C2"));
         pathText.SetSingleLine(true);
@@ -101,7 +106,7 @@ public class MainActivity : Activity
         root.AddView(body, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, 0, 1));
 
         // 목록
-        var listBox = new FrameLayout(this);
+        listBox = new FrameLayout(this);
         listBox.SetBackgroundColor(Color.ParseColor("#262B33"));
         list = new ListView(this);
         adapter = new EntryAdapter(this);
@@ -170,6 +175,20 @@ public class MainActivity : Activity
         deck.AddView(loadText);
         body.AddView(deck, new LinearLayout.LayoutParams(0, 0, 1) { Weight = 1 });
 
+        // 가로 화면 데크 (ApplyOrientation이 deck과 바꿔 끼운다). 다음 곡 자동 · 반복은 두 데크가 같은 값
+        wide = new WideDeck(this, () => busy);
+        wide.PrevSong += () => PlayNeighbor(-1);
+        wide.NextSong += () => PlayNeighbor(1);
+        wide.PlayPause += TogglePlay;
+        wide.StopPressed += () => { if (!busy) { AppEnv.Session.Stop(); Refresh(); } };
+        wide.SettingsRequested += ShowSettings;
+        wide.AutoNext.Checked = autoNext.Checked;
+        wide.Repeat.Checked = repeat.Checked;
+        wide.AutoNext.CheckedChange += (s, e) => { if (autoNext.Checked != e.IsChecked) autoNext.Checked = e.IsChecked; };
+        wide.Repeat.CheckedChange += (s, e) => { if (repeat.Checked != e.IsChecked) repeat.Checked = e.IsChecked; };
+        autoNext.CheckedChange += (s, e) => { if (wide.AutoNext.Checked != e.IsChecked) wide.AutoNext.Checked = e.IsChecked; };
+        repeat.CheckedChange += (s, e) => { if (wide.Repeat.Checked != e.IsChecked) wide.Repeat.Checked = e.IsChecked; };
+
         // 안드로이드 15+ (targetSdk 35 이상)는 화면을 상태 · 내비게이션 막대 밑까지 그린다 (edge-to-edge 강제)
         // → 막대 크기만큼 안쪽 여백. 그 아래 판은 시스템이 알아서 띄우므로 손대지 않는다.
         if (OperatingSystem.IsAndroidVersionAtLeast(35)) root.SetOnApplyWindowInsetsListener(new SystemBarPadding());
@@ -190,19 +209,129 @@ public class MainActivity : Activity
         }
     }
 
-    /// <summary>가로 화면 = 목록 | 데크, 세로 화면 = 목록 위 · 데크 아래.</summary>
+    /// <summary>
+    /// 가로 화면 = 목록 | Windows Jukebox 배치 데크 (곡 정보 · 조작 / 채널 믹서 / 건반), 세로 화면 = 목록 위 · 기존 데크 아래.
+    /// </summary>
     private void ApplyOrientation()
     {
         bool landscape = Resources.Configuration.Orientation == Android.Content.Res.Orientation.Landscape;
+        View want = landscape ? wide : deck, other = landscape ? deck : wide;
+        if (other.Parent != null) body.RemoveView(other);
+        if (want.Parent == null) body.AddView(want);
         body.Orientation = landscape ? Orientation.Horizontal : Orientation.Vertical;
-        for (int i = 0; i < body.ChildCount; i++)
+        listBox.LayoutParameters = landscape
+            ? new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 34)
+            : new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, 0, 1);
+        want.LayoutParameters = landscape
+            ? new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 66)
+            : new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.WrapContent);
+        Refresh();
+    }
+
+    /// <summary>상태 글 (여는 중 · zip 푸는 중 · 오류): 세로 데크 아래 줄, 가로 데크는 상태 줄 끝.</summary>
+    private void SetStatus(string text)
+    {
+        status = text ?? "";
+        statusText.Text = status;
+        if (wide != null) wide.SetStatus(status);
+    }
+
+    // ================================================================ 설정 창
+
+    /// <summary>지금 목록이 보여 주는 실제 폴더 (곡 목록 · 없는 폴더면 null).</summary>
+    private string CurrentFolder()
+    {
+        if (places.Count == 0) return null;
+        var p = places[places.Count - 1];
+        return !p.Tracks && Directory.Exists(p.Path) ? p.Path : null;
+    }
+
+    /// <summary>
+    /// 설정: 소리 (거친 음색 · 스피커 · 원래 소리 / 8-bit · MIDI 신디 · 모듈), resource 폴더 (기본 = APK에 든 것), 노래방 그림 폴더.
+    /// 폴더는 왼쪽 목록에서 그 폴더로 들어간 뒤 [지금 목록 폴더로]를 누른다.
+    /// </summary>
+    private void ShowSettings()
+    {
+        float d = Resources.DisplayMetrics.Density;
+        int P(int v) => (int)(v * d + 0.5f);
+        var box = new LinearLayout(this) { Orientation = Orientation.Vertical };
+        box.SetPadding(P(20), P(12), P(20), P(8));
+
+        TextView Head(string t)
         {
-            var v = body.GetChildAt(i);
-            v.LayoutParameters = landscape
-                ? new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1)
-                : v == deck ? new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.WrapContent)
-                : new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, 0, 1);
+            var h = new TextView(this) { Text = t, TextSize = 17 };
+            h.SetTypeface(null, TypefaceStyle.Bold);
+            h.SetTextColor(Color.ParseColor("#5FD3C6"));
+            h.SetPadding(0, P(14), 0, P(4));
+            box.AddView(h);
+            return h;
         }
+        TextView Note(string t)
+        {
+            var n = new TextView(this) { Text = t, TextSize = 13 };
+            n.SetTextColor(Color.ParseColor("#AEB6C2"));
+            box.AddView(n);
+            return n;
+        }
+
+        Head("소리");
+        var sound = new FlowRow(this, P(12), 0);
+        SoundControls.Add(this, sound);
+        box.AddView(sound);
+        Note("8-bit = MIDI · ROL · IMS 곡을 옛 게임기 칩 소리로. MT-32 = Munt 에뮬레이터 (ROM: resource 폴더에 .ROM이 있으면 그것, 없으면 APK에 든 것 · " + (AppEnv.Mt32RomFolder() != null ? "있음" : "없음 → MT-32 음색 번호를 GM으로") + ").");
+
+        string here = CurrentFolder();
+        string hereText = here != null ? "지금 목록 폴더: " + ShortPath(here) : "지금 목록이 폴더가 아닙니다 (곡 목록 · zip 안이면 폴더로 나와서)";
+
+        Head("resource 폴더");
+        var resText = Note("");
+        Action showRes = () =>
+        {
+            var lines = new List<string> { JukeboxPrefs.ResourceFolder == null ? "APK에 든 파일만 씀 (기본)" : "폴더: " + ShortPath(JukeboxPrefs.ResourceFolder) };
+            foreach (var f in JukeboxPrefs.ResourceFiles)
+            {
+                JukeboxPrefs.ResourceFile(f, out bool user);
+                lines.Add("  " + f + " — " + (user ? "폴더의 것" : "APK에 든 것"));
+            }
+            lines.Add("STANDARD.BNK = ROL · IMS 기본 뱅크, GENMIDI.OP2 = MIDI FM 뱅크, systems.json = 기종 정의 (앱을 다시 시작한 뒤 적용)");
+            resText.Text = string.Join("\n", lines);
+        };
+        showRes();
+        var resRow = new FlowRow(this, P(8), 0);
+        var setRes = SmallButton("지금 목록 폴더로", delegate { if (CurrentFolder() != null) { JukeboxPrefs.SetResourceFolder(CurrentFolder()); showRes(); } });
+        setRes.Enabled = here != null;
+        resRow.AddView(setRes);
+        resRow.AddView(SmallButton("APK에 든 것만", delegate { JukeboxPrefs.SetResourceFolder(null); showRes(); }));
+        box.AddView(resRow);
+
+        Head("노래방 그림 폴더");
+        var karText = Note("");
+        Action showKar = () => karText.Text = "곡 폴더에 그림(JPG · PNG · BMP · GIF)이 없을 때 쓸 폴더: " + (JukeboxPrefs.KaraokeFolder == null ? "없음" : ShortPath(JukeboxPrefs.KaraokeFolder));
+        showKar();
+        var karRow = new FlowRow(this, P(8), 0);
+        var setKar = SmallButton("지금 목록 폴더로", delegate { if (CurrentFolder() != null) { JukeboxPrefs.SetKaraokeFolder(CurrentFolder()); showKar(); wide.ReloadKaraoke(); } });
+        setKar.Enabled = here != null;
+        karRow.AddView(setKar);
+        karRow.AddView(SmallButton("없음", delegate { JukeboxPrefs.SetKaraokeFolder(null); showKar(); wide.ReloadKaraoke(); }));
+        box.AddView(karRow);
+        Note(hereText);
+
+        var scroll = new ScrollView(this);
+        scroll.AddView(box);
+        new AlertDialog.Builder(this).SetTitle("설정").SetView(scroll).SetPositiveButton("닫기", (EventHandler<DialogClickEventArgs>)null).Show();
+    }
+
+    private static string ShortPath(string p)
+    {
+        return p.StartsWith(StorageRoot, StringComparison.Ordinal) ? "저장소" + p.Substring(StorageRoot.Length) : p;
+    }
+
+    /// <summary>렌더 부하 글 (재생 중일 때만): 소리 블록 하나를 만드는 데 든 시간 ÷ 그 소리 길이.</summary>
+    private static string LoadText(bool playing)
+    {
+        if (!playing) return "";
+        double load = AndroidAudioOutput.Load;
+        return "렌더 부하 " + (int)Math.Round(load * 100) + "%" + (load > 0.8 ? " — 끊길 수 있음" : "");
     }
 
     public override void OnConfigurationChanged(Android.Content.Res.Configuration newConfig)
@@ -393,7 +522,7 @@ public class MainActivity : Activity
     {
         if (busy) return;
         busy = true;
-        statusText.Text = "zip 푸는 중: " + e.Name;
+        SetStatus("zip 푸는 중: " + e.Name);
         Task.Run(() =>
         {
             string dir = null, err = null;
@@ -402,7 +531,7 @@ public class MainActivity : Activity
             RunOnUiThread(() =>
             {
                 busy = false;
-                statusText.Text = err != null ? "zip을 열 수 없습니다: " + err : "";
+                SetStatus(err != null ? "zip을 열 수 없습니다: " + err : "");
                 if (dir != null) Enter(new Place { Path = dir, Shown = e.Name });
             });
         });
@@ -416,7 +545,7 @@ public class MainActivity : Activity
         if (busy) return;
         busy = true;
         if (newPlaylist != null) playlist = newPlaylist;
-        statusText.Text = "여는 중: " + System.IO.Path.GetFileName(AdlibComposer.Audio.ChipSongs.FilePart(path));
+        SetStatus("여는 중: " + System.IO.Path.GetFileName(AdlibComposer.Audio.ChipSongs.FilePart(path)));
         adapter.Playing = path;
         Task.Run(() =>
         {
@@ -426,7 +555,7 @@ public class MainActivity : Activity
             RunOnUiThread(() =>
             {
                 busy = false;
-                statusText.Text = ok ? "" : "열 수 없습니다: " + err;
+                SetStatus(ok ? "" : "열 수 없습니다: " + err);
                 if (!ok) adapter.Playing = s.Path;
                 Refresh();
             });
@@ -470,6 +599,13 @@ public class MainActivity : Activity
                 if (i >= 0 && i + 1 < playlist.Count) { PlayPath(playlist[i + 1], null); return; }
             }
         }
+        bool nowPlaying = s.State == PlayState.Playing;
+        if (wide.Parent != null)
+        {
+            wide.Update(LoadText(nowPlaying));
+            if (nowPlaying != servicePlaying) { servicePlaying = nowPlaying; PlaybackService.Update(this, nowPlaying, s.Title); }
+            return;
+        }
         titleText.Text = s.HasSong ? s.Title : "곡 없음";
         infoText.Text = s.Info;
         detailText.Text = s.Detail;
@@ -487,7 +623,7 @@ public class MainActivity : Activity
         // 재생 중이면 전경 서비스 (화면을 꺼도 계속)
         bool playing = s.State == PlayState.Playing;
         if (playing != servicePlaying) { servicePlaying = playing; PlaybackService.Update(this, playing, s.Title); }
-        loadText.Text = playing ? "렌더 부하 " + (int)Math.Round(AndroidAudioOutput.Load * 100) + "%" + (AndroidAudioOutput.Load > 0.8 ? " — 끊길 수 있음" : "") : "";
+        loadText.Text = LoadText(playing);
     }
 
     private static string Clock(double sec)

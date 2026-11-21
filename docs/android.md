@@ -44,6 +44,8 @@ dotnet build src/AdlibComposer.Android -c Debug -t:Install            # USB로 �
 | A4 | v2.3.32 | 전경 서비스 (화면 꺼도 재생, 알림) + 부분 wake lock, 렌더 부하 표시, Release = 전체 AOT (arm64, 약 9.7MB), 서명 키 설정 자리 | 끝 (기기 확인 전) |
 | A5 | v2.3.33 | 폴더 위로: 목록 맨 위 `..` 줄, 안드로이드 뒤로 (제스처 · ◁ 키) = 위로 | 끝 (기기 확인) |
 | A6 | v2.3.34 | 안드로이드 15+ 전체 화면(edge-to-edge) 대응: 제목 줄 없앰, 상태 · 내비게이션 막대만큼 안쪽 여백 (위 막대가 상태 표시줄 밑에 가려지던 것) | 끝 (기기 확인) |
+| A7 | v2.3.35 | 가로 화면 = Windows Jukebox 배치: 곡 정보 + 조작 상자 (⏮ −5초 ▶ ■ +5초 ⏭ · 다음 곡 자동 · 반복 · 속도 · 키 · 볼륨 · 초기화 · 진행 막대) / 채널 믹서 (켜기/끄기 · 솔로 · 채널 음높이 · 음량 막대) / 건반. 세로 화면은 그대로. `JukeboxSession`에 채널 목록 · 키 · 솔로 · ±초 · BPM | 끝 (기기 확인 전) |
+| A8 | v2.3.36 | 가사(같은 이름 ISS) · 표시 방식 (Implay · Ocplay · 노래방 · 노래방(Cyberfunk)) · 소리 (거친 음색 · 그 시절 스피커 · 원래 소리 / 8-bit · MIDI 신디 · 모듈) · [⚙ 설정] 창 (소리 · resource 폴더 · 노래방 그림 폴더). `JukeboxSession`에 가사 · 소리 고르기 · MT-32 에뮬레이터 (Munt arm64 + 개인용 ROM) | 끝 (기기 확인 전) |
 
 ## 태블릿에 설치 (권장: Release)
 
@@ -83,7 +85,11 @@ dotnet publish src/AdlibComposer.Android -c Release
 
 ## 화면 (A3)
 
-- 가로 화면: 왼쪽 폴더 목록 | 오른쪽 재생 데크. 세로 화면: 목록 위 · 데크 아래.
+- 가로 화면 (A7): 왼쪽 폴더 목록 | 오른쪽 Windows Jukebox 배치 데크 — 위 [곡 정보 (시간 · ♩ · 속도 · 키 · 볼륨 · 상태, 제목, 형식) | 조작 상자], 가운데 채널 믹서 (왼쪽 칸 누르기 = 켜기/끄기, 길게 = 그 채널만, − + = 채널 음높이, 위아래로 끌어 넘김), 아래 건반 C0~B8 (채널 색). 다음 곡 자동 · 반복은 세로 데크와 같은 값.
+- 세로 화면: 목록 위 · 데크 아래 (A3 그대로).
+- 표시 방식 (A8, 가로 화면 곡 정보 아래 단추): Implay = 가사 + 채널 믹서, Ocplay = 가사 + 작은 악보 · 세로 음량 막대, 노래방 = 곡 폴더 그림 (없으면 설정의 그림 폴더, 10초마다 바뀜, 누르면 다음 그림) + 가사, 노래방(Cyberfunk) = 별 · 워프 · 튕기는 도형 + 네온 가사 (오른쪽 위 체크박스로 층 켜고 끄기). 가사 = 곡 옆 같은 이름 ISS (ROL · IMS · SOP).
+- 소리 (가로 데크 맨 위 막대, 또는 [⚙ 설정]): 거친 음색 · 그 시절 스피커 · 원래 소리 / 8-bit 풍 8가지 (MIDI · ROL · IMS) · MIDI 신디 (OPL FM · 8-bit, 원래 소리 상자와 같은 설정) · 모듈 (GM · MT-32 = Munt 에뮬레이터, ROM이나 라이브러리가 없으면 MT-32 음색 번호를 GM으로). 재생 중에 바꾸면 그 자리에서 새 소리로.
+- resource 폴더 ([⚙ 설정]): 기본은 APK에 든 STANDARD.BNK · GENMIDI.OP2 · systems.json (처음 실행할 때 앱 폴더로 복사). 왼쪽 목록에서 폴더로 들어가 [지금 목록 폴더로]를 누르면 그 폴더에 있는 파일이 APK 것 대신 쓰인다 (없는 파일은 APK 것). 뱅크는 다음 곡부터, systems.json은 앱을 다시 시작한 뒤부터.
 - 위로: 위 막대 [▲ 위로] · 목록 맨 위 `..` 줄 · 안드로이드 뒤로 (제스처 · ◁ 키). 더 갈 곳이 없으면 뒤로는 앱을 뒤로 보낸다 (재생은 계속).
 - 위 막대: [▲ 위로] [저장소] (내부 저장소 맨 위) [데모] (내장 데모 곡) + 지금 경로.
 - 목록: 📁 폴더 · 🗜 zip (누르면 캐시에 풀고 안으로, 처음은 시간이 걸림) · ♪ 곡 · ▸ 곡 여럿 든 파일 (누르면 곡 목록). 곡을 누르면 그 목록이 재생 목록이 된다.
@@ -93,9 +99,20 @@ dotnet publish src/AdlibComposer.Android -c Release
 
 ## 빠진 것 (최소판)
 
-가사(ISS) · 채널 믹서 · 건반 표시 · 8-bit MIDI 신디 · Windows MIDI · MT-32 에뮬레이터(GM 번호로 냄) · hoot 목록 트리(xml) — hoot zip은 폴더 목록에서 열면 .hoot 항목으로 보인다(목록 xml이 zip 옆에 있을 때).
+세로 화면의 가사 · 채널 믹서 · 건반 · 표시 방식 (가로 화면에 있음) · Windows MIDI · hoot 목록 트리(xml) — hoot zip은 폴더 목록에서 열면 .hoot 항목으로 보인다(목록 xml이 zip 옆에 있을 때).
 
 ## 주의
 
 - `ZipPath`(zip을 풀지 않고 읽기)는 경로 구분자를 `\`로 다뤄 안드로이드에서 쓰지 않는다. 안드로이드는 zip을 언제나 `ZipFolder.Extract`로 캐시에 푼다.
 - 안드로이드 파일 시스템은 대소문자를 가린다: 같은 이름 BNK · ISS 찾기는 대소문자 무시로 목록을 훑는다 (`JukeboxSession.SideFile`).
+
+## MT-32 에뮬레이터 (개인용)
+
+- 라이브러리: `src/AdlibComposer.Mt32/build_mt32emu_android.bat` → `src/AdlibComposer.Mt32/android/arm64-v8a/libmt32emu.so` (Munt libmt32emu 2.8.6, LGPL-2.1+, 저장소에 들어 있음). 다시 빌드하려면 NDK가 필요하다:
+  ```
+  %LOCALAPPDATA%\Android\Sdk\cmdline-tools\19.0\bin\sdkmanager.bat --sdk_root=%LOCALAPPDATA%\Android\Sdk "ndk;30.0.16248370"
+  ```
+  (JAVA_HOME = `%LOCALAPPDATA%\Android\jdk`). libc++는 정적으로 묶고 16 KB 페이지 정렬 (안드로이드 15+).
+- ROM: 빌드하는 PC의 `_incoming/MT32/MT32_CONTROL.ROM` · `MT32_PCM.ROM`이 있으면 APK에 들어간다 (`_incoming`은 저장소에 넣지 않음 → 다른 PC에서 빌드하려면 그 PC에도 둔다). 처음 실행할 때 앱 폴더/mt32로 복사.
+- [⚙ 설정]의 resource 폴더에 `.ROM` 파일이 있으면 그 폴더의 ROM을 쓴다 (CM-32L 등, 파일 이름은 상관없음 — SHA-1로 알아본다).
+- 모듈 = MT-32를 고르면 MIDI 곡을 에뮬레이터로 (hoot MT-32 곡은 설정과 상관없이). 곡 정보 줄에 `MT-32 에뮬레이터 · MT32_CONTROL.ROM + MT32_PCM.ROM`. 8-bit 소리일 때는 쓰지 않는다.

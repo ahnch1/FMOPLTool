@@ -23,6 +23,8 @@ public sealed class PlayerSettings
     public string MidiBankPath { get; set; }
     /// <summary>프로그램 리소스 폴더 (GENMIDI.OP2 · systems.json).</summary>
     public string ResourceFolder { get; set; }
+    /// <summary>MT-32 ROM 폴더 (컨트롤 + PCM ROM, 파일 이름은 상관없음 — SHA-1로 알아본다). 없거나 에뮬레이터 라이브러리가 없으면 MT-32 → GM.</summary>
+    public string Mt32RomFolder { get; set; }
 }
 
 /// <summary>
@@ -31,7 +33,7 @@ public sealed class PlayerSettings
 /// Windows Jukebox(JukeboxView)의 곡 열기 · 재생 제어를 화면 없이 옮긴 것이다 (가사 · 믹서 · 8-bit 신디 · MT-32 에뮬레이터는 뺐다).
 /// <para>화면은 <see cref="Update"/>를 자주(30ms쯤) 불러 곡이 끝났는지 본다. 장치는 앱이 <see cref="AudioEngine.OpenDevice"/>로 연다.</para>
 /// </summary>
-public sealed class JukeboxSession
+public sealed partial class JukeboxSession
 {
     private readonly AudioEngine engine;
     private readonly PlayerSettings settings;
@@ -108,6 +110,8 @@ public sealed class JukeboxSession
         Path = path;
         pausedTick = 0;
         for (int v = 0; v < PlaybackOptions.Voices; v++) { Options.VoiceMute[v] = false; Options.VoiceTranspose[v] = 0; }
+        BuildChannels();
+        Lyrics = Kind == SongKind.Adlib || Kind == SongKind.Sop ? FindLyrics(path) : null;
         State = PlayState.Stopped;
         return true;
     }
@@ -394,11 +398,26 @@ public sealed class JukeboxSession
             case SongKind.Sop: engine.PlaySop(sopSong, (int)tick, Options); break;
             case SongKind.Midi:
                 engine.MidiBank = gmBank;
-                engine.MidiSynth = MidiSynth.Fm;
-                engine.MidiModule = midiForceMt32 ? MidiModule.Mt32 : MidiModule.Gm;   // MT-32 에뮬레이터가 없으면 엔진이 음색 번호를 GM에 맞춘다
+                engine.MidiSynth = ChipSynth ? MidiSynth.Chip : MidiSynth.Fm;
+                engine.MidiChipSound = ChipStyle;
+                // MT-32 에뮬레이터 (ROM 폴더 · 라이브러리가 있으면). 없으면 엔진이 음색 번호를 GM에 맞춘다
+                bool mt32 = (Mt32Module || midiForceMt32) && !ChipSynth;
+                if (mt32) EnsureMt32();
+                engine.MidiModule = mt32 ? MidiModule.Mt32 : MidiModule.Gm;
                 engine.PlayMidi(midiSong, tick, Options);
                 break;
-            default: engine.Play(song, bank, (int)tick, -1, -1, -1, Options); break;
+            default:
+                if (ChipSynth)
+                {
+                    // ROL · IMS → 8-bit: 같은 틱의 MIDI 곡으로 바꿔 칩 신디로 (위치 · 가사 · 채널은 그대로)
+                    engine.MidiSynth = MidiSynth.Chip;
+                    engine.MidiChipSound = ChipStyle;
+                    engine.MidiModule = MidiModule.Gm;
+                    engine.PlayMidi(ChipSongOf(song, bank), tick, Options);
+                    songChip = true;
+                }
+                else { engine.Play(song, bank, (int)tick, -1, -1, -1, Options); songChip = false; }
+                break;
         }
         State = PlayState.Playing;
     }

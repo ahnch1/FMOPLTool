@@ -51,4 +51,13 @@
     <AndroidAsset Include="..\..\samples\demo.rol" Link="Assets\demo\demo.rol" />
     <AndroidAsset Include="..\..\samples\demo.bnk" Link="Assets\demo\demo.bnk" />
   </ItemGroup>
+  <!--
+    MT-32 에뮬레이터 (Munt libmt32emu, LGPL-2.1+): src/AdlibComposer.Mt32/build_mt32emu_android.bat로 빌드한 arm64 라이브러리.
+    ROM (개인용, 저장소에 넣지 않음): _incoming/MT32/MT32_CONTROL.ROM · MT32_PCM.ROM이 있으면 APK에 넣는다 → 앱 폴더/mt32로 복사.
+  -->
+  <ItemGroup>
+    <AndroidNativeLibrary Include="..\AdlibComposer.Mt32\android\arm64-v8a\libmt32emu.so" Abi="arm64-v8a" Condition="Exists('..\AdlibComposer.Mt32\android\arm64-v8a\libmt32emu.so')" />
+    <AndroidAsset Include="..\..\_incoming\MT32\MT32_CONTROL.ROM" Link="Assets\mt32\MT32_CONTROL.ROM" Condition="Exists('..\..\_incoming\MT32\MT32_CONTROL.ROM')" />
+    <AndroidAsset Include="..\..\_incoming\MT32\MT32_PCM.ROM" Link="Assets\mt32\MT32_PCM.ROM" Condition="Exists('..\..\_incoming\MT32\MT32_PCM.ROM')" />
+  </ItemGroup>
 </Project>

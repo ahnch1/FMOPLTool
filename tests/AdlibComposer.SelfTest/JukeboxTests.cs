@@ -265,7 +265,7 @@ public static class JukeboxTests
         return o.ToArray();
     }
 
-    private static byte[] BuildIss(bool v2, string[] lines, List<int[]> recs)
+    internal static byte[] BuildIss(bool v2, string[] lines, List<int[]> recs)
     {
         var ms = new MemoryStream();
         var w = new BinaryWriter(ms);

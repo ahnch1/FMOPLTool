@@ -9,7 +9,7 @@ namespace AdlibComposer.Audio;
 
 /// <summary>
 /// hoot PC-8801 (driver pc88, type opn · opna): 문서가 없어 hoot 목록의 시작 코드(rom PATCH 등)를 거꾸로 읽어 맞춘 규약.
-/// <para>기계: Z80 3.9936MHz (clock_mul 2 = 7.9872MHz), 64KB 전부 RAM (ROM · 뱅크 무시), 인터럽트 = IM 2 벡터 (I·256 + 레벨×2; IM 1이면 0038h):
+/// <para>기계: Z80 7.9872MHz (옵션 baseclock 4 = 3.9936MHz), 64KB 전부 RAM (ROM · 뱅크 무시), 인터럽트 = IM 2 벡터 (I·256 + 레벨×2; IM 1이면 0038h):
 /// VRTC 레벨 1 (60Hz, use_vrtc 또는 E6h bit1), RTC 레벨 2 (1/600초, use_rtc 또는 E6h bit0), OPN 타이머 레벨 4 (타이머 A · B 넘침, 27h로 켬).
 /// 칩: OPN (44h 주소 · 45h 데이터, 44h 읽기 = 상태), OPNA (46h · 47h = 뒤 256 레지스터).</para>
 /// <para>hoot 포트: IN 00h = 명령 (1 = 재생, 2 = 정지; 읽으면 비움), OUT 00h = 받음, IN 01h = 곡 코드 아래 바이트,
@@ -32,7 +32,9 @@ public static class HootPc88
 
     public static Machine Boot(HootArchive.Entry e, Func<string, byte[]> file)
     {
-        int mul = e.Option("clock_mul", e.Option("clockmul", 1));
+        // hoot 옵션 baseclock = "Z80 execute base clock (MHz)" — 없으면 8MHz (hoot 20050924 "4MHzモードをサポート", 목록에 있는 값은 모두 4)
+        int mhz = e.Option("baseclock", 0);
+        int mul = mhz > 0 ? Math.Max(1, mhz / 4) : e.Option("clock_mul", e.Option("clockmul", 2));
         var m = new Machine(mul >= 2 ? 2 : 1)
         {
             Opna = e.Type.Equals("opna", StringComparison.OrdinalIgnoreCase),

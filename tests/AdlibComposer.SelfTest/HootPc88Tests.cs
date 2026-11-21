@@ -88,6 +88,9 @@ public static class HootPc88Tests
         m3.Out(0x44, 0x27); m3.Out(0x45, 0x32);   // B LOAD만 (ENABLE 없음) · 깃발 지우기
         m3.RunSeconds(0.2);
         check("hoot pc88: OPN timer flag set by LOAD alone, without IRQ enable (hoot ssFMTimer)", (m3.In(0x44) & 2) != 0, m3.In(0x44).ToString("X2"));
+        var e4 = HootArchive.Parse(xml.Replace("<options>", "<options><option name=\"baseclock\" value=\"0x04\"/>"));
+        var m4 = HootPc88.Boot(e4, n => files.TryGetValue(n, out var d) ? d : null);
+        check("hoot pc88: Z80 clock = baseclock option (MHz), default 8 MHz (hoot)", m.CpuHz == 7987200 && m4.CpuHz == 3993600, m.CpuHz + " / " + m4.CpuHz);
         var v = m.ToVgm(1, 0);
         check("hoot pc88: VGM YM2203", v.Ym2203Clock > 0 && v.IsPlayable, v.ChipSummary);
     }

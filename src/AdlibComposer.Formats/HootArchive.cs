@@ -19,7 +19,7 @@ public static class HootArchive
 {
     public const string Extension = ".hoot";
     /// <summary>항목을 써 둔 표시 (재생할 수 있는 드라이버가 늘면 이름을 바꿔 이미 푼 zip에도 다시 쓴다: 2 = SPC · KSS · NSF · GBS 더함, 3 = PC/AT DOS, 4 = MIDI 판, 5 = pc98vx · pc98).</summary>
-    private const string Mark = ".fmopl_hoot60";
+    private const string Mark = ".fmopl_hoot61";
 
     /// <summary>
     /// 재생할 수 있는 hoot 드라이버 · 형식: pc98dos opn · opna · 86 · beep · pcatdos adlib · soundblaster16 · beep (기계 흉내), 그리고 이미 읽는 파일을 곡 코드로 고르는 것 —
@@ -35,7 +35,8 @@ public static class HootArchive
             case "pcatdos": return t == "adlib" || t == "soundblaster16" || t == "beep" || t == "gameblaster" || t == "tandy";
             case "snes": return t == "spc";
             case "msx": return t == "kss" || t == "generic";
-            case "pc88": return t == "opn" || t == "opna";
+            case "pc88": return t == "opn" || t == "opna" || t == "8801-11" || t == "generic"
+                || t == "romancia" || t == "xanadu" || t == "xanadu2" || t == "asteka2";   // hoot oldfalcom.cpp 규약 (HootPc88 Falcom)   // 8801-11 = OPN을 사운드 보드 II 포트 (A8h~) · generic = OPNA (옛 이름)
             case "x1": return t == "psg" || t == "opm";
             case "fm7": case "fm77av": return t == "generic";                                            // 6809 + PSG · OPN (HootFm7)
             case "neogeo": return t == "generic";

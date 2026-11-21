@@ -113,6 +113,21 @@ public static class HootPc88Tests
                 check("hoot pc88 " + arc + " (" + e.Type + "): first song makes sound in 10 s", r.sound, r.note);
             }
         }
+        // hoot oldfalcom.cpp 규약 (xanadu · xanadu2 · asteka2): 곡마다 prog · 주소 표 · OUT 02h bgm
+        foreach (var (arc, need) in new[] { ("xana_88", 0.8), ("xana2_88", 0.8), ("asteka2", 0.1) })   // asteka2: zip의 APRG (2018년 16KB)가 2001년 표와 판이 달라 1 / 8만
+        {
+            string zip = Path.Combine(folder, arc + ".zip");
+            if (!File.Exists(zip)) { Console.WriteLine("SKIP  hoot pc88 " + arc + " (zip not found)"); continue; }
+            string dir = ZipFolder.Extract(zip);
+            var e = Directory.GetFiles(dir, "*" + HootArchive.Extension).Select(HootArchive.Load).FirstOrDefault(x => HootPc88.FalcomType(x.Type) != null);
+            if (e == null) { check("hoot pc88 " + arc + ": falcom .hoot entry", false, "none"); continue; }
+            var silent = new List<string>();
+            string firstNote = "";
+            foreach (var (code, _) in e.Titles) { var mr = Measure(e, dir, code, 6); if (!mr.sound) { silent.Add(code.ToString("X4")); if (firstNote.Length == 0) firstNote = " (" + mr.cause + ": " + mr.note + ")"; } }
+            int ok = e.Titles.Count - silent.Count;
+            check("hoot pc88 " + arc + " (falcom " + e.Type + ", hoot oldfalcom.cpp): songs make sound", HootArchive.Playable(e.Driver, e.Type) && ok >= need * e.Titles.Count,
+                ok + " / " + e.Titles.Count + (silent.Count > 0 ? ", silent " + string.Join(" ", silent) + firstNote : ""));
+        }
     }
 
     public static (bool sound, string cause, string note) Measure(HootArchive.Entry e, string dir, int code, double seconds)

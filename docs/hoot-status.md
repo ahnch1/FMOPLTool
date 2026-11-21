@@ -31,6 +31,7 @@
 | 2.0.4 | 8-6 (메가드라이브) | hoot megadrive generic_z80 · iyinc: `Audio/HootMegaDrive.cs` (Z80 사운드 쪽 · 카트리지의 Z80 드라이버를 RAM에, 요청 주소) |
 | 2.0.5 | 8-7 (X68000) | MC68000 `Audio/Cpu/M68000.cs` + hoot x68k generic: `Audio/HootX68k.cs` (OPM · ADPCM · DMA · MFP, E00010h = hoot가 대신 하는 IOCS · DOS) |
 | 2.0.6 | 8-7 (X68000 MIDI) | x68k MIDI 판: YM3802 MIDI 보드 (EAFA00h) → 살아 있는 MIDI 곡 (`HootX68k.LoadMidi`) |
+| 2.3.6 | PC-88 옛 팔콤 | hoot oldfalcom.cpp 이식 (`HootPc88` Falcom): 곡 코드 위 바이트 = prog (24KB → 0000h, romancia 1 = 1000h, asteka2 = 8000h), sndadr 표 → E00Eh~E015h (2012년 PATCH가 그대로 읽음), iffadr ← E0h, Xanadu 음량 · 음식 · 거울 · 싸움 바이트와 Ending 2, Xanadu II OUT 02h = bgm 13KB → 5C00h (+ 60A5h = FFh), 4MHz, 타이머 B만 IRQ. 1xh 코드 (2001년 뒤 "음식 없음")는 드라이버 x + 음식 바이트 안 채움. Xanadu 9 / 9, Xanadu II 54 / 55 (0600 IPL = 표에 없음), ASTEKA II 1 / 8 (zip의 APRG는 2018년 16KB — 2001년 표와 판이 다름). 8801-11 · generic도 Playable (thexder88 · arcus2 × 2). 푼 zip 표시 61. PC-88 509 / 533 |
 | 2.3.5 | PC-88 클럭 | 옵션 baseclock = "Z80 execute base clock (MHz)" (hoot.exe 문자열), 없으면 8MHz (hoot 20050924 "4MHzモードをサポート", 목록 14항목은 모두 4). 예전엔 clock_mul만 봐서 모두 4MHz. 499 → 503 / 527 (yakyufan · 100yen4 · hardrank · castle × 2) |
 | 2.3.4 | MSX (hoot 원본) | kss.cpp: 0000h~3FFFh = C9h (없는 BIOS를 부르면 NOP으로 미끄러져 시작 코드를 다시 돌던 문제) + 0006h/0007h = 98h · 002Bh~ = 0 (mmabtl이 읽음), GTSTCK · GTTRIG · RSLREG · WSLREG · RDVDP · SNSMAT · CALLF (RST 30h), WRTPSG 본체를 0390h로; JIFFY += 1; ssAY8910: PSG 읽기 = 레지스터 (R14 = FFh); SCC 9890h~989Fh 미러. 481 → 494 / 498 (Cybernetic Hi-School 1 · 2 · 3 · 데모, Ultima IV, 探偵団X, Golvellius 2 × 2, 銀河英雄伝説 × 2, mbsp, Herzog, NG Warp). 남은 무음: Rona PSG · kgc3 (SCC+ 카트리지 기억) · Illusion City · fukujin1 |
 | 2.3.3 | PC-88 (hoot 원본) | mucom88.cpp · ed2.cpp · mistyblue.cpp: OPN 타이머 깃발 = LOAD만, IRQ = ENABLE일 때 넘칠 때마다 (깃발을 안 지워도), 32h · AAh bit7 = SINTM (사운드 인터럽트 버림), 사운드 보드 II A8h · A9h · ACh · ADh = 같은 칩. 487 → 499 / 527 (rst88v1 · xzr × 2 · liberty · luxsor · tnmbox · thexder88 · andrgyns · saziri × 2 · ginga). OPN 판 46h/47h = FFh는 f_crisis가 멈춰서 안 함 |
@@ -140,7 +141,7 @@
 | MIDI 판 PC/AT | 571 / 586 | `--hootmidisurvey pc 1000 20` |
 | MIDI 판 PC-98 | 360 / 641 | `--hootmidisurvey pc98 1709 20` |
 | MSX generic (PSG · OPLL · SCC · SCC+ · MSX-AUDIO) | 494 / 498 (v2.3.4, 첫 곡이 조용하면 다음 곡 5개까지) | `--hootmsxsurvey msx 1000 8` |
-| PC-88 (opn · opna) | 503 / 527 — opn 369/385 · opna 134/142 (v2.3.5) | `--hoot88survey pc88 1000 6` |
+| PC-88 (opn · opna) | 509 / 533 — opn 369/385 · opna 134/142 · 8801-11 · generic 2 · xanadu · xanadu2 · asteka2 (v2.3.6) | `--hoot88survey pc88 1000 6` |
 | FM-7 · FM77AV (generic) | 29 / 29, 곡 279 / 308 | `--test hootfm7` (HOOT_SONGS=1) |
 | X1 (psg · opm) | 148 / 152 — opm 68/71 · psg 80/81 (v2.3.1) | `--hootx1survey x1 1000 8` |
 | 네오지오 | 137 / 146 (음악일 만한 코드 10h 이상 3곡까지) | `--hootneosurvey roms 200 6` |

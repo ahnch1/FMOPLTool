@@ -34,10 +34,12 @@ public static class HootPc88
     {
         // hoot 옵션 baseclock = "Z80 execute base clock (MHz)" — 없으면 8MHz (hoot 20050924 "4MHzモードをサポート", 목록에 있는 값은 모두 4)
         int mhz = e.Option("baseclock", 0);
-        int mul = mhz > 0 ? Math.Max(1, mhz / 4) : e.Option("clock_mul", e.Option("clockmul", 2));
+        string falcom = FalcomType(e.Type);
+        int mul = mhz > 0 ? Math.Max(1, mhz / 4) : falcom != null ? 1 : e.Option("clock_mul", e.Option("clockmul", 2));   // 옛 팔콤 = hoot oldfalcom.cpp 4MHz
         var m = new Machine(mul >= 2 ? 2 : 1)
         {
-            Opna = e.Type.Equals("opna", StringComparison.OrdinalIgnoreCase),
+            Opna = e.Type.Equals("opna", StringComparison.OrdinalIgnoreCase) || e.Type.Equals("generic", StringComparison.OrdinalIgnoreCase),
+            Falcom = falcom,
             Rtc = e.Option("use_rtc", 0) != 0,
             Vrtc = e.Option("use_vrtc", 0) != 0,
             DataAddr = e.Option("mdata_addr", 0x4000) & 0xFFFF,   // 없으면 4000h (laplace · urusei: 드라이버가 4000h에서 읽음), 0도 주소 (cdtakara)
@@ -68,7 +70,14 @@ public static class HootPc88
                     }
                 case "bgm": bgm[(int)off] = text; break;
                 case "voice": voice[(int)off] = text; break;
-                default: m.Unsupported.Add(type); break;   // adpcm · file · shell · conin · prog · device: 아직
+                case "prog" when falcom != null:
+                    {
+                        var d = file(text);
+                        if (d == null) { m.Missing.Add(text); break; }
+                        m.Progs[(int)off] = d;
+                        break;
+                    }
+                default: m.Unsupported.Add(type); break;   // adpcm · file · shell · conin · device: 아직
             }
         }
         byte[] FileOf(Dictionary<int, string> names, int n)
@@ -80,10 +89,36 @@ public static class HootPc88
         }
         m.Bgm = n => FileOf(bgm, n);
         m.Voice = n => FileOf(voice, n);
-        m.Start(e.Option("init_pc", 0) & 0xFFFF);
+        m.Start(e.Option("init_pc", falcom != null ? 0xE000 : 0) & 0xFFFF);
         m.Run((long)(m.CpuHz * 3), untilWaiting: true);
         return m;
     }
+
+    /// <summary>hoot oldfalcom.cpp가 다루는 형식 (falcom romancia · xanadu · xanadu2 · asteka2), 아니면 null.</summary>
+    public static string FalcomType(string type)
+    {
+        string t = (type ?? "").Trim().ToLowerInvariant();
+        return t == "romancia" || t == "xanadu" || t == "xanadu2" || t == "asteka2" ? t : null;
+    }
+
+    // hoot oldfalcom.cpp sndadr[]: 끼어들기 · 시작 · 멈춤 · 곡 번호 주소 · "LD A,nn / LD I,A"의 nn 자리 (→ E0h)
+    private static readonly (int intAdr, int start, int stop, int codeAdr, int iffAdr)[] FalcomTable =
+    {
+        (0x1056, 0x103a, 0xa000, 0x0000, 0x1043),   // ROMANCIA Opening
+        (0x3a39, 0x3bee, 0x3b98, 0x3db5, 0x0000),   //          Main
+        (0x1b67, 0x1c41, 0x1c0a, 0x0000, 0x1c49),   // XANADU Training Ground
+        (0x4351, 0x443b, 0x43f5, 0x0000, 0x4443),   //        Main
+        (0x168a, 0x1762, 0x172b, 0x0000, 0x176a),   //        Boss
+        (0x16b5, 0x178d, 0x1756, 0x0000, 0x1795),   //        King Dragon
+        (0x03d6, 0x0495, 0x0489, 0x0000, 0x049d),   //        Ending 1
+        (0x03d6, 0x053d, 0x0489, 0x0000, 0x0545),   //        Ending 2
+        (0x0160, 0x03dc, 0xa000, 0x0000, 0x0000),   // XANADU scenario II Opening
+        (0x431c, 0x4466, 0x4417, 0x6067, 0x0000),   //                    Main
+        (0x1563, 0x16a9, 0x165a, 0x6067, 0x0000),   //                    Boss
+        (0x159c, 0x16e2, 0x1693, 0x6067, 0x0000),   //                    King Dragon
+        (0x03d5, 0x05d6, 0xa000, 0x0000, 0x0000),   //                    Ending
+        (0xaeb7, 0xb103, 0xb05b, 0x7eec, 0x0000),   // ASTEKA II
+    };
 
     private static byte[] HexBytes(string s)
     {
@@ -105,6 +140,11 @@ public static class HootPc88
         public readonly Z80 Cpu;
         public readonly double CpuHz;
         public bool Opna, Rtc, Vrtc;
+        /// <summary>hoot oldfalcom.cpp 형식 (romancia · xanadu · xanadu2 · asteka2) 또는 null.</summary>
+        public string Falcom;
+        public readonly Dictionary<int, byte[]> Progs = new Dictionary<int, byte[]>();
+        private int falcomDrv;
+        private bool falcomFoodEmpty;
         public int DataAddr, DataSize, FileSize, VoiceAddr, VoiceSize, VoiceFileSize;
         public Func<int, byte[]> Bgm = n => null, Voice = n => null;
         public readonly List<string> Missing = new List<string>();
@@ -149,6 +189,7 @@ public static class HootPc88
 
         public void Play(int songCode)
         {
+            if (Falcom != null) { FalcomPrepare(songCode); songCode &= 0xFF; }
             code = songCode;
             command = 1;
             var init = Log.Select(x => (0.0, x.port, x.reg, x.val)).ToList();
@@ -158,6 +199,69 @@ public static class HootPc88
         }
 
         public bool Waiting { get { return waitReads >= 4; } }
+
+        /// <summary>
+        /// hoot oldfalcom.cpp Play: 곡 코드 위 바이트 = 드라이버 (prog 번호), prog (24KB)를 0000h (romancia 1 = 1000h, asteka2 = 8000h)에,
+        /// 표의 주소를 E00Eh~E015h에 (시작 코드가 끼어들기 벡터 · 시작 · 멈춤으로 부른다), 32h bit7 (인터럽트 멈춤).
+        /// 1xh (xanadu 12xx~14xx · xanadu2 12xx~)는 2001년판 뒤에 생긴 "음식 없음" 판 — 드라이버는 x, 음식 바이트를 안 채움.
+        /// </summary>
+        private void FalcomPrepare(int songCode)
+        {
+            int hi = (songCode >> 8) & 0xFF;
+            int drv = hi & 0x0F;
+            falcomDrv = drv;
+            falcomFoodEmpty = (hi & 0xF0) == 0x10;
+            portSintm |= 0x80;
+            if (Progs.TryGetValue(drv, out var p))
+            {
+                int ofs = Falcom == "romancia" && drv == 1 ? 0x1000 : Falcom == "asteka2" ? 0x8000 : 0x0000;
+                for (int i = 0; i < 0x6000; i++) Ram[(ofs + i) & 0xFFFF] = i < p.Length ? p[i] : (byte)0;
+            }
+            else for (int i = 0; i < 0x6000; i++) Ram[i] = 0xC9;
+            int ind = -1;
+            switch (Falcom)
+            {
+                case "romancia": ind = drv == 1 ? 0 : 1; break;
+                case "xanadu":
+                    if (drv >= 1 && drv <= 6) ind = drv + 1;
+                    Ram[0x617A] = 0x09;                       // 음량
+                    if (drv >= 2 && drv <= 4)
+                    {
+                        if (!falcomFoodEmpty) Ram[0x60A7] = 0xFF;   // 음식 ≠ 0
+                        Ram[0x607D] = 0x00;                   // 거울 없음
+                        Ram[0x6170] = 0x00;                   // 싸움 아님
+                    }
+                    else if (drv == 6)
+                    {
+                        // Ending 2
+                        Word(0x06AF, 1); Word(0x06B8, 1); Word(0x06C1, 1);
+                        Word(0x06B1, 0x09E2); Word(0x06B3, 0x09E2);
+                        Word(0x06BA, 0x0B2F); Word(0x06BC, 0x0B2F);
+                        Word(0x06C3, 0x0CA3); Word(0x06C5, 0x0CA3);
+                        Ram[0x0226] = 0x0C;                   // 음량
+                        Ram[0x0227] = 0xAA;                   // 타이머 B
+                    }
+                    break;
+                case "xanadu2": if (drv >= 1 && drv <= 5) ind = drv + 7; break;
+                case "asteka2": ind = 13; break;
+            }
+            if (ind < 0) return;
+            var t = FalcomTable[ind];
+            Word(0xE00E, t.intAdr); Word(0xE010, t.start); Word(0xE012, t.stop); Word(0xE014, t.codeAdr);
+            if (t.iffAdr != 0) Ram[t.iffAdr] = 0xE0;
+        }
+
+        private void Word(int at, int v) { Ram[at & 0xFFFF] = (byte)v; Ram[(at + 1) & 0xFFFF] = (byte)(v >> 8); }
+
+        /// <summary>xanadu2: OUT 02h,n = bgm n (13KB)을 5C00h에, 엔딩 (드라이버 5)이 아니면 60A5h = FFh (음식 ≠ 0, 아니면 음이 어긋남).</summary>
+        private void FalcomBgm(int n)
+        {
+            var d = Bgm(n);
+            if (d == null) return;
+            for (int i = 0; i < 13 * 1024; i++) Ram[(0x5C00 + i) & 0xFFFF] = i < d.Length ? d[i] : (byte)0;
+            if (falcomDrv != 5 && !falcomFoodEmpty) Ram[0x60A5] = 0xFF;
+            Loads++;
+        }
 
         private long TimerAPeriod { get { return Math.Max(1, (long)(72.0 * (1024 - timerA) / BaseClock * CpuHz)); } }
         private long TimerBPeriod { get { return Math.Max(1, (long)(1152.0 * (256 - timerB) / BaseClock * CpuHz)); } }
@@ -196,7 +300,7 @@ public static class HootPc88
         {
             // hoot ssFMTimer · mucom88.cpp: 깃발은 LOAD만으로 서고, IRQ는 ENABLE일 때 넘칠 때마다 (32h bit7 = SINTM이면 버림)
             timerFlags |= which == 0 ? 1 : 2;
-            if ((timerCtl & (which == 0 ? 4 : 8)) != 0 && (portSintm & 0x80) == 0) opnPending = true;
+            if ((timerCtl & (which == 0 ? 4 : 8)) != 0 && (portSintm & 0x80) == 0 && !(which == 0 && Falcom != null)) opnPending = true;   // oldfalcom.cpp: 타이머 B만 IRQ
         }
 
         private void Interrupt(int level)
@@ -290,6 +394,7 @@ public static class HootPc88
             {
                 case 0x00: command = 0; break;
                 case 0x01: Load(v); break;
+                case 0x02: if (Falcom == "xanadu2") FalcomBgm(v); break;
                 case 0x44: case 0xA8: addr0 = v; break;
                 case 0x45: case 0xA9: OpnWrite(0, addr0, v); break;
                 case 0x46: case 0xAC: if (Opna) addr1 = v; break;

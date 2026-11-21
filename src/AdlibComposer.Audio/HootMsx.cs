@@ -35,6 +35,7 @@ public static class HootMsx
     /// <summary>기계를 세우고 init_pc부터 돌려 hoot 명령을 기다리는 곳까지 (최대 2초).</summary>
     public static Machine Boot(HootArchive.Entry e, Func<string, byte[]> file)
     {
+        if (e.Type.Equals("ds4", StringComparison.OrdinalIgnoreCase)) return BootDs4(e, file);
         var m = new Machine
         {
             Opll = e.Option("use_opll", 0) != 0,
@@ -87,6 +88,45 @@ public static class HootMsx
         return m;
     }
 
+    // hoot ds4.cpp IPL: IM 1 · SP F380h, 뱅크 2 · 3, CALL 48F2h (초기화), 고리: IN 00h (재생 깃발) → IN 01h (곡) → (C094h) → CALL 729Dh, 0038h = 처리기 (CALL 7236h)
+    private static readonly byte[] Ds4Ipl =
+    {
+        0xed,0x56,0x31,0x80,0xf3,0x3e,0x02,0x32,0x00,0x70,0x3c,0x32,0x00,0x78,0xcd,0xf2,
+        0x48,0xdb,0x00,0xb7,0x20,0x04,0xdb,0x02,0x18,0xf7,0xf3,0x3e,0x02,0x32,0x00,0x70,
+        0x3c,0x32,0x00,0x78,0xdb,0x01,0x32,0x94,0xc0,0xcd,0x9d,0x72,0xfb,0x18,0xe2,0xff,
+        0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xf3,0xf5,0xc5,0xd5,0xe5,0xdd,0xe5,0xfd,
+        0xe5,0x3e,0x02,0x32,0x00,0x70,0x3c,0x32,0x00,0x78,0xcd,0x36,0x72,0xfd,0xe1,0xdd,
+        0xe1,0xe1,0xd1,0xc1,0xf1,0xfb,0xc9,
+    };
+
+    /// <summary>
+    /// hoot ds4.cpp (msx ds4 = Legacy of the Wizard 롬 256KB): 4000h~7FFFh = 롬 0~3FFFh, 8000h · A000h = 8KB 뱅크 (7000h · 7800h에 쓰기),
+    /// 0000h~3FFFh · C000h~ = RAM, IPL + PSG 진입점 (93h · 96h → 1102h · 110Eh), 10000클럭 돌리고 C042h · C043h · C095h · C098h를 채운다.
+    /// </summary>
+    private static Machine BootDs4(HootArchive.Entry e, Func<string, byte[]> file)
+    {
+        var m = new Machine();
+        foreach (var (type, off, text) in e.Roms)
+        {
+            if (type != "code") { m.Unsupported.Add(type); continue; }
+            var d = file(text);
+            if (d == null) { m.Missing.Add(text); continue; }
+            var rom = m.Ds4Rom ?? new byte[0x40000];
+            long o = off < 0 ? 0 : off;   // offset 없음 = 0
+            for (int i = 0; i < d.Length && o + i < rom.Length; i++) rom[o + i] = d[i];
+            m.Ds4Rom = rom;
+        }
+        if (m.Ds4Rom == null) return m;
+        m.Put(0, Ds4Ipl);
+        m.Put(0x93, new byte[] { 0xC3, 0x02, 0x11, 0xC3, 0x0E, 0x11 });
+        m.Put(0x1102, new byte[] { 0xF3, 0xD3, 0xA0, 0xF5, 0x7B, 0xD3, 0xA1, 0xFB, 0xF1, 0xC9, 0x00, 0x00, 0xD3, 0xA0, 0xDB, 0xA2, 0xC9 });
+        m.Start(0);
+        m.Run(10000);
+        m.Ram[0xC042] = 0x02; m.Ram[0xC043] = 0x03; m.Ram[0xC095] = 0xFF; m.Ram[0xC098] = 0xBF;
+        m.Run((long)(CpuClock * 2), untilWaiting: true);
+        return m;
+    }
+
     /// <summary>"00 14 ab" → 바이트 (16진이 아니면 null).</summary>
     private static byte[] HexBytes(string s)
     {
@@ -107,6 +147,9 @@ public static class HootMsx
         public readonly byte[] Ram = new byte[0x10000];
         public readonly Z80 Cpu;
         public bool Opll, SccAlways;
+        /// <summary>hoot ds4.cpp 롬 (msx ds4), 아니면 null.</summary>
+        public byte[] Ds4Rom;
+        private int ds4Bank8 = 2, ds4BankA = 3;
         public int DataAddr, DataSize, FileSize;
         public Func<int, byte[]> Bgm = n => null;
         public readonly List<string> Missing = new List<string>();
@@ -200,8 +243,15 @@ public static class HootMsx
         /// <summary>재생 명령 (곡 코드 = 포트 03h~06h).</summary>
         public void Play(int songCode)
         {
-            code = songCode;
-            command = 1;
+            bool ds4Effect = Ds4Rom != null && (songCode & 0x80) != 0;
+            if (ds4Effect)
+            {
+                // ds4.cpp: 80h 이상 = 효과음 칸 (C095h)에 — IPL은 곡을 한 번 튼 뒤에야 EI하므로 효과음만 틀 때는 인터럽트를 켠다
+                Ram[0xC095] = (byte)(songCode & 0x7F);
+                Cpu.Iff1 = Cpu.Iff2 = true;
+            }
+            code = ds4Effect ? 0 : songCode;
+            command = ds4Effect ? 0 : 1;
             Commands++;
             // 재생 전 쓰기(부팅 중 칩 설정)는 0초로 남긴다
             var init = Log.Select(x => (0.0, x.cmd)).ToList();
@@ -266,10 +316,27 @@ public static class HootMsx
             Log.Add((t, cmd));
         }
 
-        public byte Read(int a) { return Ram[a & 0xFFFF]; }
+        public byte Read(int a)
+        {
+            a &= 0xFFFF;
+            if (Ds4Rom != null && a >= 0x4000 && a < 0xC000)
+            {
+                if (a < 0x8000) return Ds4Rom[a - 0x4000];
+                int bank = a < 0xA000 ? ds4Bank8 : ds4BankA;
+                return Ds4Rom[(bank * 0x2000 + (a & 0x1FFF)) % Ds4Rom.Length];
+            }
+            return Ram[a];
+        }
 
         public void Write(int a, byte v)
         {
+            if (Ds4Rom != null)
+            {
+                a &= 0xFFFF;
+                if (a == 0x7000) ds4Bank8 = v; else if (a == 0x7800) ds4BankA = v;
+                else if (a < 0x4000 || a >= 0xC000) Ram[a] = v;
+                return;
+            }
             a &= 0xFFFF;
             if (banked != null && a >= bankAt && a < bankAt + 0x4000)
             {
@@ -304,6 +371,16 @@ public static class HootMsx
         public byte In(int port)
         {
             port &= 0xFF;
+            if (Ds4Rom != null)
+            {
+                // ds4.cpp: 00h = 재생 깃발 (읽으면 지움), 01h = 곡, 02h = 쉼 (기다리는 고리)
+                if (port == 0x00) { int c = command; command = 0; return (byte)c; }
+                if (port == 0x01) return (byte)code;
+                if (port == 0x02) { waitReads++; return 0; }
+                waitReads = 0;
+                if (port == 0xA2) return psgAddr == 14 ? (byte)0xFF : psgReg[psgAddr];
+                return 0xFF;
+            }
             if (port != 0x02) waitReads = 0;
             switch (port)
             {

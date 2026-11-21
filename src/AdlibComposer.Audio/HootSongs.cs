@@ -51,7 +51,7 @@ public static class HootSongs
         string dir = Path.GetDirectoryName(Path.GetFullPath(file));
         VgmSong v;
         string what;
-        if (driver == "msx" && e.Type.Equals("generic", StringComparison.OrdinalIgnoreCase))
+        if (driver == "msx" && (e.Type.Equals("generic", StringComparison.OrdinalIgnoreCase) || e.Type.Equals("ds4", StringComparison.OrdinalIgnoreCase)))
         {
             // hoot MSX 범용 드라이버: 시작 코드 · 드라이버 · 곡 데이터를 MSX 기계에서 돌려 미리 렌더
             v = HootMsx.Render(e, dir, code);

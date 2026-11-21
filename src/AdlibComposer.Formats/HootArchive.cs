@@ -34,7 +34,7 @@ public static class HootArchive
             case "pc98dos": case "pc9821dos": case "pc88vados": case "pc98vx": case "pc98": case "pc88va": return t == "opn" || t == "opna" || t == "86" || t == "beep" || (d == "pc98dos" && t == "soundblaster16");
             case "pcatdos": return t == "adlib" || t == "soundblaster16" || t == "beep" || t == "gameblaster" || t == "tandy";
             case "snes": return t == "spc";
-            case "msx": return t == "kss" || t == "generic";
+            case "msx": return t == "kss" || t == "generic" || t == "ds4";   // ds4 = hoot ds4.cpp (HootMsx)
             case "pc88": return t == "opn" || t == "opna" || t == "8801-11" || t == "generic"
                 || t == "romancia" || t == "xanadu" || t == "xanadu2" || t == "asteka2";   // hoot oldfalcom.cpp 규약 (HootPc88 Falcom)   // 8801-11 = OPN을 사운드 보드 II 포트 (A8h~) · generic = OPNA (옛 이름)
             case "x1": return t == "psg" || t == "opm";

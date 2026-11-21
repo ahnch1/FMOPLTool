@@ -91,6 +91,18 @@ public static class HootMsxTests
             var r = Measure(e, dir, e.Titles[0].Code, 10);
             check("hoot msx " + arc + " (" + what + "): first song makes sound in 10 s", r.sound, r.note);
         }
+        // hoot ds4.cpp (Legacy of the Wizard 롬): 뱅크 7000h · 7800h, IPL, 포트 00h · 01h · 02h
+        string zip4 = Path.Combine(folder, "slayer42.zip");
+        if (!File.Exists(zip4)) { Console.WriteLine("SKIP  hoot msx slayer42 (zip not found)"); return; }
+        string dir4 = ZipFolder.Extract(zip4);
+        var e4 = Directory.GetFiles(dir4, "*" + HootArchive.Extension).Select(HootArchive.Load).FirstOrDefault(x => x.Driver == "msx" && x.Type == "ds4");
+        if (e4 == null) { check("hoot msx slayer42: ds4 .hoot entry", false, "none"); return; }
+        var silent = new List<string>();
+        string firstNote = "";
+        foreach (var (code, _) in e4.Titles) { var mr = Measure(e4, dir4, code, 6); if (!mr.sound) { silent.Add(code.ToString("X2")); if (firstNote.Length == 0) firstNote = " (" + mr.cause + ": " + mr.note + ")"; } }
+        int ok = e4.Titles.Count - silent.Count;
+        check("hoot msx slayer42 (ds4, hoot ds4.cpp): songs make sound", HootArchive.Playable(e4.Driver, e4.Type) && ok >= e4.Titles.Count * 0.8,
+            ok + " / " + e4.Titles.Count + (silent.Count > 0 ? ", silent " + string.Join(" ", silent) + firstNote : ""));
     }
 
     /// <summary>항목 · 곡을 seconds초 돌려 소리가 나는지 (PSG 볼륨 · OPLL 키온 · SCC 볼륨 · MSX-AUDIO 키온).</summary>

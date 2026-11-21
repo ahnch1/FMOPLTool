@@ -41,6 +41,7 @@ public static class HootX68k
         return name =>
         {
             string f = HootArchive.FindFile(dir, name);
+            if (f == null && name.Equals("zmusic.x", StringComparison.OrdinalIgnoreCase)) f = HootArchive.FindFile(dir, "ZMSC.X");   // zip 안의 ZMSC.X가 그 게임의 판 (다른 게임 zmusic.x는 판이 달라 무너짐)
             if (f != null) return File.ReadAllBytes(f);
             var shared = library != null ? Dos.SharedPrograms.Find(library, name, zip) : null;
             return shared?.data;
@@ -236,6 +237,7 @@ public static class HootX68k
         {
             Mfp[0x17] = 0x40;   // VR: X68000 IOCS와 같은 벡터 40h~ (자동 EOI)
             for (int ch = 0; ch < 4; ch++) { Dma[ch * 0x40 + 0x25] = 0x0F; Dma[ch * 0x40 + 0x27] = 0x0F; }   // NIV · EIV 처음 값
+            Dma[0xC6] = 0x04;   // ch3 SCR: MAC = 01 (메모리 주소 증가) — IOCS가 남기는 값. 시작 코드의 ADPCM 출력은 C6h를 안 쓴다 (hoot x68k.cpp: A1부터 D2바이트를 그냥 재생)
             Cpu.Reset();
             nextFrame = frameCycles - (long)(frameCycles * DisplayPart);
             Reschedule();
@@ -390,28 +392,33 @@ public static class HootX68k
 
         // ------------------------------------------------------------ 메모리
 
+        // hoot cpu_init_memmap24: 24비트 버스 (주소 위 8비트는 버림)
         public byte Read8(uint a)
         {
+            a &= 0xFFFFFF;
             if (a >= 0xE00000 && a < 0xF00000) return IoRead(a);
             return Ram[a];
         }
 
         public ushort Read16(uint a)
         {
+            a &= 0xFFFFFF;
             if (a >= 0xE00000 && a < 0xF00000) return (ushort)(IoRead(a) << 8 | IoRead(a + 1));
-            return (ushort)(Ram[a] << 8 | Ram[a + 1]);
+            return (ushort)(Ram[a] << 8 | Ram[(a + 1) & 0xFFFFFF]);
         }
 
         public void Write8(uint a, byte v)
         {
+            a &= 0xFFFFFF;
             if (a >= 0xE00000 && a < 0xF00000) { IoWrite(a, v); return; }
             Ram[a] = v;
         }
 
         public void Write16(uint a, ushort v)
         {
+            a &= 0xFFFFFF;
             if (a >= 0xE00000 && a < 0xF00000) { IoWrite(a, (byte)(v >> 8)); IoWrite(a + 1, (byte)v); return; }
-            Ram[a] = (byte)(v >> 8); Ram[a + 1] = (byte)v;
+            Ram[a] = (byte)(v >> 8); Ram[(a + 1) & 0xFFFFFF] = (byte)v;
         }
 
         private byte IoRead(uint a)
@@ -549,7 +556,7 @@ public static class HootX68k
         // ------------------------------------------------------------ ADPCM (MSM6258) · PPI
 
         private bool adpcmPlaying;
-        private int ppiC = 0x0B, emittedClock = -1, emittedDiv = -1, emittedPan = -1;
+        private int ppiC = 0x08, emittedClock = -1, emittedDiv = -1, emittedPan = -1;   // ppiC 처음 값: hoot ssMSM6258V: 양쪽 켬 · 15.6kHz
         private static readonly int[] Dividers = { 1024, 768, 512, 512 };
 
         private int AdpcmClock { get { return opmCt == 1 ? 4000000 : 8000000; } }

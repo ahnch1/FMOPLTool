@@ -175,6 +175,10 @@ public static class HootX68kTests
         check("hoot x68k: OPM timer A → level 6 autovector → key-on with song code", m.Ram[0x600] == 3 && keys > 900 && keys < 1050, keys + " key-ons, ints " + m.OpmInterrupts);
         int bytes = m.Log.Count(l => l.chip == 1 && l.reg == 1);
         check("hoot x68k: DMA channel 3 feeds 256 ADPCM bytes", bytes == 0x100 && m.DmaBytes == 0x100 && (m.Dma[0xC0] & 0x80) != 0, bytes + " bytes, CSR " + m.Dma[0xC0].ToString("X2"));
+        int distinct = m.Log.Where(l => l.chip == 1 && l.reg == 1).Select(l => l.val).Distinct().Count();
+        check("hoot x68k: DMA ch3 SCR starts with MAC = count up (start code never writes E840C6h)", (m.Dma[0xC6] & 0x0C) == 0x04 && distinct > 100, "SCR " + m.Dma[0xC6].ToString("X2") + ", " + distinct + " distinct bytes");
+        m.Write8(0x01000040, 0x5A);
+        check("hoot x68k: 24-bit address bus (hoot cpu_init_memmap24) — 1000040h = 000040h", m.Ram[0x40] == 0x5A && m.Read8(0xFF000040) == 0x5A, m.Ram[0x40].ToString("X2"));
         var v = m.ToVgm(1, 0);
         check("hoot x68k: VGM YM2151 + OKIM6258", v.Ym2151Clock > 0 && v.Okim6258Clock > 0, v.ChipSummary);
     }
@@ -184,7 +188,7 @@ public static class HootX68kTests
         string root = SopTests.FindDir("_incoming");
         string folder = root == null ? null : Path.Combine(root, "Hootarchive", "X68k");
         if (folder == null || !Directory.Exists(folder)) { Console.WriteLine("SKIP  hoot x68k real files (_incoming/Hootarchive/X68k not found)"); return; }
-        foreach (var arc in new[] { "If68snd", "noble68snd" })   // 레벨 6 자동 벡터 · mfp
+        foreach (var arc in new[] { "If68snd", "noble68snd", "wasp68snd", "carat68snd" })   // 레벨 6 자동 벡터 · mfp
         {
             string zip = Path.Combine(folder, arc + ".zip");
             if (!File.Exists(zip)) { Console.WriteLine("SKIP  hoot x68k " + arc + " (zip not found)"); continue; }
@@ -208,10 +212,13 @@ public static class HootX68kTests
         m.Play(code);
         m.RunSeconds(seconds);
         int fm = m.Log.Count(x => x.chip == 0 && x.reg == 0x08 && (x.val & 0x78) != 0);
-        int pcm = m.Log.Count(x => x.chip == 1 && x.reg == 1);
-        bool sound = fm > 0 || pcm > 1000;
+        var pcmLog = m.Log.Where(x => x.chip == 1 && x.reg == 1).Select(x => x.val).ToList();
+        int pcm = pcmLog.Count;
+        int pcmVary = 0;   // 바이트가 바뀐 수: 같은 바이트만 되풀이 (DMA 주소가 안 늚)는 무음
+        for (int i = 1; i < pcmLog.Count; i++) if (pcmLog[i] != pcmLog[i - 1]) pcmVary++;
+        bool sound = fm > 0 || (pcm > 1000 && pcmVary >= 500);
         string cause = sound ? "sound" : m.Missing.Count > 0 ? "missing-file" : !waited ? "boot-not-waiting" : m.Errors.Count > 0 ? "exception-" + m.Errors[0] : m.Log.Count == 0 ? "no-chip-writes" : "writes-no-keyon";
-        string note = "fm " + fm + " pcm " + pcm + ", writes " + m.Log.Count + ", opm-int " + m.OpmInterrupts + " mfp-int " + m.MfpInterrupts + ", PC " + m.Cpu.PC.ToString("X6")
+        string note = "fm " + fm + " pcm " + pcm + " (vary " + pcmVary + "), writes " + m.Log.Count + ", opm-int " + m.OpmInterrupts + " mfp-int " + m.MfpInterrupts + ", PC " + m.Cpu.PC.ToString("X6")
             + " exc " + m.Cpu.LastException + (m.Errors.Count > 0 ? ", errors " + string.Join(",", m.Errors.Take(4)) : "")
             + (m.Missing.Count > 0 ? ", missing " + string.Join(" ", m.Missing.Take(2)) : "")
             + (m.Unhandled.Count > 0 ? ", host " + string.Join(" ", m.Unhandled.OrderByDescending(kv => kv.Value).Take(4).Select(kv => kv.Key + "x" + kv.Value)) : "");

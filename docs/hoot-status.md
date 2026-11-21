@@ -31,6 +31,7 @@
 | 2.0.4 | 8-6 (메가드라이브) | hoot megadrive generic_z80 · iyinc: `Audio/HootMegaDrive.cs` (Z80 사운드 쪽 · 카트리지의 Z80 드라이버를 RAM에, 요청 주소) |
 | 2.0.5 | 8-7 (X68000) | MC68000 `Audio/Cpu/M68000.cs` + hoot x68k generic: `Audio/HootX68k.cs` (OPM · ADPCM · DMA · MFP, E00010h = hoot가 대신 하는 IOCS · DOS) |
 | 2.0.6 | 8-7 (X68000 MIDI) | x68k MIDI 판: YM3802 MIDI 보드 (EAFA00h) → 살아 있는 MIDI 곡 (`HootX68k.LoadMidi`) |
+| 2.3.2 | X68000 (hoot 원본) | x68k.cpp: 24비트 버스 (`cpu_init_memmap24`, wasp · wa3 예외 2 해결), DMA ch3 SCR = 04h (MAC 증가 — 시작 코드 142개가 C6h를 안 써서 ADPCM이 한 바이트 되풀이 = 무음이었음, 진짜 ADPCM 48 → 112항목), PPI C = 08h (ssMSM6258V), zmusic.x 대신 zip 안 ZMSC.X (판 차이 9). 499 → 510 / 553 (조사는 ADPCM 바이트가 500번 넘게 바뀌어야 소리로 셈). 남은 무음: cos68snd.bin + tank.x 묶음 약 13 (xml 오프셋 ↔ zip의 큰 TANK.X), boot-not-waiting 23 · missing 10 · no-keyon 10 |
 | 2.3.1 | X1 (hoot 원본) | mucomx1.cpp: data 줄 = I/O 포트 메모리 (`IoRam`, KOEI `.CIM`), 나머지 포트 = 쓴 값을 되읽음, CTC 카운터는 시간 상수 없이도 256으로 셈. 143 → 148 / 152 (三国志 II · Blassty 등). 남은 무음: Super Laydock × 2 (use_psgpcm), 維新の嵐 · 水滸伝 (본체 CTC ch0을 안 세움, ch3만 D5h:01) |
 | 2.3.0 | hoot 원본 소스 | `_incoming/hoot code` (hoot 2001년판 소스) 대조 시작. PC-98: `Pc98Machine` OPN 타이머 = hoot `ssFMTimer` (깃발 = LOAD만, IRQ = ENABLE일 때 넘칠 때마다 — 깃발을 안 지우는 드라이버도 틱), 종 PIC가 막은 동안의 요청을 지우지 않음 (주 IRQ7 = 종의 열린 요청), VA 사운드 보드 II (A8h~ADh, AAh = 32h). 300 zip 표본 283 → 285 / 303 (usodom · cheryjam), msqrade · hiiro · roseblod 틱 정상 |
 | 2.2.7 | 타이토 F3 | hoot taito f3system: `Audio/HootTaitoF3.cs` + `Chips/Es5505.cs` (MAME es5506 · taito_en · es5510 소스로 맞춤) — 68000 15.24MHz, DUART 타이머 IRQ6, ESP 호스트 기억 (쓰고 되읽어 확인), DPRAM 메시지 고리 (480h 쓰기 · 482h 읽기 포인터), 81h = 재생 · 86h = 음량 · 88h · 8Dh · 8Eh, tbloffs 표 → 메인 CPU 루틴 흉내. Jukebox = 스스로 도는 칩 (표본 ROM 16MB까지). 36 / 36, 곡 469 / 688 |
@@ -184,7 +185,7 @@
 | 캡콤 CPS-2 (QSound HLE) | 38 / 38 | `--hootcps2survey roms 100 6` |
 | 세가 PCM 보드 (Out Run · X · Y · Hang-On 계열) | 20 / 24 | `--hootspcmsurvey roms 100 6` |
 | 메가드라이브 (generic_z80 · iyinc · 1c00 · koei) | 112 / 150 (smd zip에 있는 것) — generic_z80 70/108 · iyinc 23/23 · 1c00 5/5 · koei 14/14 | `--hootmdsurvey smd 400 6` (HOOT_TYPE · HOOT_SONGS) |
-| X68000 generic (OPM · ADPCM) | 499 / 553 — generic 328/370 · mfp 171/183 | `--hootx68survey X68k 1000 6` |
+| X68000 generic (OPM · ADPCM) | 510 / 553 — generic 337/370 · mfp 173/183 (v2.3.2) | `--hootx68survey X68k 1000 6` |
 | MIDI 판 X68000 | 141 / 166 (노트) | `--hootx68midisurvey X68k 1000 10` |
 | SPC · KSS · NSF · GBS | 717항목 파일 있음 (KSS 71항목은 zip에 .kss 없음) | — |
 

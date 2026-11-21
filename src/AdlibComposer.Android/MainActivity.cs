@@ -276,19 +276,39 @@ public class MainActivity : Activity
         ShowPlace();
     }
 
+    /// <summary>위로 갈 곳이 있는가: 들어온 길이 둘 이상이거나, 처음 연 폴더가 저장소 맨 위보다 아래.</summary>
+    private bool CanGoUp()
+    {
+        if (places.Count > 1) return true;
+        return places.Count == 1 && RootParent(places[0]) != null;
+    }
+
+    /// <summary>처음 연 폴더의 위 폴더 (저장소 맨 위보다 위로는 안 감, 곡 목록 · 데모 · 캐시면 null).</summary>
+    private static string RootParent(Place p)
+    {
+        if (p.Tracks) return null;
+        string cur = p.Path.TrimEnd('/');
+        if (!cur.StartsWith(StorageRoot, StringComparison.Ordinal) || cur == StorageRoot.TrimEnd('/')) return null;
+        return System.IO.Path.GetDirectoryName(cur);
+    }
+
     private void GoUp()
     {
         if (places.Count > 1) { places.RemoveAt(places.Count - 1); ShowPlace(); return; }
-        if (places.Count == 1 && !places[0].Tracks)
-        {
-            // 처음 연 폴더의 위 (저장소 맨 위보다 위로는 안 감)
-            string cur = places[0].Path;
-            string parent = System.IO.Path.GetDirectoryName(cur.TrimEnd('/'));
-            if (parent == null || !cur.StartsWith(StorageRoot, StringComparison.Ordinal) || cur.TrimEnd('/') == StorageRoot.TrimEnd('/')) return;
-            places[0] = new Place { Path = parent };
-            ShowPlace();
-        }
+        string parent = places.Count == 1 ? RootParent(places[0]) : null;
+        if (parent == null) return;
+        places[0] = new Place { Path = parent };
+        ShowPlace();
     }
+
+    /// <summary>안드로이드 뒤로 (제스처 · ◁ 키): 위로 갈 곳이 있으면 위로, 없으면 앱을 뒤로 보냄 (재생은 계속).</summary>
+#pragma warning disable CS0618, CS0672   // OnBackPressed: 안드로이드 13+에서 '사용 중단'이지만 enableOnBackInvokedCallback을 켜지 않으면 그대로 불린다
+    public override void OnBackPressed()
+    {
+        if (CanGoUp()) GoUp();
+        else MoveTaskToBack(true);
+    }
+#pragma warning restore CS0618, CS0672
 
     private string ShownPath()
     {
@@ -309,18 +329,20 @@ public class MainActivity : Activity
         pathText.Text = ShownPath();
         emptyText.Text = "읽는 중…";
         adapter.Set(new List<FolderEntry>());
-        bool canUp = places.Count > 1;
+        bool canUp = CanGoUp();
         Task.Run(() =>
         {
             List<FolderEntry> l; string err = null;
             try { l = p.Tracks ? SongFolder.Tracks(p.Path) : SongFolder.List(p.Path, false); }
             catch (Exception ex) { l = new List<FolderEntry>(); err = ex.Message; }
+            // 맨 위 [..] 줄 = 위로 (zip · 곡 목록에서도 들어온 곳으로)
+            if (canUp) l.Insert(0, new FolderEntry { Kind = EntryKind.Up, Path = "", Name = ".." });
             RunOnUiThread(() =>
             {
                 if (places.Count == 0 || places[places.Count - 1] != p) return;   // 그사이 다른 곳으로
                 entries = l;
                 adapter.Set(l);
-                emptyText.Text = err != null ? "읽을 수 없습니다: " + err : l.Count == 0 ? "곡 · 폴더가 없습니다" : "";
+                emptyText.Text = err != null ? "읽을 수 없습니다: " + err : l.Count == (canUp ? 1 : 0) ? "곡 · 폴더가 없습니다" : "";
                 list.SetSelection(0);
                 if (!p.Tracks && places.Count == 1 && !ZipCache(p.Path)) prefs.Edit().PutString(PrefLastFolder, p.Path).Apply();
             });

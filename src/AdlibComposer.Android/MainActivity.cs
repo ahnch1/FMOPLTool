@@ -20,7 +20,7 @@ namespace AdlibComposer.Droid;
 /// <para>데크: 제목 · 형식 · 게임 정보, 위치 막대(끌어서 이동), 이전 · 재생/일시정지 · 정지 · 다음, 다음 곡 자동 · 반복.</para>
 /// <para>곡 열기 · 폴더 읽기는 뒤 스레드에서 (hoot 항목은 곡을 미리 렌더해서 몇 초 걸릴 수 있다). 그동안 화면은 재생 판을 건드리지 않는다.</para>
 /// </summary>
-[Activity(Label = "@string/app_name", MainLauncher = true, Theme = "@android:style/Theme.Material", LaunchMode = LaunchMode.SingleTask,
+[Activity(Label = "@string/app_name", MainLauncher = true, Theme = "@android:style/Theme.Material.NoActionBar", LaunchMode = LaunchMode.SingleTask,
     ConfigurationChanges = ConfigChanges.Orientation | ConfigChanges.ScreenSize | ConfigChanges.ScreenLayout | ConfigChanges.KeyboardHidden)]
 public class MainActivity : Activity
 {
@@ -170,7 +170,24 @@ public class MainActivity : Activity
         deck.AddView(loadText);
         body.AddView(deck, new LinearLayout.LayoutParams(0, 0, 1) { Weight = 1 });
 
+        // 안드로이드 15+ (targetSdk 35 이상)는 화면을 상태 · 내비게이션 막대 밑까지 그린다 (edge-to-edge 강제)
+        // → 막대 크기만큼 안쪽 여백. 그 아래 판은 시스템이 알아서 띄우므로 손대지 않는다.
+        if (OperatingSystem.IsAndroidVersionAtLeast(35)) root.SetOnApplyWindowInsetsListener(new SystemBarPadding());
         SetContentView(root);
+    }
+
+    /// <summary>상태 막대 · 내비게이션 막대 · 화면 구멍(카메라) 만큼 안쪽 여백.</summary>
+    private sealed class SystemBarPadding : Java.Lang.Object, View.IOnApplyWindowInsetsListener
+    {
+        public WindowInsets OnApplyWindowInsets(View v, WindowInsets insets)
+        {
+            if (OperatingSystem.IsAndroidVersionAtLeast(30))
+            {
+                var i = insets.GetInsets(WindowInsets.Type.SystemBars() | WindowInsets.Type.DisplayCutout());
+                v.SetPadding(i.Left, i.Top, i.Right, i.Bottom);
+            }
+            return insets;
+        }
     }
 
     /// <summary>가로 화면 = 목록 | 데크, 세로 화면 = 목록 위 · 데크 아래.</summary>

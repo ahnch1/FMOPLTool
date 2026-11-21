@@ -64,6 +64,18 @@ public static class HootX1Tests
         check("hoot x1: CTC ch0 (÷256 × 2) → ch3 counter (use_ctc3 = 80h) ≈ 61 interrupts per second", vol >= 58 && vol <= 64, vol + " volume writes, " + m.Interrupts + " interrupts");
         var v = m.ToVgm(1, 0);
         check("hoot x1: VGM with PSG", v.HasPsg && v.IsPlayable, v.ChipSummary);
+
+        // hoot mucomx1.cpp: data 줄 = I/O 포트 메모리, 나머지 포트는 쓴 값을 되읽음
+        files["TBL"] = new byte[] { 0x12, 0x34 };
+        var e2 = HootArchive.Parse(xml.Replace("<option name=\"use_ctc3\" value=\"0x80\"/>", "").Replace("</romlist>", "<rom type=\"data\" offset=\"0x4800\">TBL</rom></romlist>"));
+        var m2 = HootX1.Boot(e2, n => files.TryGetValue(n, out var d) ? d : null);
+        m2.Out(0x0A55, 0x5A);
+        check("hoot x1: data rom goes to I/O memory (IN r,(C)), other ports latch writes (hoot mucomx1)",
+            m2.In(0x4800) == 0x12 && m2.In(0x4801) == 0x34 && m2.Ram[0x4800] == 0 && m2.In(0x0A55) == 0x5A, m2.In(0x4800).ToString("X2") + " " + m2.In(0x0A55).ToString("X2"));
+        m2.Play(1);
+        m2.RunSeconds(1);
+        int vol2 = m2.Log.Count(x => x.chip == 0 && x.reg == 8 && x.val == 0x07);
+        check("hoot x1: CTC ch3 counter with no time constant counts 256 (x1hydlide) ≈ 30 per second", vol2 >= 27 && vol2 <= 33, vol2 + " volume writes");
     }
 
     private static void Real(Action<string, bool, string> check)
@@ -71,7 +83,7 @@ public static class HootX1Tests
         string root = SopTests.FindDir("_incoming");
         string folder = root == null ? null : Path.Combine(root, "Hootarchive", "x1");
         if (folder == null || !Directory.Exists(folder)) { Console.WriteLine("SKIP  hoot x1 real files (_incoming/Hootarchive/x1 not found)"); return; }
-        foreach (var arc in new[] { "x1rv", "x1wibarm" })
+        foreach (var arc in new[] { "x1rv", "x1wibarm", "x1sangoku2" })
         {
             string zip = Path.Combine(folder, arc + ".zip");
             if (!File.Exists(zip)) { Console.WriteLine("SKIP  hoot x1 " + arc + " (zip not found)"); continue; }

@@ -55,11 +55,18 @@ public static class HootX1
             switch (type)
             {
                 case "code":
-                case "data":
                     {
                         var d = file(text);
                         if (d == null) { m.Missing.Add(text); break; }
                         m.Put((int)off, d);
+                        break;
+                    }
+                case "data":
+                    {
+                        // hoot mucomx1.cpp: data = "I/O port memory" (KOEI 드라이버가 IN r,(C)로 곡 표를 읽는다)
+                        var d = file(text);
+                        if (d == null) { m.Missing.Add(text); break; }
+                        for (int i = 0; i < d.Length && off + i < 0x10000; i++) m.IoRam[(int)off + i] = d[i];
                         break;
                     }
                 case "binary":
@@ -144,6 +151,7 @@ public static class HootX1
                     Count[ch] = Tc[ch] == 0 ? 256 : Tc[ch];
                     if (!CounterMode(v)) Next[ch] = now + Period(ch);
                 }
+                else if (CounterMode(v)) Count[ch] = 256;   // 시간 상수가 안 와도 카운터는 256으로 센다 (x1hydlide: ch3 D5h 뒤 시간 상수 없음)
             }
             else if ((v & 0x02) == 0 && Tc[ch] != 0 && !CounterMode(v)) Next[ch] = now + Period(ch);
             if ((v & 0x80) == 0) Pending[ch] = false;
@@ -167,7 +175,7 @@ public static class HootX1
         /// <summary>카운터 모드 채널에 트리거 하나.</summary>
         public bool Trigger(int ch)
         {
-            if (!CounterMode(Control[ch]) || (Control[ch] & 0x02) != 0 || (WaitTc[ch] && DefaultTc[ch] < 0)) return false;
+            if (!CounterMode(Control[ch]) || (Control[ch] & 0x02) != 0) return false;
             if (--Count[ch] > 0) return false;
             Count[ch] = Tc[ch] == 0 ? 256 : Tc[ch];
             Zero(ch);
@@ -333,12 +341,11 @@ public static class HootX1
                 return (byte)((blank ? 0x80 : 0x00) | 0x1F);
             }
             if (hi == 0x19) return 0x00;   // 서브 CPU (80C49) 응답
-            if (port >= 0x2000) return IoRam[port];
             if (!Opm && port >= 0x0700 && port <= 0x0707) return 0xFF;   // PSG 판: FM 보드 없음 (드라이버가 CTC · OPM을 보고 FM으로 고르지 않게)
             if (port == 0x0701 || port == 0x0700) return 0x00;   // OPM 상태: 바쁘지 않음
             if (port >= 0x1FA0 && port <= 0x1FA3) return Main.Read(port - 0x1FA0, Cpu.Cycles);
             if (port >= 0x0704 && port <= 0x0707) return Fm.Read(port - 0x0704, Cpu.Cycles);
-            return 0xFF;
+            return IoRam[port];   // hoot mucomx1.cpp: 나머지 포트 = 쓴 값을 되읽는 I/O 메모리 (data 줄이 미리 채움)
         }
 
         public void Out(int port, byte v)
@@ -358,7 +365,7 @@ public static class HootX1
             if (port == 0x0701) { Emit(1, opmAddr, v); return; }
             if (port >= 0x1FA0 && port <= 0x1FA3) { Main.Write(port - 0x1FA0, v, Cpu.Cycles); return; }
             if (port >= 0x0704 && port <= 0x0707) { Fm.Write(port - 0x0704, v, Cpu.Cycles); return; }
-            if (port >= 0x2000) IoRam[port] = v;
+            IoRam[port] = v;
         }
 
         private void Load(int n)

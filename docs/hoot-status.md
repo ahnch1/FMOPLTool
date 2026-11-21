@@ -31,6 +31,7 @@
 | 2.0.4 | 8-6 (메가드라이브) | hoot megadrive generic_z80 · iyinc: `Audio/HootMegaDrive.cs` (Z80 사운드 쪽 · 카트리지의 Z80 드라이버를 RAM에, 요청 주소) |
 | 2.0.5 | 8-7 (X68000) | MC68000 `Audio/Cpu/M68000.cs` + hoot x68k generic: `Audio/HootX68k.cs` (OPM · ADPCM · DMA · MFP, E00010h = hoot가 대신 하는 IOCS · DOS) |
 | 2.0.6 | 8-7 (X68000 MIDI) | x68k MIDI 판: YM3802 MIDI 보드 (EAFA00h) → 살아 있는 MIDI 곡 (`HootX68k.LoadMidi`) |
+| 2.3.1 | X1 (hoot 원본) | mucomx1.cpp: data 줄 = I/O 포트 메모리 (`IoRam`, KOEI `.CIM`), 나머지 포트 = 쓴 값을 되읽음, CTC 카운터는 시간 상수 없이도 256으로 셈. 143 → 148 / 152 (三国志 II · Blassty 등). 남은 무음: Super Laydock × 2 (use_psgpcm), 維新の嵐 · 水滸伝 (본체 CTC ch0을 안 세움, ch3만 D5h:01) |
 | 2.3.0 | hoot 원본 소스 | `_incoming/hoot code` (hoot 2001년판 소스) 대조 시작. PC-98: `Pc98Machine` OPN 타이머 = hoot `ssFMTimer` (깃발 = LOAD만, IRQ = ENABLE일 때 넘칠 때마다 — 깃발을 안 지우는 드라이버도 틱), 종 PIC가 막은 동안의 요청을 지우지 않음 (주 IRQ7 = 종의 열린 요청), VA 사운드 보드 II (A8h~ADh, AAh = 32h). 300 zip 표본 283 → 285 / 303 (usodom · cheryjam), msqrade · hiiro · roseblod 틱 정상 |
 | 2.2.7 | 타이토 F3 | hoot taito f3system: `Audio/HootTaitoF3.cs` + `Chips/Es5505.cs` (MAME es5506 · taito_en · es5510 소스로 맞춤) — 68000 15.24MHz, DUART 타이머 IRQ6, ESP 호스트 기억 (쓰고 되읽어 확인), DPRAM 메시지 고리 (480h 쓰기 · 482h 읽기 포인터), 81h = 재생 · 86h = 음량 · 88h · 8Dh · 8Eh, tbloffs 표 → 메인 CPU 루틴 흉내. Jukebox = 스스로 도는 칩 (표본 ROM 16MB까지). 36 / 36, 곡 469 / 688 |
 | 2.2.6 | 반프레스토 | dbz · ultraman = `HootOpmBoard` 배치 (Z80 + YM2151 + OKI, 명령 NMI), godzilla · sdgndmps = `HootSeibu` raiden2 배치 (세이부 사운드 + YM2151) — 5 / 5 |
@@ -137,7 +138,7 @@
 | MSX generic (PSG · OPLL · SCC · SCC+ · MSX-AUDIO) | 481 / 498 (첫 곡이 조용하면 다음 곡 5개까지) | `--hootmsxsurvey msx 1000 8` |
 | PC-88 (opn · opna) | 487 / 527 — opn 357/385 · opna 130/142 | `--hoot88survey pc88 1000 6` |
 | FM-7 · FM77AV (generic) | 29 / 29, 곡 279 / 308 | `--test hootfm7` (HOOT_SONGS=1) |
-| X1 (psg · opm) | 143 / 152 — opm 65/71 · psg 78/81 | `--hootx1survey x1 1000 8` |
+| X1 (psg · opm) | 148 / 152 — opm 68/71 · psg 80/81 (v2.3.1) | `--hootx1survey x1 1000 8` |
 | 네오지오 | 137 / 146 (음악일 만한 코드 10h 이상 3곡까지) | `--hootneosurvey roms 200 6` |
 | 타이토 YM2610 보드 (f2 · b · dual68 · x · fx1a · sonicb) | 67 / 67 (첫 곡이 조용하면 다음 곡 3개까지) | `--hoottaitosurvey roms 200 6` |
 | 데이터 이스트 6502 (cobracom · drgninja · karnov · triothep · lastmisn · makyosen) | 20 / 20, 곡 283 / 285 (무음 2 = cobracom SE 12 · ghostb 효과음 하나) | `--test hootdeco65` (HOOT_SONGS=1 = 곡마다) |

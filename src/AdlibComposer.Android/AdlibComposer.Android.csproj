@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    안드로이드 Jukebox (개인 태블릿용). Windows 프로그램과 따로: FMOPLTools.sln에 넣지 않고 FMOPLTools.Android.sln으로 빌드한다.
+    준비: dotnet workload install android (+ InstallAndroidDependencies, docs/android.md)
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0-android</TargetFramework>
+    <SupportedOSPlatformVersion>24</SupportedOSPlatformVersion>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>AdlibComposer.Droid</RootNamespace>
+    <AssemblyName>FMOPLJukebox</AssemblyName>
+    <ApplicationId>net.fmopltool.jukebox</ApplicationId>
+    <ApplicationTitle>FMOPL Jukebox</ApplicationTitle>
+    <!-- 버전 = Directory.Build.props의 Version (2.3.29 → 표시 2.3.29, 번호 2003029) -->
+    <ApplicationDisplayVersion>$(Version)</ApplicationDisplayVersion>
+    <ApplicationVersion>$([MSBuild]::Add($([MSBuild]::Add($([MSBuild]::Multiply($([System.Version]::Parse($(Version)).Major), 1000000)), $([MSBuild]::Multiply($([System.Version]::Parse($(Version)).Minor), 1000)))), $([System.Version]::Parse($(Version)).Build)))</ApplicationVersion>
+    <!-- 우리 어셈블리는 줄이지 않는다 (형식 등록 · 엔진을 리플렉션 걱정 없이) -->
+    <TrimMode>partial</TrimMode>
+    <!-- 태블릿 = arm64. 에뮬레이터 시험용 x64도 -->
+    <RuntimeIdentifiers>android-arm64;android-x64</RuntimeIdentifiers>
+  </PropertyGroup>
+  <!-- SDK · JDK 위치: 따로 정하지 않았으면 InstallAndroidDependencies로 받은 사용자 폴더 -->
+  <PropertyGroup>
+    <AndroidSdkDirectory Condition="'$(AndroidSdkDirectory)' == '' And '$(ANDROID_HOME)' == '' And Exists('$(LOCALAPPDATA)\Android\Sdk')">$(LOCALAPPDATA)\Android\Sdk</AndroidSdkDirectory>
+    <JavaSdkDirectory Condition="'$(JavaSdkDirectory)' == '' And '$(JAVA_HOME)' == '' And Exists('$(LOCALAPPDATA)\Android\jdk')">$(LOCALAPPDATA)\Android\jdk</JavaSdkDirectory>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\AdlibComposer.Player\AdlibComposer.Player.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- 프로그램 리소스 (Windows 실행 폴더\resource와 같은 파일): 처음 실행할 때 앱 폴더\resource로 복사 -->
+    <AndroidAsset Include="..\AdlibComposer.App\Defaults\resource\STANDARD.BNK" Link="Assets\resource\STANDARD.BNK" />
+    <AndroidAsset Include="..\AdlibComposer.App\Defaults\resource\GENMIDI.OP2" Link="Assets\resource\GENMIDI.OP2" />
+    <AndroidAsset Include="..\AdlibComposer.App\Defaults\resource\GENMIDI.OP2.LICENSE.txt" Link="Assets\resource\GENMIDI.OP2.LICENSE.txt" />
+    <AndroidAsset Include="..\AdlibComposer.App\Defaults\resource\systems.json" Link="Assets\resource\systems.json" />
+    <!-- 데모 곡 (저장소 samples) -->
+    <AndroidAsset Include="..\..\samples\demo.rol" Link="Assets\demo\demo.rol" />
+    <AndroidAsset Include="..\..\samples\demo.bnk" Link="Assets\demo\demo.bnk" />
+  </ItemGroup>
+</Project>

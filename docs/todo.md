@@ -205,7 +205,7 @@
 ### 안드로이드 Jukebox ([`android.md`](android.md))
 
 - [x] A1 화면 없는 재생 묶음 `AdlibComposer.Player` — v2.3.29
-- [ ] A2 앱 뼈대 + `AudioTrack` 출력 + 리소스 → 데모 곡 재생
+- [x] A2 앱 뼈대 + `AudioTrack` 출력 + 리소스 → 데모 곡 재생 — v2.3.30
 - [ ] A3 Jukebox 화면 최소판 (폴더 목록 · 재생 제어 · 위치 · 다음 곡)
 - [ ] A4 성능 · AOT · 서명한 릴리스 APK
 

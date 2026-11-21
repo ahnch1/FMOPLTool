@@ -24,7 +24,7 @@ dotnet run --project tests/AdlibComposer.SelfTest
 dotnet run --project tests/AdlibComposer.SelfTest -- --wav demo.wav   # 데모 곡을 WAV로 렌더링
 ```
 
-외부 NuGet 패키지를 쓰지 않는다. 플랫폼 코드는 `AdlibComposer.Audio.Windows` 하나에만 있다 (오디오 출력 winmm `waveOut`, Windows MIDI `midiOut`, MP3 등 Media Foundation). 앱 · 자체 테스트는 시작할 때 `WindowsAudio.Register()`로 `AudioPlatform`에 끼운다. 다른 플랫폼은 `IAudioOutput` · `IMidiOutDevice` · 디코더를 구현해 끼우면 된다.
+외부 NuGet 패키지를 쓰지 않는다. 플랫폼 코드는 `AdlibComposer.Audio.Windows` 하나에만 있다 (안드로이드 앱은 `AdlibComposer.Android`, [docs/android.md](docs/android.md)) (오디오 출력 winmm `waveOut`, Windows MIDI `midiOut`, MP3 등 Media Foundation). 앱 · 자체 테스트는 시작할 때 `WindowsAudio.Register()`로 `AudioPlatform`에 끼운다. 다른 플랫폼은 `IAudioOutput` · `IMidiOutDevice` · 디코더를 구현해 끼우면 된다.
 
 **실행 폴더 구성** (빌드하면 자동으로 만들어진다)
 
@@ -311,6 +311,7 @@ Mt32RomFolder=resource
 | `AdlibComposer.Notation` | `Score` 모델, `ScoreBuilder`(Song→마디/음표, 붙임줄), `NoteSpelling`(음표 나누기·셋잇단·음 이름), `MusicXmlExporter`, `MidiExporter`, 텍스트 내보내기, `OrgelComb` / `OrgelBuilder`(곡 → 30음 오르골 띠 구멍) |
 | `AdlibComposer.Audio.Windows` | Windows 구현: `WaveOutPlayer`(IAudioOutput, winmm), `WinMidiOut`(IMidiOutDevice, midiOut · SysEx), `MediaFoundationDecoder`(MP3 등 → 모노), `WindowsAudio.Register()` |
 | `AdlibComposer.Player` | 화면 없는 Jukebox 재생 묶음 (안드로이드 앱용, Windows 프로그램은 쓰지 않음): `JukeboxSession`(곡 열기 · 재생 · 일시정지 · 이동 · 끝 알림), `SongFolder`(폴더 · zip · 곡 여럿 든 파일 목록). [docs/android.md](docs/android.md) |
+| `AdlibComposer.Android` | 안드로이드 Jukebox 앱 (.NET for Android, `net10.0-android`, `FMOPLTools.sln`에 안 들어감): `AndroidAudioOutput`(IAudioOutput, AudioTrack), `AppEnv`(자산 복사 · 엔진), 화면. 빌드 · 설치는 [docs/android.md](docs/android.md) |
 | `AdlibComposer.App` | WinForms GUI: `MainForm`, `Shell/`(가로 페이지 메뉴 · 공용 폴더/파일 목록 · hoot 목록 `HootBrowser` · `HootTree` · 왼쪽 목록 접점 `ISongList` · 로그 · 셸 테마), `ComposerView`, `InstrumentView`, `JukeboxView`, `NoteView`, `OrganizerView`, `PianoRollControl`, `RetroSlider` 등 |
 | `tests/AdlibComposer.SelfTest` | 의존성 없는 자체 테스트 + 데모 WAV 렌더러 |
 

@@ -262,6 +262,20 @@ public static class HootPc98Tests
                 check("Real hoot pc98dos: 夢の精 " + (h == opn ? "PMD (YM2203)" : "PMDB2 (YM2608)") + " 'Daydream' plays in the jukebox path",
                     tracks.Count == 15 && daydream >= 0 && rms > 300 && speed > 1.5, tracks.Count + " songs, rms " + rms.ToString("0") + ", " + speed.ToString("0.0") + "x realtime");
             }
+            // hoot 옵션 dummysndrom: 메모리 스위치 4 (A3FEEh) bit3 — majoriko MJSND는 이것만 보고 "サウンドボードがありません"
+            string zm = Path.Combine(inc, "Hootarchive", "pc98", "majoriko_98.zip");
+            if (File.Exists(zm))
+            {
+                string dm = ZipFolder.Extract(zm);
+                string hm = Directory.GetFiles(dm, "*" + HootArchive.Extension).FirstOrDefault(x => !HootSongs.IsMidi(x));
+                if (hm == null) check("Real hoot pc98dos majoriko: FM entry", false, "none");
+                else
+                {
+                    var vm = ChipSongs.Load(ChipSongs.Tracks(hm)[0].path);
+                    double rm = Rms(vm, 6, out _);
+                    check("Real hoot pc98dos majoriko (dummysndrom → memory switch 4 bit3): driver finds the sound board and plays", rm > 100, "rms " + rm.ToString("0"));
+                }
+            }
         }
         finally
         {

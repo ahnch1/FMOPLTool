@@ -248,6 +248,7 @@ public static class HootPc98
         else m = new Pc98Machine(fs, BoardOf(e), Math.Max(1, e.Option("clockmul", 8))) { Trace = TraceBoot };
         m.Cpu.Is386 = Is386(e);
         if (m is Pc98Machine va) va.Va = e.Driver.Equals("pc88vados", StringComparison.OrdinalIgnoreCase);   // PC-88VA DOS = 포트만 다른 같은 기계
+        if (m is Pc98Machine sr) DummySoundRom(sr, e);
         var hm = (IHootMachine)m;
         hm.HootVector = e.Option("funcvect", 0x7F) & 0xFF;
         shells = new List<DosMachine.ShellResult>();
@@ -311,6 +312,15 @@ public static class HootPc98
     /// bgm · bgm2 · strlist (offset = 번호)는 기계가 재생 때 넣도록 맡긴 뒤 bootcs:bootip로 뛴다.
     /// 주소: addressing (목록에는 adressing으로도 씀) 0 = 선형, 1 = 세그먼트 &lt;&lt; 16 | 오프셋. pc98 = PIC 자동 EOI.
     /// </summary>
+    /// <summary>
+    /// hoot 옵션 dummysndrom (74항목): 사운드 ROM이 있다고 알림 — 메모리 스위치 4 (A3FEEh) bit3.
+    /// majoriko MJSND.COM은 포트를 보지 않고 A300:0FEEh bit3만 보고 없으면 "サウンドボードがありません".
+    /// </summary>
+    private static void DummySoundRom(Pc98Machine m, HootArchive.Entry e)
+    {
+        if (e.Option("dummysndrom", 0) != 0) m.Mem[0xA3FEE] |= 0x08;
+    }
+
     public static Pc98Machine BootGeneric(DosFileSystem fs, HootArchive.Entry e)
     {
         var m = new Pc98Machine(fs, BoardOf(e), Math.Max(1, e.Option("clockmul", 8))) { Trace = TraceBoot };
@@ -318,6 +328,7 @@ public static class HootPc98
         m.Va = e.Driver.Equals("pc88va", StringComparison.OrdinalIgnoreCase);   // PC-88VA = 포트만 다른 같은 기계
         m.MpuPresent = IsMidiEntry(e);   // hoot는 MIDI 판에만 MPU를 붙인다
         ((IHootMachine)m).HootVector = e.Option("funcvect", 0x7F) & 0xFF;
+        DummySoundRom(m, e);
         bool real = e.Option("addressing", e.Option("adressing", 0)) == 1;
         int Addr(long v) { return real ? X86.Linear((int)(v >> 16) & 0xFFFF, (int)v & 0xFFFF) : (int)(v & 0xFFFFF); }
         var bgm = new Dictionary<int, string>();

@@ -17,6 +17,8 @@ dotnet workload install android
 dotnet build -t:InstallAndroidDependencies -f net10.0-android src/AdlibComposer.Android/AdlibComposer.Android.csproj -p:AcceptAndroidSDKLicenses=true -p:AndroidSdkDirectory=%LOCALAPPDATA%\Android\Sdk -p:JavaSdkDirectory=%LOCALAPPDATA%\Android\jdk
 ```
 
+PowerShell에서는 `%LOCALAPPDATA%` 대신 `$env:LOCALAPPDATA`로 쓴다 (`%LOCALAPPDATA%`는 cmd에서만 풀린다. PowerShell에서 그대로 쓰면 프로젝트 폴더 안에 `%LOCALAPPDATA%` 폴더가 생겨 SDK · JDK가 거기에 받아진다).
+
 SDK · JDK를 이 위치(`%LOCALAPPDATA%\Android\Sdk` · `jdk`)에 받으면 csproj가 알아서 찾는다 (`ANDROID_HOME` · `JAVA_HOME`을 정했으면 그쪽).
 
 ## 빌드 · 설치
@@ -58,7 +60,7 @@ dotnet publish src/AdlibComposer.Android -c Release
 키를 정하지 않으면 이 PC의 .NET 디버그 키로 서명된다. 다른 PC에서 만든 APK로 덮어 설치하려면 같은 키가 필요하다 → 키를 한 번 만들고 두 PC에 같은 파일을 둔다 (저장소에 넣지 않음, `.gitignore`).
 
 ```
-%LOCALAPPDATA%\Android\jdkin\keytool -genkeypair -v -keystore %USERPROFILE%mopl-jukebox.keystore -alias jukebox -keyalg RSA -keysize 2048 -validity 36500
+%LOCALAPPDATA%\Android\jdk\bin\keytool -genkeypair -v -keystore %USERPROFILE%\fmopl-jukebox.keystore -alias jukebox -keyalg RSA -keysize 2048 -validity 36500
 ```
 
 `src/AdlibComposer.Android/signing.local.props`:
@@ -67,7 +69,7 @@ dotnet publish src/AdlibComposer.Android -c Release
 <Project>
   <PropertyGroup>
     <AndroidKeyStore>true</AndroidKeyStore>
-    <AndroidSigningKeyStore>$(USERPROFILE)mopl-jukebox.keystore</AndroidSigningKeyStore>
+    <AndroidSigningKeyStore>$(USERPROFILE)\fmopl-jukebox.keystore</AndroidSigningKeyStore>
     <AndroidSigningKeyAlias>jukebox</AndroidSigningKeyAlias>
     <AndroidSigningStorePass>비밀번호</AndroidSigningStorePass>
     <AndroidSigningKeyPass>비밀번호</AndroidSigningKeyPass>

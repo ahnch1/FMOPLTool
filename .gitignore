@@ -374,3 +374,12 @@ src/AdlibComposer.Mt32/build/
 src/AdlibComposer.Android/signing.local.props
 *.keystore
 *.jks
+
+# 안드로이드 SDK · JDK가 저장소 안에 받아진 경우 (PowerShell에서 %LOCALAPPDATA%가 풀리지 않아 글자 그대로 폴더가 됨)
+**/%LOCALAPPDATA%/
+# 안드로이드 빌드 부산물 (bin/obj 밖에 생기는 것)
+*.apk
+*.aab
+*.idsig
+.gradle/
+local.properties

@@ -31,6 +31,7 @@
 | 2.0.4 | 8-6 (메가드라이브) | hoot megadrive generic_z80 · iyinc: `Audio/HootMegaDrive.cs` (Z80 사운드 쪽 · 카트리지의 Z80 드라이버를 RAM에, 요청 주소) |
 | 2.0.5 | 8-7 (X68000) | MC68000 `Audio/Cpu/M68000.cs` + hoot x68k generic: `Audio/HootX68k.cs` (OPM · ADPCM · DMA · MFP, E00010h = hoot가 대신 하는 IOCS · DOS) |
 | 2.0.6 | 8-7 (X68000 MIDI) | x68k MIDI 판: YM3802 MIDI 보드 (EAFA00h) → 살아 있는 MIDI 곡 (`HootX68k.LoadMidi`) |
+| 2.2.6 | 반프레스토 | dbz · ultraman = `HootOpmBoard` 배치 (Z80 + YM2151 + OKI, 명령 NMI), godzilla · sdgndmps = `HootSeibu` raiden2 배치 (세이부 사운드 + YM2151) — 5 / 5 |
 | 2.2.5 | PC-88VA | hoot pc88va · pc88vados: `Pc98Machine.Va` — PC-98 기계 + VA 포트 (OPN 44h~47h, 8259 주 188h/18Ah · 종 184h/186h, 8253 1A0h~1A6h, 32h SINTM, 사운드 = 종 IRQ4), pc88va 24 / 24 · pc88vados 10 / 14 |
 | 2.2.4 | PC-98 SB16 | hoot pc98dos soundblaster16: `Pc98Machine.Board.Sb16` (PC-98용 SB16: 20D2h~23D2h OPL3, 24D2h · 25D2h 믹서, 26D2h DSP 리셋 · 2AD2h 읽기 · 2CD2h 쓰기 · 2ED2h 상태, 81D2h), Jukebox 칩 = OPL3, 6 / 6 |
 | 2.2.3 | 곡 목록 | titlelist · range가 없는 항목은 bgm 파일이 곧 곡 목록 (코드 = bgm 번호, 제목 = 파일 이름 — FM-7 Reviver · WiBARM 등이 트리에서 재생됨) |

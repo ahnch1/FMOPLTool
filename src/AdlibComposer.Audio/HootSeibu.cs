@@ -23,9 +23,9 @@ public static class HootSeibu
 
     public static bool Handles(string driver, string type)
     {
-        if (!string.Equals((driver ?? "").Trim(), "seibu", StringComparison.OrdinalIgnoreCase)) return false;
-        string t = (type ?? "").Trim().ToLowerInvariant();
-        return t == "raiden" || t == "raiden2";
+        string d = (driver ?? "").Trim().ToLowerInvariant(), t = (type ?? "").Trim().ToLowerInvariant();
+        if (d == "banpresto") return t == "godzilla" || t == "sdgndmps";   // 반프레스토 (MAME legionna): 세이부 사운드 + YM2151 = raiden2 배치
+        return d == "seibu" && (t == "raiden" || t == "raiden2");
     }
 
     public static VgmSong Render(HootArchive.Entry e, string dir, int code, double seconds = DefaultSeconds, double fade = DefaultFade)
@@ -54,7 +54,8 @@ public static class HootSeibu
             any = true;
         }
         if (!any) missing.Add("(code)");
-        bool opm = (e.Type ?? "").Trim().ToLowerInvariant() == "raiden2";
+        string ty = (e.Type ?? "").Trim().ToLowerInvariant();
+        bool opm = ty == "raiden2" || ty == "godzilla" || ty == "sdgndmps";
         // raiden2: pcm 처음 (자리 0) = OKI #1, 나머지 = OKI #2 (자리를 0부터로)
         var first = opm ? pcm.Where(x => x.off == pcm.Min(y => y.off)).ToList() : pcm;
         var rest = opm ? pcm.Except(first).ToList() : new List<(long off, byte[] d)>();

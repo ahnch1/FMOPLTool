@@ -43,6 +43,12 @@ public static class HootOpmBoard
     // MAME bionicc: ROM ~7FFFh, 8000h · 8001h YM2151 (상태 폴링, IRQ 안 씀), A000h 명령 (NMI), RAM C000h~C7FFh, OKI 없음
     public static readonly Layout BionicCommando = new Layout { Name = "Capcom Bionic Commando", FixedEnd = 0x8000, RamStart = 0xC000, RamEnd = 0xC800, Ym = 0x8000, Oki = 0x10000, Latch = 0xA000, LatchNmi = true };
 
+    // MAME dbz sound_map (반프레스토 Dragon Ball Z 1 · 2): ROM ~7FFFh, RAM 8000h~BFFFh, YM2151 C000h (IRQ), OKI D000h, 명령 E000h (NMI), Z80 · YM 4MHz, OKI 1.056MHz
+    public static readonly Layout DragonBallZ = new Layout { Name = "Banpresto Dragon Ball Z", FixedEnd = 0x8000, RamStart = 0x8000, RamEnd = 0xC000, Ym = 0xC000, Oki = 0xD000, Latch = 0xE000, LatchNmi = true, CpuClock = 4000000, YmClock = 4000000, OkiClock = 1056000 };
+
+    // MAME ultraman sound_map (반프레스토 Ultraman): ROM ~7FFFh, RAM 8000h~BFFFh, 명령 C000h (NMI), D000h NMI 켬, OKI E000h, YM2151 F000h, Z80 · YM 4MHz, OKI 1.056MHz
+    public static readonly Layout Ultraman = new Layout { Name = "Banpresto Ultraman", FixedEnd = 0x8000, RamStart = 0x8000, RamEnd = 0xC000, Ym = 0xF000, Oki = 0xE000, Latch = 0xC000, LatchNmi = true, CpuClock = 4000000, YmClock = 4000000, OkiClock = 1056000 };
+
     public static Layout LayoutOf(string driver, string type)
     {
         string d = (driver ?? "").Trim().ToLowerInvariant(), t = (type ?? "").Trim().ToLowerInvariant();
@@ -51,6 +57,8 @@ public static class HootOpmBoard
         if (d == "technos" && (t == "ddragon2" || t == "ctribe")) return DoubleDragon2;   // Combatribes = DD2와 같은 사운드 배치 (MAME ctribe_sound_map)
         if (d == "technos" && t == "ddragon3") return DoubleDragon3;
         if (d == "tecmo" && t == "tecmo16") return Tecmo16;
+        if (d == "banpresto" && t == "dbz") return DragonBallZ;
+        if (d == "banpresto" && t == "ultraman") return Ultraman;
         return null;
     }
 

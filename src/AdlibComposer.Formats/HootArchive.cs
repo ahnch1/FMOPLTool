@@ -19,7 +19,7 @@ public static class HootArchive
 {
     public const string Extension = ".hoot";
     /// <summary>항목을 써 둔 표시 (재생할 수 있는 드라이버가 늘면 이름을 바꿔 이미 푼 zip에도 다시 쓴다: 2 = SPC · KSS · NSF · GBS 더함, 3 = PC/AT DOS, 4 = MIDI 판, 5 = pc98vx · pc98).</summary>
-    private const string Mark = ".fmopl_hoot58";
+    private const string Mark = ".fmopl_hoot59";
 
     /// <summary>
     /// 재생할 수 있는 hoot 드라이버 · 형식: pc98dos opn · opna · 86 · beep · pcatdos adlib · soundblaster16 · beep (기계 흉내), 그리고 이미 읽는 파일을 곡 코드로 고르는 것 —
@@ -75,6 +75,8 @@ public static class HootArchive
                 || t == "wsgz80"                                                                           // Z80 + WSG (HootNamcoWsgZ80)
                 || t == "system2"                                                                          // 6809 + YM2151 + C140 (HootNamcoSys2)
                 || t == "system86" || t == "wsg63701";                                                     // HD63701 MCU + (YM2151) + CUS30 (HootNamcoSys86)
+            case "banpresto": return t == "dbz" || t == "ultraman"                                         // Z80 + YM2151 + OKIM6295 (HootOpmBoard 배치)
+                || t == "godzilla" || t == "sdgndmps";                                                     // 세이부 사운드 + YM2151 (HootSeibu raiden2)
             case "konami": return t == "scramble" || t == "timeplt" || t == "pooyan" || t == "frogger"                     // Z80 + AY-3-8910 × 2 (HootKonamiAy)
                 || t == "scontra" || t == "thundercross" || t == "salamander" || t == "hcastle" || t == "crimfght" || t == "twin16" || t == "battlantis" || t == "lethal" || t == "ironhors"                                                // Z80 + YM2151 + K007232 (HootKonamiK007232)
                 || t == "053260"                                                                           // Z80 + YM2151 + K053260 (HootKonami53260)

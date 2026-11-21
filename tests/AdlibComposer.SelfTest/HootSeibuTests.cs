@@ -9,7 +9,7 @@ namespace AdlibComposer.SelfTest;
 /// <summary>hoot 세이부 사운드 시스템 (HootSeibu, type raiden): 실제 zip, 진단 (HOOT_SONGS = 곡마다).</summary>
 public static class HootSeibuTests
 {
-    public static readonly string[] Archives = { "raiden", "totmejan", "heatbrl", "cupsoc", "raidndx", "raiden2" };
+    public static readonly string[] Archives = { "raiden", "totmejan", "heatbrl", "cupsoc", "raidndx", "raiden2", "godzilla", "sdgndmps" };
 
     public static void Run(Action<string, bool, string> check)
     {

@@ -83,7 +83,7 @@ public static class HootX1Tests
         string root = SopTests.FindDir("_incoming");
         string folder = root == null ? null : Path.Combine(root, "Hootarchive", "x1");
         if (folder == null || !Directory.Exists(folder)) { Console.WriteLine("SKIP  hoot x1 real files (_incoming/Hootarchive/x1 not found)"); return; }
-        foreach (var arc in new[] { "x1rv", "x1wibarm", "x1sangoku2" })
+        foreach (var arc in new[] { "x1rv", "x1wibarm", "x1sangoku2", "x1ishin" })
         {
             string zip = Path.Combine(folder, arc + ".zip");
             if (!File.Exists(zip)) { Console.WriteLine("SKIP  hoot x1 " + arc + " (zip not found)"); continue; }

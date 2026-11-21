@@ -114,7 +114,7 @@ public static class HootPc88Tests
             }
         }
         // hoot oldfalcom.cpp 규약 (xanadu · xanadu2 · asteka2): 곡마다 prog · 주소 표 · OUT 02h bgm
-        foreach (var (arc, need) in new[] { ("xana_88", 0.8), ("xana2_88", 0.8), ("asteka2", 0.1) })   // asteka2: zip의 APRG (2018년 16KB)가 2001년 표와 판이 달라 1 / 8만
+        foreach (var (arc, need) in new[] { ("xana_88", 0.8), ("xana2_88", 0.8), ("asteka2", 0.8) })   // asteka2 0200 (SOUND prog)는 2001년 표에 없음
         {
             string zip = Path.Combine(folder, arc + ".zip");
             if (!File.Exists(zip)) { Console.WriteLine("SKIP  hoot pc88 " + arc + " (zip not found)"); continue; }

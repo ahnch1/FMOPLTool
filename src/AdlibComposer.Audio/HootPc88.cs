@@ -179,6 +179,9 @@ public static class HootPc88
 
         public void Start(int pc)
         {
+            // hoot (RAZE z80_reset)처럼 레지스터 0으로 시작
+            Cpu.A = Cpu.F = Cpu.B = Cpu.C = Cpu.D = Cpu.E = Cpu.H = Cpu.L = 0;
+            Cpu.IX = Cpu.IY = 0;
             Cpu.PC = pc;
             Cpu.SP = 0x0000;
             Cpu.Im = 2;

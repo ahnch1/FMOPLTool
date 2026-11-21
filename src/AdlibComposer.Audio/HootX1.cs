@@ -219,6 +219,9 @@ public static class HootX1
 
         public void Start(int pc)
         {
+            // hoot (RAZE z80_reset)처럼 레지스터 0: 維新の嵐 · 水滸伝 PATCH는 E239h (NOP · RET M)로 들어가 S = 0 · B = 0에 기댄다
+            Cpu.A = Cpu.F = Cpu.B = Cpu.C = Cpu.D = Cpu.E = Cpu.H = Cpu.L = 0;
+            Cpu.IX = Cpu.IY = 0;
             Cpu.PC = pc;
             Cpu.SP = 0x0000;
             Cpu.Im = 2;

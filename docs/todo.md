@@ -159,7 +159,7 @@
 - [ ] PC-98 MIDI 무음: DOFMDX98 50 · FUGA 50 · ARTDI 32 · FMX 16 · MINT/NLP 16 · MFD 12 · valky 11, RS-MIDI (내장 8251)
 - [ ] pc98vx 무음 40: writes-no-keyon 19 · no-chip-writes 13 · unknown-op 2 · vector 2 · hoot 끔 2
 - [ ] PC/AT 무음 6 (rakuen · kurodan · eshoutei · darksun · globaleffect · nestory2), SB16 PCM (DSP DMA)
-- [ ] MSX 무음 3 (Rona PSG · Illusion City · fukujin1; kgc3는 v2.3.9 SCC+ 카트리지로 해결) · PC-88 무음 24 (v2.3.3 hoot 타이머 · SINTM · 보드 II, v2.3.5 baseclock 8MHz로 40 → 24) · X1 무음 4 (v2.3.1: Super Laydock × 2 = use_psgpcm, 維新の嵐 · 水滸伝 = CTC ch0 없음) · 네오지오 무음 9 (암호화 V ROM · m1_decrypt) · 메가드라이브 무음 38 (generic_z80 요청 주소) · X68000 무음 43 (v2.3.2: ZMSC.X · 24비트 버스로 54 → 43, 남은 것 cos68snd + tank.x 묶음 약 13 = xml ↔ zip TANK.X 차이) · X68000 MIDI 무음 25 — 원인 목록은 `hoot-status.md`
+- [ ] MSX 무음 3 (Rona PSG · Illusion City · fukujin1; kgc3는 v2.3.9 SCC+ 카트리지로 해결) · PC-88 무음 23 (v2.3.3 hoot 타이머 · SINTM · 보드 II, v2.3.5 baseclock 8MHz, v2.3.10 레지스터 0 시작으로 40 → 23) · X1 무음 2 (Super Laydock × 2 = use_psgpcm; 維新の嵐 · 水滸伝은 v2.3.10 레지스터 0 시작으로 해결) · 네오지오 무음 9 (암호화 V ROM · m1_decrypt) · 메가드라이브 무음 38 (generic_z80 요청 주소) · X68000 무음 43 (v2.3.2: ZMSC.X · 24비트 버스로 54 → 43, 남은 것 cos68snd + tank.x 묶음 약 13 = xml ↔ zip TANK.X 차이) · X68000 MIDI 무음 25 — 원인 목록은 `hoot-status.md`
 - [ ] 아케이드 무음: deco wizdfire (zip에 사운드 ROM 없음) · hangzo, System 16 eswat (ROM 없음), 세가 PCM endurob2 × 2 · outrunb · smgp
 - [ ] 86 PCM · OPNA ADPCM RAM · fm_mix / ssg_mix · pcm_mix 옵션 반영 (지금 무시)
 - [x] POKEY 칩 + VGM BBh — v2.1.31 (아타리 System 1 효과음 · 칩 시험 49곡 더 소리)

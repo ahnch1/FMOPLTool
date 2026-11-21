@@ -333,6 +333,15 @@ public static class HootSongs
             v = HootMegaDrive.Render(e, dir, code);
             what = "메가드라이브 Z80 · 곡 0x" + code.ToString("X2");
         }
+        else if (driver == "x68k" && e.Type.Equals("mxdrv", StringComparison.OrdinalIgnoreCase))
+        {
+            // hoot x68k mxdrv (doujin · takeru 목록): data 줄 offset = 곡 코드, 파일 = MDX (PDX는 같은 폴더) — hoot mxdrv.cpp의 MXDRV 대신 Mdx 재생기로
+            var rom = e.Roms.FirstOrDefault(r => r.Type == "data" && r.Offset == code && r.Text.Length > 0);
+            if (rom.Text == null) throw new InvalidDataException("곡 코드 0x" + code.ToString("X") + "의 MDX가 목록에 없습니다.");
+            string mdx = FindFile(dir, rom.Text) ?? throw new FileNotFoundException("MDX 파일이 zip에 없습니다: " + rom.Text);
+            v = Mdx.Load(mdx);
+            what = "MDX " + Path.GetFileName(mdx);
+        }
         else if (driver == "x68k")
         {
             // hoot X68000: 시작 코드 · 드라이버 (.x 재배치) · 곡 데이터를 X68000 기계 (MC68000 · OPM · ADPCM · DMA · MFP)에서 돌려 미리 렌더

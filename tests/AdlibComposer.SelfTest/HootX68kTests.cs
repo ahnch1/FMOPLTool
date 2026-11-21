@@ -200,6 +200,16 @@ public static class HootX68kTests
             for (; k < Math.Min(4, hoot.Titles.Count) && !r.sound; k++) r = Measure(hoot, dir, hoot.Titles[k].Code, 10);
             check("hoot x68k " + arc + ": song " + k + " makes sound in 10 s", r.sound, r.note);
         }
+        // x68k mxdrv (data 줄 offset = 곡 코드의 MDX) → Mdx 재생기
+        string zipM = Path.Combine(folder, "sz2w68snd.zip");
+        if (!File.Exists(zipM)) { Console.WriteLine("SKIP  hoot x68k sz2w68snd (zip not found)"); return; }
+        string dirM = ZipFolder.Extract(zipM);
+        string hm = Directory.GetFiles(dirM, "*" + HootArchive.Extension).FirstOrDefault(h => HootArchive.Load(h).Type == "mxdrv");
+        if (hm == null) { check("hoot x68k sz2w68snd: mxdrv .hoot entry", false, "none"); return; }
+        var em = HootArchive.Load(hm);
+        int idx = em.Titles.FindIndex(t => t.Code == 0x06);
+        var vm = ChipSongs.Load(hm + "::" + idx);
+        check("hoot x68k mxdrv (sz2w68snd code 06 = SZ2_S1.MDX): plays through the MDX player", HootArchive.Playable(em.Driver, em.Type) && vm.Ym2151Clock > 0 && vm.IsPlayable && vm.SourceFormat.Contains("MDX"), vm.SourceFormat);
     }
 
     /// <summary>조사: 처리하지 못한 IOCS · DOS 부름 → 그것을 부른 항목 수.</summary>

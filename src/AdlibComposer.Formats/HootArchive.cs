@@ -87,7 +87,7 @@ public static class HootArchive
             case "psikyo": return t == "gunbird";                                                         // Z80 + YM2610 (HootYm2610Board)
             case "atari": return t == "system1";                                                         // 6502 + YM2151 + POKEY (HootAtariSys1, TMS5220 없음)
             case "megadrive": return t == "generic_z80" || t == "iyinc" || t == "1c00" || t == "koei";
-            case "x68k": return t == "generic";
+            case "x68k": return t == "generic" || t == "mxdrv";   // mxdrv = data 줄 (곡 코드 = offset)의 MDX를 Mdx로
             case "nes": return t == "nsf";
             case "gb": return t == "gbs";
         }

@@ -31,6 +31,7 @@
 | 2.0.4 | 8-6 (메가드라이브) | hoot megadrive generic_z80 · iyinc: `Audio/HootMegaDrive.cs` (Z80 사운드 쪽 · 카트리지의 Z80 드라이버를 RAM에, 요청 주소) |
 | 2.0.5 | 8-7 (X68000) | MC68000 `Audio/Cpu/M68000.cs` + hoot x68k generic: `Audio/HootX68k.cs` (OPM · ADPCM · DMA · MFP, E00010h = hoot가 대신 하는 IOCS · DOS) |
 | 2.0.6 | 8-7 (X68000 MIDI) | x68k MIDI 판: YM3802 MIDI 보드 (EAFA00h) → 살아 있는 MIDI 곡 (`HootX68k.LoadMidi`) |
+| 2.3.13 | X68000 mxdrv | x68k mxdrv (sz2w68snd · chorensha68snd · kowin368snd): 2001년 mxdrv.cpp (자체 mxdrv.bin + MDX 한 파일)와 다른 뒤 형식 — data 줄 offset = 곡 코드, 파일 = MDX → `Mdx.Load` (PDX는 같은 폴더). 로컬 zip 2 (sz2w · kowin3) |
 | 2.3.12 | HES · PC-98 OPN 읽기 | hoot hes.cpp: VBlank IRQ1을 VDC 레지스터 5 bit3과 상관없이 → VDC 설정을 뺀 HES 립도 (레지스터 5를 쓴 곡은 예전처럼 bit3을 따름). PC-98 OPN 데이터 읽기: FM 레지스터 = 0, SSG = 쓴 값 (fmgen GetReg) — 300 zip 표본 그대로 |
 | 2.3.11 | SCC 클럭 규약 | hoot scc.cpp · kss.cpp `m_051649->Initialize(3579545 / 2)` · ss051649 음 = clock / ((f + 1) × 16) = VGM 규약. 재생기 (`SccEmulator.InputClock`)는 2.5MHz 아래를 두 배로 (입력 클럭 ÷32), 렌더 (HootMsx · Kss)는 `SccEmulator.VgmClock` = 1.789772MHz로 적음. 코나미 K007232 계열 (1.79MHz로 적어 옴)의 SCC가 한 옥타브 낮게 나던 것 · 이 앱의 MSX VGM이 다른 재생기에서 한 옥타브 높던 것 해결 |
 | 2.3.10 | Z80 시작 레지스터 | hoot (RAZE z80_reset)처럼 X1 · PC-88 · MSX 기계를 레지스터 0으로 시작 (예전 = 실기 리셋 AF · BC … = FFFFh). 維新の嵐 · 水滸伝 PATCH는 E239h (NOP · RET M)로 초기화에 들어가 S = 0 · B = 0에 기댐 → X1 150 / 152 (+ めぞん一刻), PC-88 Shin Ku Gyoku Den, ASTEKA II 1 → 7 / 8 (v2.3.6에 적은 "APRG 판 차이"는 틀림 — 이것이 원인). 남은 X1 무음: Super Laydock × 2 (use_psgpcm) |

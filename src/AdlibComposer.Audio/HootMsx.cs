@@ -179,6 +179,8 @@ public static class HootMsx
 
         private int psgAddr, opllAddr, audioAddr, slot;
         private readonly byte[] psgReg = new byte[16];
+        private long timerBase;
+        private long SystemTimer { get { return (Cpu.Cycles - timerBase) * 1000000L / 3911L * 1000L / (long)CpuClock; } }
         private bool sccOn, sccPlusMode;
         private int command;
         private int code;
@@ -467,6 +469,8 @@ public static class HootMsx
                 case 0x99: vdpPending = false; return 0x80;   // VDP 상태: 수직 귀선
                 case 0xA2: return psgAddr == 14 ? (byte)0xFF : psgReg[psgAddr];   // PSG 읽기 = 레지스터 값 (hoot ssAY8910), R14 = 조이스틱 안 눌림
                 case 0xA8: return (byte)slot;
+                case 0xE6: return (byte)SystemTimer;          // MSX2+ · turbo R 시스템 타이머 (3.911µs마다 하나씩, Illusion City가 OPLL 쓰기 사이를 잰다)
+                case 0xE7: return (byte)(SystemTimer >> 8);
                 default: return 0xFF;
             }
         }
@@ -485,6 +489,7 @@ public static class HootMsx
                 case 0xC0: audioAddr = v; break;
                 case 0xC1: UsedAudio = true; Emit(0x5C, (byte)audioAddr, v); break;
                 case 0xA8: slot = v; break;
+                case 0xE6: timerBase = Cpu.Cycles; break;    // 쓰면 0부터
             }
         }
 

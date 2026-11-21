@@ -80,7 +80,7 @@ public static class HootMsxTests
         string root = SopTests.FindDir("_incoming");
         string folder = root == null ? null : Path.Combine(root, "Hootarchive", "msx");
         if (folder == null || !Directory.Exists(folder)) { Console.WriteLine("SKIP  hoot msx generic real files (_incoming/Hootarchive/msx not found)"); return; }
-        foreach (var (arc, what) in new[] { ("crescent_msx", "Alice Soft PSG"), ("kubikiri_msx", "OPLL"), ("dante2_msx", "PSG"), ("sgolveli_msx", "BIOS call before load"), ("herzog_msx", "GTTRIG") })
+        foreach (var (arc, what) in new[] { ("crescent_msx", "Alice Soft PSG"), ("kubikiri_msx", "OPLL"), ("dante2_msx", "PSG"), ("sgolveli_msx", "BIOS call before load"), ("herzog_msx", "GTTRIG"), ("ic_msx", "system timer E6h") })
         {
             string zip = Path.Combine(folder, arc + ".zip");
             if (!File.Exists(zip)) { Console.WriteLine("SKIP  hoot msx " + arc + " (zip not found)"); continue; }

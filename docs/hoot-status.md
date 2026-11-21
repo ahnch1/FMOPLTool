@@ -31,6 +31,7 @@
 | 2.0.4 | 8-6 (메가드라이브) | hoot megadrive generic_z80 · iyinc: `Audio/HootMegaDrive.cs` (Z80 사운드 쪽 · 카트리지의 Z80 드라이버를 RAM에, 요청 주소) |
 | 2.0.5 | 8-7 (X68000) | MC68000 `Audio/Cpu/M68000.cs` + hoot x68k generic: `Audio/HootX68k.cs` (OPM · ADPCM · DMA · MFP, E00010h = hoot가 대신 하는 IOCS · DOS) |
 | 2.0.6 | 8-7 (X68000 MIDI) | x68k MIDI 판: YM3802 MIDI 보드 (EAFA00h) → 살아 있는 MIDI 곡 (`HootX68k.LoadMidi`) |
+| 2.3.22 | MSX 시스템 타이머 | 포트 E6h · E7h = MSX2+ · turbo R 시스템 타이머 (3.911µs마다 하나씩, E6h에 쓰면 0부터). Illusion City 드라이버는 OPLL 쓰기 사이를 E6h로 재며 기다림 — 예전엔 늘 FFh라 영영 기다림. MSX 526 → 527 / 530. 남은 무음: Rona × 2 (시작 코드 스택 어긋남), fukujin1 PSG (목록의 첫 곡들이 FM 자료 FM00~FM04) |
 | 2.3.21 | MSX FM-PAC 부팅 상태 | 4000h~에 MSX-MUSIC 롬 ("…OPLL")이 있으면 실기 부팅 때 롬 초기화가 해 두는 것처럼: SLTWRK (슬롯 0-0~3 · 페이지 1)에 작업 영역 3000h, EXPTBL FCC1h bit7 (슬롯 0 확장, 시작 코드의 OUT A8,3Fh · (FFFFh) ← 04h = FM-PAC 0-1). Ryu Kyu: INIOPL 전에 MSTOP → 0인 SLTWRK로 0000h+3Dh부터 11바이트 걸음으로 0을 써 인터럽트 처리기를 지웠음. Yoshida Konzern: RDSLT로 "OPLL"을 찾는데 슬롯 0에서 찾아 번호 0을 "없음"으로 봄. (Z80 역어셈블 z80dis로 확인) MSX 524 → 526 / 530. 남은 무음: Rona × 2 (시작 코드 049Dh가 6개 넣고 CALL D2F0h — D2F0h 끝은 6개 꺼내고 RET이라 돌아갈 곳이 어긋남), Illusion City, fukujin1 |
 | 2.3.20 | DOS 핸들 256 | MaxHandles 64 → 256: rom type="file" offset = 핸들 번호인데 xak_98은 40h~44h (곡 코드 0x0d0040 …) → 묶기가 조용히 실패해 첫 곡들이 무음. --hoot98survey: 첫 곡이 조용하면 다음 곡 2개까지 (sound-later — quizb 첫 곡 = NOMUSIC.MUS). 300 zip 표본 293 → 295 / 303 (xak · quizb) |
 | 2.3.19 | 8259 SFNM | `Pic8259.Sfnm` · `Cascade` (ICW4 bit4 · ICW3), PC-98 주 PIC 처음 값 = BIOS ICW4 1Dh (SFNM, 종 = IR7): 종 연결 입력이 들어가 있어도 종의 새 요청을 받음. Kuni's MDRV (pduo · charm)는 처리기에서 종에만 EOI → 주 ISR bit7이 남아 첫 IRQ 뒤 멈췄음. 300 zip 표본 291 → 293 / 303, emagic · dismix1 키온 크게 늘음, pc98vx writes-no-keyon 3 → 1 |
@@ -155,7 +156,7 @@
 | PC/AT DOS (adlib · sb16 · beep) | 482 / 488 | `--hootatsurvey pc 1000 6` |
 | MIDI 판 PC/AT | 571 / 586 | `--hootmidisurvey pc 1000 20` |
 | MIDI 판 PC-98 | 360 / 641 | `--hootmidisurvey pc98 1709 20` |
-| MSX generic (PSG · OPLL · SCC · SCC+ · MSX-AUDIO) | 526 / 530 (v2.3.21, 첫 곡이 조용하면 다음 곡 5개까지) | `--hootmsxsurvey msx 1000 8` |
+| MSX generic (PSG · OPLL · SCC · SCC+ · MSX-AUDIO) | 527 / 530 (v2.3.22, 첫 곡이 조용하면 다음 곡 5개까지) | `--hootmsxsurvey msx 1000 8` |
 | PC-88 (opn · opna) | 517 / 535 — opn 375/385 · opna 136/143 · 8801-11 · generic 2 · xanadu · xanadu2 · asteka2 (v2.3.15) | `--hoot88survey pc88 1000 6` |
 | FM-7 · FM77AV (generic) | 29 / 29, 곡 279 / 308 | `--test hootfm7` (HOOT_SONGS=1) |
 | X1 (psg · opm) | 150 / 152 — opm 70/71 · psg 80/81 (v2.3.10) | `--hootx1survey x1 1000 8` |

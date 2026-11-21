@@ -155,6 +155,7 @@ public static class Program
             // 진단: --hoot88survey 폴더 [zip 수] [초]
             return HootPc88Tests.Survey(args[1], args.Length > 2 ? int.Parse(args[2]) : 50, args.Length > 3 ? double.Parse(args[3], System.Globalization.CultureInfo.InvariantCulture) : 8);
         }
+        if (args.Length > 1 && args[0] == "--kssurvey") return KssSurvey.Run(args[1], args.Length > 2 ? int.Parse(args[2]) : 1000, args.Length > 3 ? double.Parse(args[3], System.Globalization.CultureInfo.InvariantCulture) : 6);
         if (args.Length > 1 && args[0] == "--hootmsxsurvey")
         {
             // 진단: --hootmsxsurvey 폴더 [zip 수] [초]

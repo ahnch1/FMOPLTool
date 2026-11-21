@@ -63,6 +63,19 @@ public static class ExtraTests
         }
         var back = Kss.Render(MakeKss(false), 0, 1, 0);
         check("Systems: back to built-in → PSG again", back.HasPsg, back.ChipSummary);
+
+        // hoot kss.cpp · ssAY8910: PSG 읽기 = 레지스터 값 (R7 = B8h를 읽어 R9에), BIOS 영역 = RET (CALL 00D8h가 돌아온다)
+        var rb = MakeKss(false, new byte[]
+        {
+            0x3E, 0x07, 0xD3, 0xA0, 0x3E, 0xB8, 0xD3, 0xA1,   // R7 = B8h
+            0xCD, 0xD8, 0x00,                                 // CALL 00D8h (GTTRIG, 없는 BIOS)
+            0x3E, 0x07, 0xD3, 0xA0, 0xDB, 0xA2, 0x47,         // B = R7 읽기
+            0x3E, 0x09, 0xD3, 0xA0, 0x78, 0xD3, 0xA1,         // R9 = B
+        });
+        var vr = Kss.Render(rb, 0, 1, 0);
+        bool found = false;
+        for (int i = vr.DataOffset; i + 2 < vr.Data.Length && !found; i++) found = vr.Data[i] == 0xA0 && vr.Data[i + 1] == 0x09 && vr.Data[i + 2] == 0xB8;
+        check("KSS: PSG read-back returns the register (hoot ssAY8910), unknown BIOS entries return (RET fill)", found, vr.ChipSummary);
     }
 
     // ------------------------------------------------------------ Z80
@@ -133,9 +146,9 @@ public static class ExtraTests
     // ------------------------------------------------------------ KSS
 
     /// <summary>KSCC 하나: 0x4000에 init (PSG A = 440Hz, SCC 채널 1 켬) + play (RET).</summary>
-    private static byte[] MakeKss(bool scc)
+    private static byte[] MakeKss(bool scc, byte[] extra = null)
     {
-        var code = new List<byte>
+        var code = extra != null ? new List<byte>(extra) : new List<byte>
         {
             0x3E, 0x00, 0xD3, 0xA0, 0x3E, 0xFE, 0xD3, 0xA1,   // R0 = 0xFE
             0x3E, 0x01, 0xD3, 0xA0, 0x3E, 0x00, 0xD3, 0xA1,   // R1 = 0

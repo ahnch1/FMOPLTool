@@ -115,6 +115,7 @@ public static class Kss
         public readonly List<(double t, byte[] cmd)> Log = new List<(double, byte[])>();
         public bool UsedPsg, UsedScc, UsedSccPlus, UsedOpll, UsedAudio, UsedSn;
         private int psgAddr, opllAddr, audioAddr;
+        private readonly byte[] psgReg = new byte[16];
         public long CpuStart;
         public Z80 Cpu;
 
@@ -193,7 +194,7 @@ public static class Kss
         public byte In(int port)
         {
             port &= 0xFF;
-            if (!h.Sega && port == pRead) return 0;
+            if (!h.Sega && port == pRead) return psgAddr == 14 ? (byte)0xFF : psgReg[psgAddr];   // hoot ssAY8910: 레지스터 값, R14 = 조이스틱 안 눌림
             return 0xFF;
         }
 
@@ -210,7 +211,7 @@ public static class Kss
                 return;
             }
             if (port == pAddr) psgAddr = v & 0x0F;
-            else if (port == pData) { UsedPsg = true; Emit(0xA0, (byte)psgAddr, v); }
+            else if (port == pData) { UsedPsg = true; psgReg[psgAddr] = v; Emit(0xA0, (byte)psgAddr, v); }
             else if (port == oAddr) opllAddr = v;
             else if (port == oData) { UsedOpll = true; Emit(0x51, (byte)opllAddr, v); }
             else if (port == aAddr) audioAddr = v;
@@ -232,6 +233,7 @@ public static class Kss
         // 작은 BIOS: 0x0000 = 함정 (돌아오면 멈춤), WRTPSG (0x93) · RDPSG (0x96), 인터럽트 0x38 = RET
         if (!h.Sega)
         {
+            for (int i = 1; i < 0x4000; i++) ram[i] = 0xC9;   // hoot kss.cpp: BIOS 영역 = RET (0000h는 함정 그대로)
             // WRTPSG (0x93, 3바이트 자리) → 0xA0의 본체로 뜀: OUT (A0),A · PUSH AF · LD A,E · OUT (A1),A · POP AF · RET
             ram[0x93] = 0xC3; ram[0x94] = 0xA0; ram[0x95] = 0x00;
             byte[] rdpsg = { 0xD3, 0xA0, 0xDB, 0xA2, 0xC9 };   // RDPSG (0x96)

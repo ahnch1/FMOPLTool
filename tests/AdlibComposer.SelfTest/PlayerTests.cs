@@ -154,6 +154,9 @@ public static class PlayerTests
             session.VintageSpeaker = true;
             check("Player sound: vintage speaker → engine", engine.VintageSpeaker);
             session.VintageSpeaker = false;
+            session.Mono = true;
+            check("Player sound: mono → engine", engine.Mono);
+            session.Mono = false;
             session.SetSound(ChipSound.Nes, false);
             check("Player sound: 8-bit label", session.ChipSynth && session.SoundText == ChipMidiSynth.Label(ChipSound.Nes), session.SoundText);
             session.Seek(0);

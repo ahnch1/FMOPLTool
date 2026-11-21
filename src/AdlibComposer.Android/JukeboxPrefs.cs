@@ -7,7 +7,7 @@ using Android.Content;
 namespace AdlibComposer.Droid;
 
 /// <summary>
-/// Jukebox 설정 (앱 설정 파일에 남김): 거친 음색 · 그 시절 스피커 · 원래 소리 / 8-bit · MIDI 모듈 · 표시 방식 · 노래방 그림 폴더 · Cyberfunk 층 · resource 폴더.
+/// Jukebox 설정 (앱 설정 파일에 남김): 모노 / 스테레오 · 거친 음색 · 그 시절 스피커 · 원래 소리 / 8-bit · MIDI 모듈 · 표시 방식 · 노래방 그림 폴더 · Cyberfunk 층 · resource 폴더.
 /// 바꾸면 <see cref="Changed"/> (가로 데크의 상자들이 맞춘다).
 /// </summary>
 internal static class JukeboxPrefs
@@ -23,6 +23,8 @@ internal static class JukeboxPrefs
 
     public static bool RawTone { get; private set; }
     public static bool VintageSpeaker { get; private set; }
+    /// <summary>true = 모노 (왼쪽 · 오른쪽을 섞음), false = 스테레오.</summary>
+    public static bool Mono { get; private set; }
     /// <summary>-1 = 원래 소리 (OPL FM), 0~ = <see cref="Player.JukeboxSession.ChipStyles"/> 번호.</summary>
     public static int Chip { get; private set; } = -1;
     public static bool Mt32 { get; private set; }
@@ -41,6 +43,7 @@ internal static class JukeboxPrefs
         prefs = ctx.GetSharedPreferences("jukebox", FileCreationMode.Private);
         RawTone = prefs.GetBoolean("rawTone", false);
         VintageSpeaker = prefs.GetBoolean("vintageSpeaker", false);
+        Mono = prefs.GetBoolean("mono", false);
         Chip = Math.Max(-1, Math.Min(Player.JukeboxSession.ChipStyles.Length - 1, prefs.GetInt("chip", -1)));
         Mt32 = prefs.GetBoolean("mt32", false);
         ViewMode = Math.Max(0, Math.Min(ViewModeNames.Length - 1, prefs.GetInt("viewMode", 0)));
@@ -55,11 +58,13 @@ internal static class JukeboxPrefs
         var s = AppEnv.Session;
         s.RawTone = RawTone;
         s.VintageSpeaker = VintageSpeaker;
+        s.Mono = Mono;
         s.SetSound(Chip >= 0 ? Player.JukeboxSession.ChipStyles[Chip] : (ChipSound?)null, Mt32);
     }
 
     public static void SetRawTone(bool v) { RawTone = v; Save(e => e.PutBoolean("rawTone", v)); ApplySound(); }
     public static void SetVintageSpeaker(bool v) { VintageSpeaker = v; Save(e => e.PutBoolean("vintageSpeaker", v)); ApplySound(); }
+    public static void SetMono(bool v) { Mono = v; Save(e => e.PutBoolean("mono", v)); ApplySound(); }
     public static void SetChip(int chip) { Chip = chip; Save(e => e.PutInt("chip", chip)); ApplySound(); }
     public static void SetMt32(bool v) { Mt32 = v; Save(e => e.PutBoolean("mt32", v)); ApplySound(); }
     public static void SetViewMode(int m) { ViewMode = m; Save(e => e.PutInt("viewMode", m)); }

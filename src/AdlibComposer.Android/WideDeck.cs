@@ -597,17 +597,18 @@ internal sealed class KeyboardView : View
 }
 
 /// <summary>
-/// 소리 고르기 상자들 (Windows Jukebox 위 막대와 같은 것): 거친 음색 · 그 시절 스피커 · 원래 소리 / 8-bit · MIDI 신디 · MIDI 모듈.
+/// 소리 고르기 상자들 (Windows Jukebox 위 막대와 같은 것): 모노 / 스테레오 · 거친 음색 · 그 시절 스피커 · 원래 소리 / 8-bit · MIDI 신디 · MIDI 모듈.
 /// 가로 데크 막대와 설정 창이 같이 쓴다. '원래 소리' 상자와 MIDI 신디 상자는 같은 설정 (8-bit을 고르면 둘 다 그 풍).
 /// </summary>
 internal static class SoundControls
 {
     /// <summary>parent에 상자들을 넣고, 설정에 맞추는 동작을 돌려준다.</summary>
-    /// <param name="compact">세로 데크: MIDI 신디 · 거친 음색 · 그 시절 스피커만 (원래 소리 상자 · 모듈은 [⚙ 설정]에).</param>
+    /// <param name="compact">세로 데크: MIDI 신디 · 모노 / 스테레오 · 거친 음색 · 그 시절 스피커만 (원래 소리 상자 · 모듈은 [⚙ 설정]에).</param>
     public static Action Add(Context c, ViewGroup parent, bool compact = false)
     {
         float d = c.Resources.DisplayMetrics.Density;
         var labels = JukeboxSession.ChipStyles.Select(ChipMidiSynth.Label).ToList();
+        var channels = NewSpinner(c, new List<string> { "스테레오", "모노" });
         var raw = new CheckBox(c) { Text = "거친 음색" };
         var vintage = new CheckBox(c) { Text = "그 시절 스피커" };
         var chip = NewSpinner(c, new[] { "원래 소리" }.Concat(labels).ToList());
@@ -621,6 +622,7 @@ internal static class SoundControls
             gs.AddView(synth);
             parent.AddView(gs);
             var gt = Group(c);
+            gt.AddView(channels);
             gt.AddView(raw);
             gt.AddView(vintage);
             parent.AddView(gt);
@@ -628,6 +630,7 @@ internal static class SoundControls
         else
         {
             var g1 = Group(c);
+            g1.AddView(channels);
             g1.AddView(raw);
             g1.AddView(vintage);
             g1.AddView(chip);
@@ -642,6 +645,8 @@ internal static class SoundControls
 
         Action sync = () =>
         {
+            int ch = JukeboxPrefs.Mono ? 1 : 0;
+            if (channels.SelectedItemPosition != ch) channels.SetSelection(ch);
             if (raw.Checked != JukeboxPrefs.RawTone) raw.Checked = JukeboxPrefs.RawTone;
             if (vintage.Checked != JukeboxPrefs.VintageSpeaker) vintage.Checked = JukeboxPrefs.VintageSpeaker;
             if (chip.SelectedItemPosition != JukeboxPrefs.Chip + 1) chip.SetSelection(JukeboxPrefs.Chip + 1);
@@ -651,6 +656,7 @@ internal static class SoundControls
         };
         sync();
         // 설정과 같은 값이면 아무것도 안 함 (SetSelection이 뒤늦게 일으키는 이벤트도 걸러짐)
+        channels.ItemSelected += (s, e) => { if ((e.Position == 1) != JukeboxPrefs.Mono) JukeboxPrefs.SetMono(e.Position == 1); };
         raw.CheckedChange += (s, e) => { if (e.IsChecked != JukeboxPrefs.RawTone) JukeboxPrefs.SetRawTone(e.IsChecked); };
         vintage.CheckedChange += (s, e) => { if (e.IsChecked != JukeboxPrefs.VintageSpeaker) JukeboxPrefs.SetVintageSpeaker(e.IsChecked); };
         chip.ItemSelected += (s, e) => { if (e.Position - 1 != JukeboxPrefs.Chip) JukeboxPrefs.SetChip(e.Position - 1); };

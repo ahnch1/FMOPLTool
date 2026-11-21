@@ -113,6 +113,17 @@ public sealed class AudioEngine : IDisposable
         set { vintageSpeaker = value; }   // 오디오 스레드는 샘플마다 읽기만 한다 (volatile)
     }
 
+    private volatile bool mono;
+    /// <summary>모노 비율 (0 = 스테레오, 1 = 모노). 바꿀 때 30ms에 걸쳐 옮겨 간다.</summary>
+    private double monoMix;
+
+    /// <summary>모노 (true): 왼쪽 · 오른쪽을 섞어 두 쪽에 같은 소리 (모든 곡). false = 스테레오 그대로.</summary>
+    public bool Mono
+    {
+        get { return mono; }
+        set { mono = value; }   // 오디오 스레드는 샘플마다 읽기만 한다 (volatile)
+    }
+
     public OplMapping Mapping { get { return synth.Mapping; } }
     public double MasterVolume { get; set; } = 1.5;
     public bool IsDeviceOpen { get { return player != null && player.IsOpen; } }
@@ -672,6 +683,14 @@ public sealed class AudioEngine : IDisposable
             }
             double vl = (prevL + (curL - prevL) * resamplePos) * gain;
             double vr = (prevR + (curR - prevR) * resamplePos) * gain;
+            // 모노: 왼쪽 · 오른쪽을 가운데로 (스피커 필터 앞에서)
+            monoMix += ((mono ? 1.0 : 0.0) - monoMix) * SpeakerFade;
+            if (monoMix > 1e-4)
+            {
+                double m = (vl + vr) * 0.5;
+                vl += (m - vl) * monoMix;
+                vr += (m - vr) * monoMix;
+            }
             // 스피커: 필터는 늘 돌려 두고(바꿀 때 상태가 이어지게) 비율만 옮긴다
             double wl = spkL.Process(vl), wr = spkR.Process(vr);
             speakerMix += ((vintageSpeaker ? 1.0 : 0.0) - speakerMix) * SpeakerFade;

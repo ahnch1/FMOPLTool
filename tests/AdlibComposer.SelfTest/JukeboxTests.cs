@@ -177,6 +177,37 @@ public static class JukeboxTests
             }
 
         TestToneAndSpeaker(check);
+        TestMono(check);
+    }
+
+    /// <summary>모노: 한쪽으로 치우친 트래커 채널도 왼쪽 · 오른쪽이 같아지고, 끄면 스테레오로 돌아온다.</summary>
+    private static void TestMono(Action<string, bool, string> check)
+    {
+        var m = TrackerModule.CreateNew(TrackerKind.S3m);
+        m.Samples.Add(TrackerTests.Square("SQUARE", 32 * 400, 8363, true));
+        m.Patterns[0][0, 0] = new TrackerCell { Note = 0x40, Instrument = 1, Volume = 48 };
+        using (var e = new AudioEngine())
+        {
+            e.PlayTracker(m);
+            var buf = new short[4410 * 2];
+            double Side(out double mid)
+            {
+                e.RenderStereo(buf, 4410);
+                double sd = 0, md = 0;
+                for (int i = 0; i < buf.Length; i += 2) { double d = buf[i] - buf[i + 1], a = buf[i] + buf[i + 1]; sd += d * d; md += a * a; }
+                mid = Math.Sqrt(md / 4410);
+                return Math.Sqrt(sd / 4410);
+            }
+            double st = Side(out double stMid);
+            e.Mono = true;
+            Side(out _);                      // 30ms 페이드
+            double mo = Side(out double moMid);
+            e.Mono = false;
+            Side(out _);
+            double back = Side(out _);
+            check("Mono: panned channel → L = R, stereo back when off", st > 300 && mo < st * 0.03 && back > st * 0.5 && Math.Abs(moMid - stMid) < stMid * 0.2,
+                "side " + st.ToString("0") + " → " + mo.ToString("0.0") + " → " + back.ToString("0") + ", mid " + stMid.ToString("0") + "/" + moMid.ToString("0"));
+        }
     }
 
     /// <summary>음색 표준/거칠게, 스피커 기본값/그 시절: 소리가 달라지고, 크기는 기본값과 비슷하게 (±4dB).</summary>

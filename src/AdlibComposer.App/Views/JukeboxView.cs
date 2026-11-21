@@ -43,6 +43,8 @@ internal sealed class JukeboxView : UserControl, IShellPage
     private readonly CheckBox autoNext = new CheckBox();
     private readonly CheckBox repeat = new CheckBox();
     private readonly CheckBox rawTone = new CheckBox(), vintageSpeaker = new CheckBox();
+    /// <summary>모노 / 스테레오 (소리 막대 맨 왼쪽). 0 = 스테레오, 1 = 모노.</summary>
+    private readonly ComboBox channelBox = new ComboBox();
     /// <summary>소리: 원래 소리 / 8-bit PSG / PSG + SCC / MSX FM-PAC / PC엔진 / NES (MIDI · ROL · IMS).</summary>
     private static readonly ChipSound[] ChipStyles = { ChipSound.Psg, ChipSound.PsgScc, ChipSound.FmPac, ChipSound.Pce, ChipSound.Nes, ChipSound.MegaDrive, ChipSound.GameBoy, ChipSound.Snes };
     private readonly ComboBox chipBox = new ComboBox();
@@ -430,6 +432,16 @@ internal sealed class JukeboxView : UserControl, IShellPage
 
         // 음색 / 스피커
         var sound = BarGroup();
+        channelBox.DropDownStyle = ComboBoxStyle.DropDownList;
+        channelBox.Items.Add("스테레오");
+        channelBox.Items.Add("모노");
+        channelBox.Font = ShellTheme.Ui;
+        channelBox.Width = 84;
+        channelBox.Margin = new Padding(0, 10, 0, 0);
+        channelBox.SelectedIndex = settings().JukeboxMono ? 1 : 0;
+        tips.SetToolTip(channelBox, "스테레오 = 곡의 왼쪽 · 오른쪽 그대로\n모노 = 왼쪽 · 오른쪽을 섞어 두 쪽에 같은 소리 (스피커 하나로 듣던 그 시절처럼) · 모든 곡 · 재생 중에도 바로");
+        channelBox.SelectedIndexChanged += delegate { settings().JukeboxMono = channelBox.SelectedIndex == 1; ApplySound(); SaveSettings(); };
+        sound.Controls.Add(channelBox);
         rawTone.Text = "거친 음색";
         vintageSpeaker.Text = "그 시절 스피커";
         foreach (var cb in new[] { rawTone, vintageSpeaker })
@@ -437,7 +449,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
             cb.ForeColor = DeckTheme.TextDark;
             cb.Font = ShellTheme.Ui;
             cb.AutoSize = true;
-            cb.Margin = new Padding(cb == rawTone ? 0 : 12, 13, 0, 0);
+            cb.Margin = new Padding(12, 13, 0, 0);
             sound.Controls.Add(cb);
         }
         chipBox.DropDownStyle = ComboBoxStyle.DropDownList;
@@ -1757,11 +1769,13 @@ internal sealed class JukeboxView : UserControl, IShellPage
         // 음색 · 스피커는 Jukebox에서만: 다른 페이지(Composer 재생 · 시음)는 칩 소리 그대로
         ws.Audio.ToneStandard = false;
         ws.Audio.VintageSpeaker = false;
+        ws.Audio.Mono = false;
     }
 
-    /// <summary>음색 · 스피커 선택을 오디오 엔진에 (재생 중에도 바로 바뀐다).</summary>
+    /// <summary>모노 · 음색 · 스피커 선택을 오디오 엔진에 (재생 중에도 바로 바뀐다).</summary>
     private void ApplySound()
     {
+        ws.Audio.Mono = channelBox.SelectedIndex == 1;
         ws.Audio.ToneStandard = !rawTone.Checked;
         ws.Audio.VintageSpeaker = vintageSpeaker.Checked;
     }

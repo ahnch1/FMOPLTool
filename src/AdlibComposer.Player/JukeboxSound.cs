@@ -40,6 +40,13 @@ public sealed partial class JukeboxSession
         set { engine.VintageSpeaker = value; }
     }
 
+    /// <summary>모노 (왼쪽 · 오른쪽을 섞어 두 쪽에 같은 소리). false = 스테레오. 재생 중에도 바로.</summary>
+    public bool Mono
+    {
+        get { return engine.Mono; }
+        set { engine.Mono = value; }
+    }
+
     /// <summary>
     /// 소리 고르기: chip = null이면 원래 소리 (OPL FM), 아니면 그 8-bit 풍. mt32 = MIDI 모듈.
     /// 재생 중이면 같은 자리에서 새 소리로 다시 시작한다 (멈춰 있으면 다음 재생부터).

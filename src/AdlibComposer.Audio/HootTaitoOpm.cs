@@ -31,7 +31,8 @@ public static class HootTaitoOpm
     {
         if (!string.Equals((driver ?? "").Trim(), "taito", StringComparison.OrdinalIgnoreCase)) return false;
         string t = (type ?? "").Trim().ToLowerInvariant();
-        return t == "fullt" || t == "masterw" || t == "viofight";
+        return t == "fullt" || t == "masterw" || t == "viofight"
+            || t == "rainbow" || t == "daisenpuu" || t == "opwolf";   // MAME rainbow · taito_x (twinhawk) · opwolf: Rastan과 같은 사운드 맵 (9000h YM2151 · A000h TC0140SYT)
     }
 
     public static VgmSong Render(HootArchive.Entry e, string dir, int code, double seconds = DefaultSeconds, double fade = DefaultFade)
@@ -66,7 +67,7 @@ public static class HootTaitoOpm
             return r;
         }
         string ty = (e.Type ?? "").Trim().ToLowerInvariant();
-        var m = new Machine(Join(code, 0x8000), Join(pcm, 0), (e.Name ?? "").IndexOf("Top Speed", StringComparison.OrdinalIgnoreCase) >= 0) { Opn = ty == "masterw" || ty == "viofight", Oki = ty == "viofight" };
+        var m = new Machine(Join(code, 0x8000), Join(pcm, 0), (e.Name ?? "").IndexOf("Top Speed", StringComparison.OrdinalIgnoreCase) >= 0) { Opn = ty == "masterw" || ty == "viofight", Oki = ty == "viofight", XSystem = ty == "daisenpuu" };
         m.Missing.AddRange(missing);
         foreach (var u in unsupported) m.Unsupported.Add(u);
         m.RunSeconds(1);
@@ -92,7 +93,9 @@ public static class HootTaitoOpm
         public readonly bool TopSpeed;
         /// <summary>타이토 B: YM2203 (chip 0 = YM2203), Oki = B000h OKIM6295 (chip 2).</summary>
         public bool Opn, Oki;
-        public readonly byte[] Ram = new byte[0x1000];
+        /// <summary>타이토 X 배치 (MAME taito_x · twinhawk): RAM C000h~DFFFh, YM2151 E000h, TC0140SYT E200h · E201h, 뱅크 F200h.</summary>
+        public bool XSystem;
+        public readonly byte[] Ram = new byte[0x2000];
         public readonly Z80 Cpu;
         public readonly List<string> Missing = new List<string>();
         public readonly HashSet<string> Unsupported = new HashSet<string>();
@@ -108,6 +111,7 @@ public static class HootTaitoOpm
         public List<(long cyc, int a, int v)> PortLog;
 
         private int bank = 1, ymAddr, last1B = -1;
+        private readonly int[] emittedYm = Enumerable.Repeat(-1, 256).ToArray();
         private long playStart = -1;
         private readonly byte[] ymRegs = new byte[256];
         private int timerA, timerB, timerCtl, timerFlags;
@@ -247,6 +251,13 @@ public static class HootTaitoOpm
         public byte Read(int a)
         {
             a &= 0xFFFF;
+            if (XSystem)
+            {
+                if (a >= 0xC000 && a < 0xE000) return Ram[a - 0xC000];
+                if (a == 0xE000 || a == 0xE001) return (byte)(timerFlags & 3);
+                if (a == 0xE201) return CommRead();
+                if (a >= 0x8000) return 0;
+            }
             if (a < 0x4000) return a < Rom.Length ? Rom[a] : (byte)0xFF;
             if (a < 0x8000) return Rom.Length <= 0x8000 ? Rom[a % Rom.Length] : Rom[((long)bank * 0x4000 + (a - 0x4000)) % Rom.Length];
             if (a < 0x9000) return Ram[a - 0x8000];
@@ -259,6 +270,19 @@ public static class HootTaitoOpm
         public void Write(int a, byte v)
         {
             a &= 0xFFFF;
+            if (XSystem)
+            {
+                if (a >= 0xC000 && a < 0xE000) { Ram[a - 0xC000] = v; return; }
+                switch (a)
+                {
+                    case 0xE000: ymAddr = v; return;
+                    case 0xE001: YmWrite(ymAddr, v); return;
+                    case 0xE200: subMode = v & 15; return;
+                    case 0xE201: CommWrite(v & 15); return;
+                    case 0xF200: bank = v & 3; return;
+                }
+                return;
+            }
             if (a >= 0x8000 && a < 0x9000) { Ram[a - 0x8000] = v; return; }
             switch (a)
             {
@@ -350,6 +374,12 @@ public static class HootTaitoOpm
                     last1B = v & 3;
                     Emit(0, reg, v & 3);
                     return;
+            }
+            // 틱마다 모든 레지스터를 다시 쓰는 드라이버 (Twin Hawk): 값이 같으면 VGM에 안 씀 (키온 08h · LFO 01h · 두 뜻 19h는 늘)
+            if (reg != 0x08 && reg != 0x01 && reg != 0x19)
+            {
+                if (emittedYm[reg] == v) return;
+                emittedYm[reg] = v;
             }
             Emit(0, reg, v);
         }

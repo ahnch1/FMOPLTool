@@ -262,6 +262,17 @@ public static class HootPc98Tests
                 check("Real hoot pc98dos: 夢の精 " + (h == opn ? "PMD (YM2203)" : "PMDB2 (YM2608)") + " 'Daydream' plays in the jukebox path",
                     tracks.Count == 15 && daydream >= 0 && rms > 300 && speed > 1.5, tracks.Count + " songs, rms " + rms.ToString("0") + ", " + speed.ToString("0.0") + "x realtime");
             }
+            // 목록의 파일 이름이 zip과 다를 때: DISC_1/AMUS.DAT → 뿌리의 AMUS.DAT (rance3h), file01.MUS → zip 순서 첫 .MUS (koroshi)
+            foreach (var (arc, what) in new[] { ("rance3h_98", "folder-less file bind (DISC_1/AMUS.DAT → AMUS.DAT)"), ("koroshi_98", "fileNN.MUS → N-th .MUS in zip order") })
+            {
+                string zr = Path.Combine(inc, "Hootarchive", "pc98", arc + ".zip");
+                if (!File.Exists(zr)) continue;
+                string dr = ZipFolder.Extract(zr);
+                string hr = Directory.GetFiles(dr, "*" + HootArchive.Extension).FirstOrDefault(x => !HootSongs.IsMidi(x));
+                if (hr == null) { check("Real hoot pc98dos " + arc + ": FM entry", false, "none"); continue; }
+                double rr = Rms(ChipSongs.Load(ChipSongs.Tracks(hr)[0].path), 6, out _);
+                check("Real hoot pc98dos " + arc + " (" + what + "): plays", rr > 100, "rms " + rr.ToString("0"));
+            }
             // hoot 옵션 dummysndrom: 메모리 스위치 4 (A3FEEh) bit3 — majoriko MJSND는 이것만 보고 "サウンドボードがありません"
             string zm = Path.Combine(inc, "Hootarchive", "pc98", "majoriko_98.zip");
             if (File.Exists(zm))

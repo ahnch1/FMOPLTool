@@ -497,7 +497,15 @@ public class DosMachine : IX86Bus
     /// <summary>파일을 핸들 번호에 미리 묶는다 (hoot rom type="file" offset="n").</summary>
     public bool BindFile(int handle, string name)
     {
-        if (handle < 0 || handle >= MaxHandles || !Fs.TryGet(name, out var d)) return false;
+        if (handle < 0 || handle >= MaxHandles) return false;
+        if (!Fs.TryGet(name, out var d))
+        {
+            // 목록의 폴더 (DISC_1/AMUS.DAT)가 zip에 없으면 이름만 같은 파일 (zip 뿌리의 AMUS.DAT)
+            string leaf = name.Replace('/', '\\');
+            leaf = leaf.Substring(leaf.LastIndexOf('\\') + 1);
+            string hit = Fs.Names.FirstOrDefault(n => string.Equals(n.Substring(n.LastIndexOf('\\') + 1), leaf, StringComparison.OrdinalIgnoreCase));
+            if (hit == null || !Fs.TryGet(hit, out d)) return false;
+        }
         handles[handle] = new OpenFile { Name = name, Data = d, Length = d.Length };
         boundFiles[handle] = name;
         return true;

@@ -31,6 +31,7 @@
 | 2.0.4 | 8-6 (메가드라이브) | hoot megadrive generic_z80 · iyinc: `Audio/HootMegaDrive.cs` (Z80 사운드 쪽 · 카트리지의 Z80 드라이버를 RAM에, 요청 주소) |
 | 2.0.5 | 8-7 (X68000) | MC68000 `Audio/Cpu/M68000.cs` + hoot x68k generic: `Audio/HootX68k.cs` (OPM · ADPCM · DMA · MFP, E00010h = hoot가 대신 하는 IOCS · DOS) |
 | 2.0.6 | 8-7 (X68000 MIDI) | x68k MIDI 판: YM3802 MIDI 보드 (EAFA00h) → 살아 있는 MIDI 곡 (`HootX68k.LoadMidi`) |
+| 2.3.17 | PC-98 파일 이름 | rom type="file" 묶기: 목록의 폴더 경로 (DISC_1/AMUS.DAT)가 zip에 없으면 이름만 같은 파일 (예전엔 조용히 못 묶어 MAKO_98이 곡 파일을 못 읽음), fileNN.EXT가 없으면 zip 순서 NN번째 .EXT (koroshi: 원래 일본어 이름 zip). 300 zip 표본 286 → 289 / 303 (rance3h · xix · koroshi) |
 | 2.3.16 | PC-98 dummysndrom | hoot 옵션 dummysndrom (목록 74항목)을 무시해 왔음: majoriko MJSND.COM은 포트를 안 보고 A300:0FEEh (메모리 스위치 4) bit3만 보고 없으면 "サウンドボードがありません" → 이 옵션이면 bit3을 세움. 300 zip 표본 285 → 286 / 303 (majoriko), pc98vx no-chip-writes 3 → 2. PC-88VA DOS 12 / 14 (v2.3.0 사운드 보드 II 포트 덕) |
 | 2.3.15 | PC-88 곡 덩어리 위치 | hoot snatcher.cpp (OUT 00h → bgm[code]에서 3000h)와 KOEI PATCH (IN 01h → OUT 01h, DE = 4000h를 바로 드라이버에, IN 02h/03h는 안 읽음)로: mfile_size > mdata_size면 파일 = 버퍼, 곡 코드 8~23비트 = 버퍼 안 위치에서 mdata_size만 mdata_addr에. 예전엔 늘 0에서 → KOEI 곡이 모두 첫 덩어리, 첫 덩어리가 곡이 아니면 무음. 새로 소리: 大航海時代 · L'Empereur · 伊忍道 · Operation Europe · Snatcher × 2 → PC-88 517 / 535 (KOEI 12항목 곡마다 다른 덩어리) |
 | 2.3.14 | archive="a,b" · fmbios | 색인은 archive의 첫 zip 이름으로 (예전엔 "rona_msx,fmpac_msx" 전체가 이름이라 어떤 zip과도 안 맞음 — MSX 34 · PC-88 1), 파일은 `HootArchive.Files` (푼 zip → 같은 폴더의 뒤 zip들), MSX fmbios = FMPAC.ROM 4000h~ 16KB 뱅크. 푼 zip 표시 62 (v2.3.7 ds4 · v2.3.13 mxdrv처럼 Playable이 는 형식은 전에 푼 zip에 .hoot가 없었음). MSX 495 / 498 → 524 / 530 (새 항목 32 중 29), PC-88 511 / 535 |
@@ -143,7 +144,7 @@
 | 대상 | 소리 남 | 측정 |
 |---|---|---|
 | PC-98 pc9821dos (opn · opna · 86) | 12 / 12 (v2.1.74 386) | `--hoot98survey 폴더 50 8` |
-| PC-98 DOS FM (opn · opna · 86 · beep) | 300 zip 표본 286 / 303 (약 94%, v2.3.16) | `--hoot98survey pc98 300 6` |
+| PC-98 DOS FM (opn · opna · 86 · beep) | 300 zip 표본 289 / 303 (약 95%, v2.3.17) | `--hoot98survey pc98 300 6` |
 | PC-98 pc98vx · pc98 FM (opn · opna · 86 · beep) | 354항목 중 314 (약 89%) — vx opn 168/198 · opna 18/20 · 86 9/9 · beep 36/40, pc98 opn 77/81 | `--hoot98survey _vx 400 6` (pc98vx · pc98 항목이 든 zip 285개를 따로 모은 폴더) |
 | MIDI 판 pc98vx · pc98 | 97 / 109 | `--hootmidisurvey _vx 400 20` |
 | PC/AT DOS gameblaster · tandy | 8 / 8 · 4 / 4 | `--hootatsurvey 폴더 50 8` (HOOT_TITLE = 몇째 곡) |

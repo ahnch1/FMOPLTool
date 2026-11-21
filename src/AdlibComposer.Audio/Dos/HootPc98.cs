@@ -243,6 +243,7 @@ public static class HootPc98
     public static DosMachine BootAny(DosFileSystem fs, HootArchive.Entry e, out List<DosMachine.ShellResult> shells, string library = null, string ownZip = null)
     {
         if (IsGeneric(e)) { shells = new List<DosMachine.ShellResult>(); return BootGeneric(fs, e); }
+        AliasNumberedFiles(fs, e);
         DosMachine m;
         if (IsPcAt(e)) m = new PcAtMachine(fs, CardOf(e), Math.Max(1, e.Option("clockmul", 4)));
         else m = new Pc98Machine(fs, BoardOf(e), Math.Max(1, e.Option("clockmul", 8))) { Trace = TraceBoot };
@@ -319,6 +320,24 @@ public static class HootPc98
     private static void DummySoundRom(Pc98Machine m, HootArchive.Entry e)
     {
         if (e.Option("dummysndrom", 0) != 0) m.Mem[0xA3FEE] |= 0x08;
+    }
+
+    /// <summary>
+    /// 목록이 fileNN.EXT로 부르는데 zip에는 원래 (일본어) 이름만 있는 판 (koroshi_98: file01.MUS ↔ "ｦｦ-ﾌ.MUS"):
+    /// 없는 fileNN.EXT = zip 순서로 NN번째 .EXT 파일.
+    /// </summary>
+    private static void AliasNumberedFiles(DosFileSystem fs, HootArchive.Entry e)
+    {
+        foreach (var (type, _, text) in e.Roms)
+        {
+            if (type != "file" || fs.Exists(text)) continue;
+            var mt = System.Text.RegularExpressions.Regex.Match(text, @"^file(\d+)\.(\w+)$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            if (!mt.Success) continue;
+            int n = int.Parse(mt.Groups[1].Value);
+            string ext = "." + mt.Groups[2].Value;
+            var same = fs.Names.Where(x => x.EndsWith(ext, StringComparison.OrdinalIgnoreCase) && !System.Text.RegularExpressions.Regex.IsMatch(System.IO.Path.GetFileName(x), @"^file\d+\.", System.Text.RegularExpressions.RegexOptions.IgnoreCase)).ToList();
+            if (n >= 1 && n <= same.Count && fs.TryGet(same[n - 1], out var d)) fs.Add(text, d);
+        }
     }
 
     public static Pc98Machine BootGeneric(DosFileSystem fs, HootArchive.Entry e)

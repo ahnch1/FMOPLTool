@@ -67,6 +67,8 @@ internal sealed class AppSettings
     public bool JukeboxVintageSpeaker { get; set; }
     /// <summary>Jukebox 채널: true = 모노 (왼쪽 · 오른쪽을 섞음), false = 스테레오.</summary>
     public bool JukeboxMono { get; set; }
+    /// <summary>Jukebox 강제 뱅크: 비어 있지 않으면 ROL · IMS를 같은 이름 BNK · 기본 뱅크 대신 이 뱅크로 (저장 값, 상대/절대).</summary>
+    public string JukeboxForcedBank { get; set; } = "";
     /// <summary>Jukebox 표시 방식: implay (가사 + 믹서) | ocplay (가사 + 작은 악보 · 세로 막대) | karaoke (곡 폴더 그림 + 가사) | cyber (노래방 Cyberfunk).</summary>
     public string JukeboxView { get; set; } = "implay";
     /// <summary>노래방 그림 폴더: 곡 폴더에 그림이 없을 때 쓴다. 저장 값(상대/절대), 비면 없음 (기본 그림은 없다).</summary>
@@ -118,6 +120,8 @@ internal sealed class AppSettings
 
     public string BankFolderPath { get { return Resolve(BankFolder); } }
     public string DefaultBankPath { get { return string.IsNullOrWhiteSpace(DefaultBank) ? null : Resolve(DefaultBank); } }
+    /// <summary>Jukebox 강제 뱅크의 전체 경로 (없으면 null).</summary>
+    public string JukeboxForcedBankPath { get { return string.IsNullOrWhiteSpace(JukeboxForcedBank) ? null : Resolve(JukeboxForcedBank); } }
 
     // ---------------------------------------------------------------- 읽기 / 쓰기
 
@@ -156,6 +160,7 @@ internal sealed class AppSettings
                         case "loaddefaultbank": s.LoadDefaultBank = !(value == "0" || value.Equals("false", StringComparison.OrdinalIgnoreCase)); break;
                         case "oplemulator": s.UseNukedOpl = value.Equals("nuked", StringComparison.OrdinalIgnoreCase); break;
                         case "jukeboxtone": s.JukeboxRawTone = value.Equals("raw", StringComparison.OrdinalIgnoreCase); break;
+                        case "jukeboxforcedbank": s.JukeboxForcedBank = value; break;
                         case "jukeboxchannels": s.JukeboxMono = value.Equals("mono", StringComparison.OrdinalIgnoreCase); break;
                         case "jukeboxspeaker": s.JukeboxVintageSpeaker = value.Equals("vintage", StringComparison.OrdinalIgnoreCase); break;
                         case "jukeboxview": s.JukeboxView = value.Trim().ToLowerInvariant(); break;
@@ -214,6 +219,7 @@ internal sealed class AppSettings
         sb.AppendLine("Mt32RomFolder=" + Mt32RomFolder);
         sb.AppendLine("; Jukebox: JukeboxTone = standard | raw, JukeboxSpeaker = default | vintage");
         sb.AppendLine("JukeboxTone=" + (JukeboxRawTone ? "raw" : "standard"));
+        sb.AppendLine("JukeboxForcedBank=" + JukeboxForcedBank);
         sb.AppendLine("JukeboxChannels=" + (JukeboxMono ? "mono" : "stereo"));
         sb.AppendLine("JukeboxSpeaker=" + (JukeboxVintageSpeaker ? "vintage" : "default"));
         sb.AppendLine("; JukeboxView = implay (lyrics + mixer) | ocplay (lyrics + mini piano roll + meters) | karaoke (folder images + lyrics) | cyber (cyberfunk karaoke)");

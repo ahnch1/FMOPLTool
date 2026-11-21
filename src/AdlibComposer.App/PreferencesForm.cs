@@ -66,13 +66,8 @@ internal sealed class PreferencesForm : Form
             ForeColor = Subtle, AutoSize = true, MaximumSize = new Size(700, 0), Margin = new Padding(0, 0, 0, 14)
         });
 
-        root.Controls.Add(Section("Folders"));
-        root.Controls.Add(new Label
-        {
-            Text = "Song folders are not set here: open a folder with [폴더 열기] in the left list (or drop a folder on the window). The last one is reopened at start.",
-            ForeColor = Subtle, AutoSize = true, MaximumSize = new Size(700, 0), Margin = new Padding(0, 0, 0, 6)
-        });
-        root.Controls.Add(PathRow("Instrument banks (BNK)", bankFolderBox, settings.BankFolderPath, delegate { BrowseFolder(bankFolderBox, "Instrument bank folder"); }));
+        // 뱅크 폴더 (BankFolder)는 화면에서 뺐다: 값은 그대로 두고 저장 (Jukebox는 곡 정보 상자의 [뱅크 선택]으로 고른다)
+        bankFolderBox.Text = settings.BankFolderPath;
 
         root.Controls.Add(Section("Default instrument bank"));
         root.Controls.Add(PathRow("Bank file", bankBox, settings.DefaultBankPath ?? "", delegate { BrowseBank(); }));

@@ -237,6 +237,30 @@ public static class JukeboxTests
         check("Vintage speaker changes sound, loudness within 4 dB", diffVin > a.Length / 2 && Math.Abs(dbVin) < 4, dbVin.ToString("0.0") + " dB, diff " + diffVin);
     }
 
+    /// <summary>진단: 곡을 스테레오로 3초 렌더해 모노 끔/켬에서 L−R 크기를 찍는다.</summary>
+    public static int StereoCheck(string songPath, string bankPath)
+    {
+        Song s; InstrumentBank b;
+        using (var fs = File.OpenRead(songPath)) s = songPath.EndsWith(".rol", StringComparison.OrdinalIgnoreCase) ? new RolFormat().Read(fs) : new ImsFormat().Read(fs);
+        using (var fs = File.OpenRead(bankPath)) b = new BnkFormat().Read(fs);
+        foreach (bool mono in new[] { false, true })
+        {
+            using (var e = new AudioEngine { Mono = mono })
+            {
+                e.Play(s, b, 0, -1, -1, -1, new PlaybackOptions());
+                var buf = new short[44100 * 2];
+                double sd = 0, sm = 0; int lOnly = 0;
+                for (int k = 0; k < 3; k++)
+                {
+                    e.RenderStereo(buf, 44100);
+                    for (int i = 0; i < buf.Length; i += 2) { double d = buf[i] - buf[i + 1]; sd += d * d; sm += (double)buf[i] * buf[i]; if (buf[i] != buf[i + 1]) lOnly++; }
+                }
+                Console.WriteLine((mono ? "mono  " : "stereo") + ": L rms " + Math.Sqrt(sm / 132300).ToString("0") + ", L-R rms " + Math.Sqrt(sd / 132300).ToString("0.0") + ", frames L!=R " + lOnly);
+            }
+        }
+        return 0;
+    }
+
     private static PlaybackOptions Voice0(int semis) { var o = new PlaybackOptions(); o.VoiceTranspose[0] = semis; return o; }
 
     private static int Crossings(AudioEngine e, Song s, InstrumentBank b, PlaybackOptions o)

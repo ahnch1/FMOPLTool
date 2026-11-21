@@ -130,6 +130,15 @@ internal sealed class PlayerDisplay : DeckControl
     public string BankFile = "";
     public int BankCount;
     public bool BankSameName;
+    /// <summary>뱅크 줄에 [뱅크 선택…] · [강제 사용] 단추를 그린다 (ROL · IMS일 때만).</summary>
+    public bool BankButtons;
+    /// <summary>[강제 사용] 켜짐: 이 뱅크를 같은 이름 BNK · 기본 뱅크 대신 모든 ROL · IMS에.</summary>
+    public bool BankForced;
+    public event Action BankPickRequested;
+    public event Action BankForceToggled;
+    private Rectangle bankPickRect, bankForceRect;
+    /// <summary>마우스가 올라간 뱅크 단추: 0 = 선택, 1 = 강제, -1 = 없음.</summary>
+    private int hoverBank = -1;
     public string LyricFile;
     public string State = "정지";
     public double Seconds, TotalSeconds;
@@ -158,19 +167,58 @@ internal sealed class PlayerDisplay : DeckControl
     protected override void OnMouseMove(MouseEventArgs e)
     {
         int h = Array.FindIndex(modeRects, r => r.Contains(e.Location));
-        if (h == hoverMode) return;
+        int hb = !BankButtons ? -1 : bankPickRect.Contains(e.Location) ? 0 : bankForceRect.Contains(e.Location) ? 1 : -1;
+        if (h == hoverMode && hb == hoverBank) return;
         hoverMode = h;
-        Cursor = h >= 0 ? Cursors.Hand : Cursors.Default;
-        modeTip.SetToolTip(this, h >= 0 ? ModeTips[h] : null);
+        hoverBank = hb;
+        Cursor = h >= 0 || hb >= 0 ? Cursors.Hand : Cursors.Default;
+        modeTip.SetToolTip(this, h >= 0 ? ModeTips[h]
+            : hb == 0 ? "ROL · IMS에 쓸 뱅크 파일 (BNK) 고르기 — 지금 곡에 바로 (재생 중이면 같은 자리부터)"
+            : hb == 1 ? "켜면 이 뱅크를 모든 ROL · IMS에 (같은 이름 BNK · 기본 뱅크 대신), 설정에 저장\n끄면 다시 같은 이름 BNK → 기본 뱅크 순서로" : null);
         Invalidate();
     }
 
-    protected override void OnMouseLeave(EventArgs e) { if (hoverMode >= 0) { hoverMode = -1; Invalidate(); } }
+    protected override void OnMouseLeave(EventArgs e) { if (hoverMode >= 0 || hoverBank >= 0) { hoverMode = -1; hoverBank = -1; Invalidate(); } }
 
     protected override void OnMouseDown(MouseEventArgs e)
     {
+        if (e.Button != MouseButtons.Left) return;
+        if (BankButtons && bankPickRect.Contains(e.Location)) { BankPickRequested?.Invoke(); return; }
+        if (BankButtons && bankForceRect.Contains(e.Location)) { BankForceToggled?.Invoke(); return; }
         int i = Array.FindIndex(modeRects, r => r.Contains(e.Location));
-        if (i >= 0 && e.Button == MouseButtons.Left) ViewModeRequested?.Invoke((JukeboxViewMode)i);
+        if (i >= 0) ViewModeRequested?.Invoke((JukeboxViewMode)i);
+    }
+
+    /// <summary>뱅크 줄: [뱅크 파일][n개 · 같은 이름][뱅크 선택…][□ 강제 사용].</summary>
+    private void BankRow(Graphics g, Rectangle r)
+    {
+        string tag = BankCount + "개" + (BankForced ? " · 강제" : BankSameName ? " · 같은 이름" : "");
+        if (!BankButtons)
+        {
+            bankPickRect = bankForceRect = Rectangle.Empty;
+            TagRow(g, r, BankFile, tag, DeckTheme.Text);
+            return;
+        }
+        const string pick = "뱅크 선택…", force = "강제 사용";
+        int pw = TextRenderer.MeasureText(g, pick, DeckTheme.Button).Width + 14;
+        int box = Math.Max(9, r.Height - 10);
+        int fw = TextRenderer.MeasureText(g, force, DeckTheme.Button).Width + box + 16;
+        bankForceRect = new Rectangle(r.Right - fw, r.Y, fw, r.Height);
+        bankPickRect = new Rectangle(bankForceRect.X - 4 - pw, r.Y, pw, r.Height);
+        TagRow(g, new Rectangle(r.X, r.Y, Math.Max(40, bankPickRect.X - 4 - r.X), r.Height), BankFile, tag, BankForced ? DeckTheme.Lcd : DeckTheme.Text);
+
+        DeckTheme.Bevel(g, bankPickRect, true, hoverBank == 0 ? DeckTheme.Hover : DeckTheme.Panel, 1);
+        TextRenderer.DrawText(g, pick, DeckTheme.Button, bankPickRect, DeckTheme.TextDark, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
+
+        DeckTheme.Bevel(g, bankForceRect, !BankForced, BankForced ? DeckTheme.Lit : hoverBank == 1 ? DeckTheme.Hover : DeckTheme.Panel, 1);
+        var cb = new Rectangle(bankForceRect.X + 6, r.Y + (r.Height - box) / 2, box, box);
+        using (var bg = new SolidBrush(Color.White)) g.FillRectangle(bg, cb);
+        using (var pen = new Pen(DeckTheme.TextDark)) g.DrawRectangle(pen, cb);
+        if (BankForced)
+            using (var pen = new Pen(Color.Black, 2))
+                g.DrawLines(pen, new[] { new Point(cb.X + 2, cb.Y + box / 2), new Point(cb.X + box / 2 - 1, cb.Bottom - 3), new Point(cb.Right - 2, cb.Y + 2) });
+        TextRenderer.DrawText(g, force, DeckTheme.Button, new Rectangle(cb.Right + 4, r.Y, bankForceRect.Right - cb.Right - 6, r.Height), BankForced ? Color.White : DeckTheme.TextDark,
+            TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
     }
 
     /// <summary>표시 방식 단추 줄 (고른 것 = 청록 바탕).</summary>
@@ -216,7 +264,7 @@ internal sealed class PlayerDisplay : DeckControl
         {
             TagRow(g, new Rectangle(pad, y, lw, rowH), SongFile, SongTag ?? "악기 " + Loaded + "/" + Total, Loaded >= Total ? DeckTheme.Lcd : DeckTheme.Warn);
             y += rowH + gap;
-            TagRow(g, new Rectangle(pad, y, lw, rowH), BankFile, BankCount + "개" + (BankSameName ? " · 같은 이름" : ""), DeckTheme.Text);
+            BankRow(g, new Rectangle(pad, y, lw, rowH));
             y += rowH + gap;
             if (InfoLine != null) DeckTheme.InsetText(g, new Rectangle(pad, y, lw, rowH), InfoLine, DeckTheme.Mono, DeckTheme.Text, left | TextFormatFlags.EndEllipsis);
             else DeckTheme.InsetText(g, new Rectangle(pad, y, lw, rowH), "가사  " + (LyricFile ?? "없음"), DeckTheme.Mono, LyricFile != null ? DeckTheme.Text : DeckTheme.Muted, left);

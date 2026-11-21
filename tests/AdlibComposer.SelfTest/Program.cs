@@ -56,6 +56,7 @@ public static class Program
             Console.WriteLine(AdlibComposer.Audio.Gbs.Describe(b, song, sec));
             return 0;
         }
+        if (args.Length > 2 && args[0] == "--stereocheck") return JukeboxTests.StereoCheck(args[1], args[2]);   // 진단: --stereocheck 곡.ims|rol 뱅크.bnk
         if (args.Length > 1 && args[0] == "--hes")
         {
             // 진단: --hes 파일 [곡] [초]

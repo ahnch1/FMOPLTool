@@ -542,6 +542,8 @@ internal sealed class JukeboxView : UserControl, IShellPage
         stage.Controls.Add(lyrics);
         root.Controls.Add(stage, 0, 1);
         display.ViewModeRequested += m => { SetViewMode(m); };
+        display.BankPickRequested += PickBank;
+        display.BankForceToggled += ToggleForceBank;
         tips.SetToolTip(ocView, "Ocplay: 채널 색 막대가 흐르는 작은 악보 (오른쪽 끝 = 지금) · 아래 = 채널마다 음량");
         tips.SetToolTip(karaoke, "노래방: 곡 폴더(없으면 설정의 그림 폴더)의 그림을 10초마다 바꿔 보이고 가사를 겹쳐 그린다\n클릭 = 다음 그림 · 그림이 없을 때 두 번 클릭 = 그림 폴더 고르기");
         karaoke.Click += delegate { if (karaoke.HasImages) karaoke.NextImage(); };
@@ -752,25 +754,13 @@ internal sealed class JukeboxView : UserControl, IShellPage
         // 곡마다 채널 조절은 처음 상태로 (속도 / 키 / 볼륨은 유지)
         for (int v = 0; v < PlaybackOptions.Voices; v++) { options.VoiceMute[v] = false; options.VoiceTranspose[v] = 0; levels[v] = 0; }
 
-        // 악기 수: 곡이 쓰는 서로 다른 악기 이름 / 그중 뱅크에 있는 것
-        var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        for (int v = 0; v < song.VoiceCount; v++)
-        {
-            voiceUsed[v] = song.Voices[v].Notes.Count > 0;
-            foreach (var t in song.Voices[v].Timbres)
-                if (!string.IsNullOrWhiteSpace(t.InstrumentName)) used.Add(t.InstrumentName.Trim());
-        }
-        int loaded = used.Count(n => bank != null && bank.Find(n) != null);
+        for (int v = 0; v < song.VoiceCount; v++) voiceUsed[v] = song.Voices[v].Notes.Count > 0;
 
         display.Title = song.Title;
         display.SongFile = Path.GetFileName(path);
         display.SongTag = null;
         display.InfoLine = null;
-        display.Loaded = loaded;
-        display.Total = used.Count;
-        display.BankFile = bank != null && bank.FilePath != null ? Path.GetFileName(bank.FilePath) : "(뱅크 없음)";
-        display.BankCount = bank != null ? bank.UsedCount : 0;   // BNK의 빈 예약 칸은 빼고
-        display.BankSameName = sameName;
+        var used = ShowBank(sameName);
         display.LyricFile = iss != null ? Path.GetFileNameWithoutExtension(path) + ".ISS" + (iss.Encoding == KoreanText.Kind.Wansung ? " · 완성형" : " · 조합형") : null;
         display.TotalSeconds = totalSeconds;
         display.Mode = SongModeText();
@@ -782,7 +772,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
         MarkPlaying();
 
         string missing = string.Join(", ", used.Where(n => bank == null || bank.Find(n) == null));
-        AppLog.Info("Jukebox", "재생: " + Path.GetFileName(path) + " — 악기 " + loaded + "/" + used.Count + ", 뱅크 " + display.BankFile + (sameName ? " (같은 이름)" : "")
+        AppLog.Info("Jukebox", "재생: " + Path.GetFileName(path) + " — 악기 " + display.Loaded + "/" + used.Count + ", 뱅크 " + display.BankFile + (display.BankForced ? " (강제)" : sameName ? " (같은 이름)" : "")
             + (iss != null ? ", 가사 " + iss.Lines.Count + "줄" : ""), missing.Length > 0 ? "뱅크에 없는 악기: " + missing : null);
 
         Begin();
@@ -829,6 +819,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
         display.Title = title;
         display.SongFile = Path.GetFileName(path);
         display.SongTag = null;
+        display.BankButtons = false;
         display.InfoLine = null;
         display.Loaded = used.Count;
         display.Total = used.Count;
@@ -894,6 +885,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
         display.Title = title;
         display.SongFile = Path.GetFileName(path);
         display.SongTag = null;
+        display.BankButtons = false;
         display.InfoLine = null;
         display.Loaded = samples;
         display.Total = samples;
@@ -954,6 +946,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
         display.Title = title;
         display.SongFile = Path.GetFileName(path);
         display.SongTag = null;
+        display.BankButtons = false;
         display.InfoLine = null;
         display.Loaded = samples + adlib;
         display.Total = samples + adlib;
@@ -1018,6 +1011,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
         display.Title = m.Title;
         display.SongFile = Path.GetFileName(path);
         display.SongTag = null;
+        display.BankButtons = false;
         display.InfoLine = null;
         display.Loaded = programs.Count;
         display.Total = programs.Count;
@@ -1085,6 +1079,7 @@ internal sealed class JukeboxView : UserControl, IShellPage
         display.Title = v.Title;
         display.SongFile = Path.GetFileName(path);
         display.SongTag = "채널 " + active + "/" + vgmChannels.Count;
+        display.BankButtons = false;
         display.Loaded = display.Total = 0;
         display.BankFile = v.ChipSummary + (v.UnsupportedChips.Count > 0 ? " (소리 없음: " + string.Join(", ", v.UnsupportedChips) + ")" : "");
         display.BankCount = vgmChannels.Count;
@@ -1249,6 +1244,8 @@ internal sealed class JukeboxView : UserControl, IShellPage
     private InstrumentBank FindBank(string songPath, out bool sameName)
     {
         sameName = false;
+        var forced = ForcedBank();
+        if (forced != null) return forced;
         if (string.Equals(Path.GetExtension(songPath), ".mus", StringComparison.OrdinalIgnoreCase))
         {
             string snd = SideFile(songPath, ".snd");
@@ -1280,6 +1277,101 @@ internal sealed class JukeboxView : UserControl, IShellPage
             if (defaultBank != null) return defaultBank;
         }
         return ws.Bank;
+    }
+
+    // ---------------------------------------------------------------- 뱅크 선택 · 강제 사용 (곡 정보 상자의 뱅크 줄)
+
+    private InstrumentBank forcedBank;
+    private string forcedBankPath;
+
+    /// <summary>설정의 강제 뱅크 (없거나 못 읽으면 null). 같은 파일이면 한 번만 읽는다.</summary>
+    private InstrumentBank ForcedBank()
+    {
+        string p = settings().JukeboxForcedBankPath;
+        if (p == null) return null;
+        if (forcedBank == null || !string.Equals(forcedBankPath, p, StringComparison.OrdinalIgnoreCase))
+        {
+            forcedBank = ReadBank(p);
+            forcedBankPath = p;
+        }
+        return forcedBank;
+    }
+
+    /// <summary>ROL · IMS 뱅크 줄: 뱅크 이름 · 악기 수 · 같은 이름 / 강제, 곡 악기 중 뱅크에 있는 수. 곡이 쓰는 악기 이름을 돌려준다.</summary>
+    private HashSet<string> ShowBank(bool sameName)
+    {
+        var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        for (int v = 0; v < song.VoiceCount; v++)
+            foreach (var t in song.Voices[v].Timbres)
+                if (!string.IsNullOrWhiteSpace(t.InstrumentName)) used.Add(t.InstrumentName.Trim());
+        display.Loaded = used.Count(n => bank != null && bank.Find(n) != null);
+        display.Total = used.Count;
+        display.BankFile = bank != null && bank.FilePath != null ? Path.GetFileName(bank.FilePath) : "(뱅크 없음)";
+        display.BankCount = bank != null ? bank.UsedCount : 0;   // BNK의 빈 예약 칸은 빼고
+        display.BankSameName = sameName;
+        display.BankButtons = true;
+        display.BankForced = settings().JukeboxForcedBankPath != null;
+        return used;
+    }
+
+    /// <summary>지금 ROL · IMS 곡의 뱅크를 바꾼다: 표시를 맞추고, 재생 중이면 같은 자리에서 새 뱅크로 (8-bit이면 바뀐 뱅크로 다시 만든다).</summary>
+    private void UseBank(InstrumentBank b, bool sameName)
+    {
+        bank = b;
+        if (song == null) return;
+        ShowBank(sameName);
+        display.Invalidate();
+        if (state == PlayState.Playing) StartAt(CurrentTick);
+    }
+
+    /// <summary>[뱅크 선택…]: BNK를 골라 지금 곡에. 강제 사용 중이면 강제 뱅크도 그것으로.</summary>
+    private void PickBank()
+    {
+        if (song == null) return;
+        string start = bank != null && bank.FilePath != null && File.Exists(bank.FilePath) ? Path.GetDirectoryName(bank.FilePath) : settings().BankFolderPath;
+        using (var dlg = new OpenFileDialog { Filter = "AdLib instrument bank (*.bnk)|*.bnk|All files (*.*)|*.*", Title = "Jukebox 뱅크" })
+        {
+            try { if (start != null && Directory.Exists(start)) dlg.InitialDirectory = start; } catch (Exception) { }
+            if (dlg.ShowDialog(FindForm()) != DialogResult.OK) return;
+            var b = ReadBank(dlg.FileName);
+            if (b == null) { MessageBox.Show(FindForm(), "뱅크를 읽을 수 없습니다: " + Path.GetFileName(dlg.FileName), "Jukebox", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
+            if (settings().JukeboxForcedBankPath != null)
+            {
+                settings().JukeboxForcedBank = AppSettings.ToStored(dlg.FileName);
+                forcedBank = b;
+                forcedBankPath = settings().JukeboxForcedBankPath;
+                SaveSettings();
+            }
+            AppLog.Info("Jukebox", "뱅크 선택: " + Path.GetFileName(dlg.FileName) + " (" + b.UsedCount + "개)");
+            UseBank(b, false);
+        }
+    }
+
+    /// <summary>[강제 사용]: 켜면 지금 뱅크를 모든 ROL · IMS에 (저장), 끄면 같은 이름 BNK → 기본 뱅크 순서로 되돌린다.</summary>
+    private void ToggleForceBank()
+    {
+        if (song == null) return;
+        if (settings().JukeboxForcedBankPath == null)
+        {
+            if (bank == null || bank.FilePath == null) return;
+            settings().JukeboxForcedBank = AppSettings.ToStored(bank.FilePath);
+            forcedBank = bank;
+            forcedBankPath = settings().JukeboxForcedBankPath;
+            SaveSettings();
+            AppLog.Info("Jukebox", "뱅크 강제 사용: " + Path.GetFileName(bank.FilePath));
+            UseBank(bank, false);
+        }
+        else
+        {
+            settings().JukeboxForcedBank = "";
+            forcedBank = null;
+            forcedBankPath = null;
+            SaveSettings();
+            bool same;
+            var b = FindBank(currentPath, out same);
+            AppLog.Info("Jukebox", "뱅크 강제 사용 끔 → " + (b != null && b.FilePath != null ? Path.GetFileName(b.FilePath) : "(뱅크 없음)") + (same ? " (같은 이름)" : ""));
+            UseBank(b, same);
+        }
     }
 
     private InstrumentBank ReadBank(string path)

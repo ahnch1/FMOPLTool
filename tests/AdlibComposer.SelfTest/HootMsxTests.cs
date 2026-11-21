@@ -91,6 +91,19 @@ public static class HootMsxTests
             var r = Measure(e, dir, e.Titles[0].Code, 10);
             check("hoot msx " + arc + " (" + what + "): first song makes sound in 10 s", r.sound, r.note);
         }
+        // SCC+ 카트리지 (sccp)는 본체 RAM과 따로: kgc3 grascc = GRA.BIN (본체 4000h) + GRASCC.BIN (카트리지, A8h D7h로 고름)
+        string zipK = Path.Combine(folder, "kgc3_msx.zip");
+        if (File.Exists(zipK))
+        {
+            string dirK = ZipFolder.Extract(zipK);
+            var eK = Directory.GetFiles(dirK, "*" + HootArchive.Extension).Select(HootArchive.Load).FirstOrDefault(x => x.Driver == "msx" && x.Roms.Any(rm => rm.Type == "sccp") && x.Roms.Any(rm => rm.Type == "code" && rm.Offset == 0x4000));
+            if (eK == null) check("hoot msx kgc3: SCC+ cartridge entry", false, "none");
+            else
+            {
+                var rK = Measure(eK, dirK, eK.Titles[0].Code, 10);
+                check("hoot msx kgc3 (Nemesis SCC+): sccp cartridge RAM is separate from main RAM 4000h (slot via A8h) → SCC+ sound", rK.sound && !rK.note.Contains("scc 0 "), rK.note);
+            }
+        }
         // hoot ds4.cpp (Legacy of the Wizard 롬): 뱅크 7000h · 7800h, IPL, 포트 00h · 01h · 02h
         string zip4 = Path.Combine(folder, "slayer42.zip");
         if (!File.Exists(zip4)) { Console.WriteLine("SKIP  hoot msx slayer42 (zip not found)"); return; }

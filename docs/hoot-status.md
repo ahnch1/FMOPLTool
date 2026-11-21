@@ -31,6 +31,7 @@
 | 2.0.4 | 8-6 (메가드라이브) | hoot megadrive generic_z80 · iyinc: `Audio/HootMegaDrive.cs` (Z80 사운드 쪽 · 카트리지의 Z80 드라이버를 RAM에, 요청 주소) |
 | 2.0.5 | 8-7 (X68000) | MC68000 `Audio/Cpu/M68000.cs` + hoot x68k generic: `Audio/HootX68k.cs` (OPM · ADPCM · DMA · MFP, E00010h = hoot가 대신 하는 IOCS · DOS) |
 | 2.0.6 | 8-7 (X68000 MIDI) | x68k MIDI 판: YM3802 MIDI 보드 (EAFA00h) → 살아 있는 MIDI 곡 (`HootX68k.LoadMidi`) |
+| 2.3.9 | MSX SCC+ 카트리지 | sccp 줄 = 따로인 카트리지 RAM 128KB (`HootMsx.Cart`): 4000h~BFFFh 중 A8h 슬롯 ≠ 3인 페이지에 8KB 뱅크 4개 (5000h · 7000h · 9000h · B000h), 모드 BFFEh (bit4 = 모두 쓰기 · bit0~2 = 뱅크별 · bit5 = SCC+), SCC 9800h~ (뱅크 2 = 3Fh) · SCC+ B800h~ (뱅크 3 bit7). kgc3 Nemesis SCC+ (GRA.BIN 본체 + GRASCC.BIN 카트리지) 소리 → MSX 495 / 498 |
 | 2.3.8 | KSS (hoot 원본) | `Kss.Render`: 0001h~3FFFh = C9h (kss.cpp memset), PSG 읽기 = 레지스터 값 · R14 = FFh (ssAY8910; 예전엔 0). 새 진단 `--kssurvey 폴더 [zip 수] [초]` — hoot msx 폴더 KSS 330곡 중 314곡 소리 (그대로; 무음 16은 #0 = 멈춤 곡). 볼륨 쓰기 수가 바뀐 곡 (dds · gundam 줄고 ashguine3 · nobuz 늚)은 귀로 확인 필요 |
 | 2.3.7 | MSX ds4 | hoot ds4.cpp 이식 (`HootMsx.BootDs4`): 롬 256KB, 4000h~7FFFh = 롬 0~3FFFh, 8000h · A000h = 8KB 뱅크 (7000h · 7800h 쓰기, 처음 2 · 3), RAM 0000h~3FFFh · C000h~, IPL (IM 1, CALL 48F2h, 고리 IN 00h → IN 01h → C094h → CALL 729Dh, 0038h → CALL 7236h), PSG 93h · 96h → 1102h · 110Eh, 10000클럭 뒤 C042h · C043h · C095h · C098h. 80h 이상 = 효과음 (C095h, 효과음만 틀 때는 EI). Legacy of the Wizard 58 / 58 |
 | 2.3.6 | PC-88 옛 팔콤 | hoot oldfalcom.cpp 이식 (`HootPc88` Falcom): 곡 코드 위 바이트 = prog (24KB → 0000h, romancia 1 = 1000h, asteka2 = 8000h), sndadr 표 → E00Eh~E015h (2012년 PATCH가 그대로 읽음), iffadr ← E0h, Xanadu 음량 · 음식 · 거울 · 싸움 바이트와 Ending 2, Xanadu II OUT 02h = bgm 13KB → 5C00h (+ 60A5h = FFh), 4MHz, 타이머 B만 IRQ. 1xh 코드 (2001년 뒤 "음식 없음")는 드라이버 x + 음식 바이트 안 채움. Xanadu 9 / 9, Xanadu II 54 / 55 (0600 IPL = 표에 없음), ASTEKA II 1 / 8 (zip의 APRG는 2018년 16KB — 2001년 표와 판이 다름). 8801-11 · generic도 Playable (thexder88 · arcus2 × 2). 푼 zip 표시 61. PC-88 509 / 533 |
@@ -142,7 +143,7 @@
 | PC/AT DOS (adlib · sb16 · beep) | 482 / 488 | `--hootatsurvey pc 1000 6` |
 | MIDI 판 PC/AT | 571 / 586 | `--hootmidisurvey pc 1000 20` |
 | MIDI 판 PC-98 | 360 / 641 | `--hootmidisurvey pc98 1709 20` |
-| MSX generic (PSG · OPLL · SCC · SCC+ · MSX-AUDIO) | 494 / 498 (v2.3.4, 첫 곡이 조용하면 다음 곡 5개까지) | `--hootmsxsurvey msx 1000 8` |
+| MSX generic (PSG · OPLL · SCC · SCC+ · MSX-AUDIO) | 495 / 498 (v2.3.9, 첫 곡이 조용하면 다음 곡 5개까지) | `--hootmsxsurvey msx 1000 8` |
 | PC-88 (opn · opna) | 509 / 533 — opn 369/385 · opna 134/142 · 8801-11 · generic 2 · xanadu · xanadu2 · asteka2 (v2.3.6) | `--hoot88survey pc88 1000 6` |
 | FM-7 · FM77AV (generic) | 29 / 29, 곡 279 / 308 | `--test hootfm7` (HOOT_SONGS=1) |
 | X1 (psg · opm) | 148 / 152 — opm 68/71 · psg 80/81 (v2.3.1) | `--hootx1survey x1 1000 8` |

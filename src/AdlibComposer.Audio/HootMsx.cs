@@ -66,10 +66,12 @@ public static class HootMsx
                     }
                 case "sccp":
                     {
-                        // Konami SCC+ 사운드 카트리지 RAM (offset = 카트리지 RAM 안 위치, 처음 뱅크로 4000h~에 보인다)
+                        // Konami SCC+ 사운드 카트리지 RAM (offset = 카트리지 RAM 안 위치): 본체 RAM과 따로 — A8h로 카트리지 슬롯을 고른 쪽에만 보인다
+                        // (kgc3 grascc: GRA.BIN = 본체 RAM 4000h, GRASCC.BIN = 카트리지; 같은 자리에 겹쳐 쓰면 재생 루틴이 지워졌다)
                         var d = file(text);
                         if (d == null) { m.Missing.Add(text); break; }
-                        m.Put(0x4000 + (int)off, d);
+                        m.Cart = m.Cart ?? new byte[0x20000];
+                        for (int i = 0; i < d.Length && off + i < m.Cart.Length; i++) m.Cart[off + i] = d[i];
                         break;
                     }
                 case "bgm": bgm[(int)off] = text; break;
@@ -149,6 +151,13 @@ public static class HootMsx
         public bool Opll, SccAlways;
         /// <summary>hoot ds4.cpp 롬 (msx ds4), 아니면 null.</summary>
         public byte[] Ds4Rom;
+        /// <summary>SCC+ 사운드 카트리지 RAM 128KB (sccp 줄), 아니면 null. 4000h~BFFFh 중 A8h 슬롯이 3 (본체 RAM)이 아닌 페이지에 8KB 뱅크 4개로.</summary>
+        public byte[] Cart;
+        private readonly int[] cartBank = { 0, 1, 2, 3 };
+        private int cartMode;
+
+        private bool CartAt(int a) { return Cart != null && a >= 0x4000 && a < 0xC000 && ((slot >> (2 * (a >> 14))) & 3) != 3; }
+        private int CartIndex(int a) { return ((cartBank[(a - 0x4000) >> 13] & 0x0F) * 0x2000 + (a & 0x1FFF)) % Cart.Length; }
         private int ds4Bank8 = 2, ds4BankA = 3;
         public int DataAddr, DataSize, FileSize;
         public Func<int, byte[]> Bgm = n => null;
@@ -325,6 +334,7 @@ public static class HootMsx
                 int bank = a < 0xA000 ? ds4Bank8 : ds4BankA;
                 return Ds4Rom[(bank * 0x2000 + (a & 0x1FFF)) % Ds4Rom.Length];
             }
+            if (CartAt(a)) return Cart[CartIndex(a)];
             return Ram[a];
         }
 
@@ -338,6 +348,7 @@ public static class HootMsx
                 return;
             }
             a &= 0xFFFF;
+            if (CartAt(a)) { CartWrite(a, v); return; }
             if (banked != null && a >= bankAt && a < bankAt + 0x4000)
             {
                 if (a == bankAt + 0x3FF7) SelectBank(v & 3);   // FM-PAC 뱅크
@@ -348,6 +359,33 @@ public static class HootMsx
             if ((sccOn || SccAlways) && !sccPlusMode && a >= 0x9800 && a <= 0x989F) { UsedScc = true; Emit(0xD2, SccPort(a - 0x9800, out int r), (byte)r, v); }
             else if (sccPlusMode && a >= 0xB800 && a <= 0xB8AF) { UsedSccPlus = true; Emit(0xD2, SccPlusPort(a - 0xB800, out int r), (byte)r, v); }
             Ram[a] = v;
+        }
+
+        /// <summary>SCC+ 카트리지 쓰기: 뱅크 레지스터 5000h · 7000h · 9000h · B000h (~7FFh), 모드 BFFEh, SCC 9800h~ (뱅크 2 = 3Fh) · SCC+ B800h~ (모드 bit5 · 뱅크 3 bit7), RAM (모드 bit4 = 모두, bit0~2 = 뱅크 0~2).</summary>
+        private void CartWrite(int a, byte v)
+        {
+            int page = (a - 0x4000) >> 13;
+            if ((a & 0x1800) == 0x1000)
+            {
+                cartBank[page] = v;
+                if (page == 2) sccOn = (v & 0x3F) == 0x3F;
+                return;
+            }
+            if (a == 0xBFFE || a == 0xBFFF) { cartMode = v; sccPlusMode = (v & 0x20) != 0; return; }
+            if ((sccOn || SccAlways) && !sccPlusMode && a >= 0x9800 && a <= 0x98FF)
+            {
+                int off = a & 0xFF;
+                if (off < 0xA0) { UsedScc = true; Emit(0xD2, SccPort(off, out int r), (byte)r, v); }
+                return;
+            }
+            if (sccPlusMode && (cartBank[3] & 0x80) != 0 && a >= 0xB800 && a <= 0xB8FF)
+            {
+                int off = a & 0xFF;
+                if (off < 0xB0) { UsedSccPlus = true; Emit(0xD2, SccPlusPort(off, out int r), (byte)r, v); }
+                return;
+            }
+            bool writable = (cartMode & 0x10) != 0 || (page < 3 && (cartMode & (1 << page)) != 0);
+            if (writable) Cart[CartIndex(a)] = v;
         }
 
         private static byte SccPort(int off, out int r)

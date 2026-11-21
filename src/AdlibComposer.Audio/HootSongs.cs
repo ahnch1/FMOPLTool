@@ -44,6 +44,7 @@ public static class HootSongs
         string driver = e.Driver.ToLowerInvariant();
         if (driver == "pc98dos" || driver == "pc9821dos" || driver == "pc88vados" || driver == "pcatdos" || HootArchive.IsPc98Generic(driver)) return Dos.HootPc98.Load(path);
         if (!HootArchive.Playable(e.Driver, e.Type)) throw new InvalidDataException("아직 재생하지 못하는 hoot 항목입니다: " + e.Driver + " / " + e.Type);
+        if (HootTaitoF3.Handles(e.Driver, e.Type)) return HootTaitoF3.Load(path);   // 표본 ROM이 커서 미리 렌더하지 않고 스스로 도는 칩
         if (e.Titles.Count == 0) throw new InvalidDataException("hoot 항목에 곡 목록(titlelist)이 없습니다.");
         n = Math.Max(0, Math.Min(n, e.Titles.Count - 1));
         var (code, title) = e.Titles[n];

@@ -110,7 +110,7 @@
 - [x] PC-88VA (pc88va opn 15 · opna 12 · pc88vados opn 21 · opna 10) — v2.2.5 `Pc98Machine.Va` (PC-98 기계에 VA 포트 배치: OPN 44h~47h, 8259 주 188h · 종 184h, 8253 1A0h, 32h bit7 SINTM, 종 IRQ4 열림), pc88va = 일반 흉내 · pc88vados = DOS 흉내. zip 있는 것 pc88va 24 / 24, pc88vados 10 / 14 (R-Type · Famista '89 무음)
 
 ### 3.2 새 칩이 필요 (CPU는 있음)
-- [ ] 타이토 F3 (f3system) 36 · 739곡 — 68000 + **ES5505** (+ ES5510 DSP는 빼고) + MC68681 DUART 타이머
+- [x] 타이토 F3 · Super Z (f3system) 36 · 688곡 — v2.2.7 `HootTaitoF3` (68000 + 새 칩 `Chips/Es5505.cs` + MC68681 DUART 타이머 + ES5510은 호스트 기억만, 곡 요청 = DPRAM 메시지 고리 [3][81h][s], tbloffs = 메인 ROM 소리 표 → 메인 CPU 재생 루틴 흉내 (형 0~3), 표본 ROM이 커서 스스로 도는 칩), 36 / 36, 곡 469 / 688 (4초 안 소리)
 - [x] 코나미 K053260 11 · 616곡 — v2.1.43 `HootKonami53260` + K053260 칩, 606곡
 - [x] 코나미 K054539 Z80 판 (054539 4 · 054539x2 6) · 267곡 — v2.1.44 `HootKonami54539` + K054539 칩, 266곡
 - [ ] 아이렘 M92 (m92) 16 — V35 (x86 계열) + YM2151 + **GA20**

@@ -50,7 +50,7 @@ public static class HootTaitoTests
         check("hoot taito: TC0140SYT command as two nibbles via NMI", m.Ram[0x10] == 0x0B && m.Ram[0x11] == 0x02 && m.Nmis == 1, m.Ram[0x10].ToString("X") + " " + m.Ram[0x11].ToString("X") + ", NMIs " + m.Nmis);
         var v = new HootTaito.Machine(rom, new byte[16], null, true).ToVgm(1, 0);
         check("hoot taito: VGM YM2610B with ADPCM ROM block", v.Ym2610Clock > 0 && v.Ym2610B, v.ChipSummary);
-        check("hoot taito: playable types", HootArchive.Playable("taito", "f2system") && HootArchive.Playable("taito", "dual68") && !HootArchive.Playable("taito", "f3system"), "");
+        check("hoot taito: playable types", HootArchive.Playable("taito", "f2system") && HootArchive.Playable("taito", "dual68") && HootArchive.Playable("taito", "f3system") && !HootTaito.Handles("taito", "f3system"), "");
     }
 
     private static void Real(Action<string, bool, string> check)

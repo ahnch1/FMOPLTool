@@ -132,7 +132,7 @@ public static class HootPc88Tests
 
     public static (bool sound, string cause, string note) Measure(HootArchive.Entry e, string dir, int code, double seconds)
     {
-        var m = HootPc88.Boot(e, name => { string f = HootArchive.FindFile(dir, name); return f != null ? File.ReadAllBytes(f) : null; });
+        var m = HootPc88.Boot(e, HootArchive.Files(e, dir));
         bool waiting = m.Waiting;
         m.Play(code);
         m.RunSeconds(seconds);

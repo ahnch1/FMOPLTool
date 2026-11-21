@@ -26,7 +26,7 @@ public static class HootMsx
     /// <summary>항목 · 곡 코드를 seconds초 돌려 VGM으로. dir = zip을 푼 폴더 (rom 파일이 있는 곳).</summary>
     public static VgmSong Render(HootArchive.Entry e, string dir, int code, double seconds = DefaultSeconds, double fade = DefaultFade)
     {
-        var m = Boot(e, name => { string f = HootArchive.FindFile(dir, name); return f != null ? File.ReadAllBytes(f) : null; });
+        var m = Boot(e, HootArchive.Files(e, dir));
         m.Play(code);
         m.RunSeconds(seconds);
         return m.ToVgm(seconds, fade);
@@ -74,8 +74,16 @@ public static class HootMsx
                         for (int i = 0; i < d.Length && off + i < m.Cart.Length; i++) m.Cart[off + i] = d[i];
                         break;
                     }
+                case "fmbios":
+                    {
+                        // FM-PAC BIOS 롬 (archive 뒤 zip fmpac_msx): 4000h~ (64KB면 16KB 뱅크, 7FF7h로 고름) — 시작 코드가 슬롯을 바꿔 FM BIOS를 부른다
+                        var d = file(text);
+                        if (d == null) { m.Missing.Add(text); break; }
+                        if (d.Length > 0x4000) m.PutBanked(0x4000, d); else m.Put(0x4000 + (int)off, d);
+                        break;
+                    }
                 case "bgm": bgm[(int)off] = text; break;
-                default: m.Unsupported.Add(type); break;   // fmbios · rom: 아직
+                default: m.Unsupported.Add(type); break;   // rom: 아직
             }
         }
         m.Bgm = n =>

@@ -19,7 +19,7 @@ public static class HootArchive
 {
     public const string Extension = ".hoot";
     /// <summary>항목을 써 둔 표시 (재생할 수 있는 드라이버가 늘면 이름을 바꿔 이미 푼 zip에도 다시 쓴다: 2 = SPC · KSS · NSF · GBS 더함, 3 = PC/AT DOS, 4 = MIDI 판, 5 = pc98vx · pc98).</summary>
-    private const string Mark = ".fmopl_hoot61";
+    private const string Mark = ".fmopl_hoot62";
 
     /// <summary>
     /// 재생할 수 있는 hoot 드라이버 · 형식: pc98dos opn · opna · 86 · beep · pcatdos adlib · soundblaster16 · beep (기계 흉내), 그리고 이미 읽는 파일을 곡 코드로 고르는 것 —
@@ -157,7 +157,7 @@ public static class HootArchive
                     if (MidiOutRx.IsMatch(g) && !MidiPlayable(dm.Groups[2].Value)) continue;   // MIDI로 내는 판: DOS 기계 (MPU-401 · MPU-PC98)만
                     var am = ArchiveRx.Match(g);
                     if (!am.Success) continue;
-                    string a = am.Groups[1].Value.Trim();
+                    string a = am.Groups[1].Value.Split(',')[0].Trim();   // "rona_msx,fmpac_msx" = 이 zip + 같이 쓰는 zip
                     if (a.Length == 0) continue;
                     if (!idx.TryGetValue(a, out var l)) idx[a] = l = new List<string>();
                     l.Add(g);
@@ -227,6 +227,29 @@ public static class HootArchive
     }
 
     /// <summary>zip을 푼 폴더에서 rom 이름의 파일 (대소문자 · '/' 무시, 하위 폴더 포함, 이름만 맞아도). 없으면 null.</summary>
+    /// <summary>
+    /// 항목의 파일 찾기: 푼 zip 폴더, 없으면 archive="a,b,…"의 뒤 zip들 (같은 폴더의 b.zip …, 예: msx fmbios = fmpac_msx.zip의 FMPAC.ROM).
+    /// </summary>
+    public static Func<string, byte[]> Files(Entry e, string dir)
+    {
+        var extra = (e?.Archive ?? "").Split(',').Skip(1).Select(x => x.Trim()).Where(x => x.Length > 0).ToList();
+        string zip = extra.Count > 0 ? ZipFolder.SourceZip(dir) : null;
+        string lib = zip != null ? Path.GetDirectoryName(zip) : null;
+        return name =>
+        {
+            string f = FindFile(dir, name);
+            if (f == null && lib != null)
+                foreach (var a in extra)
+                {
+                    string other = Path.Combine(lib, a + ".zip");
+                    if (!File.Exists(other)) continue;
+                    try { f = FindFile(ZipFolder.Extract(other), name); } catch (Exception) { }
+                    if (f != null) break;
+                }
+            return f != null ? File.ReadAllBytes(f) : null;
+        };
+    }
+
     public static string FindFile(string dir, string name)
     {
         string rel = name.Replace('/', Path.DirectorySeparatorChar).Replace('\\', Path.DirectorySeparatorChar).TrimStart(Path.DirectorySeparatorChar);

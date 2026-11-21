@@ -104,6 +104,19 @@ public static class HootMsxTests
                 check("hoot msx kgc3 (Nemesis SCC+): sccp cartridge RAM is separate from main RAM 4000h (slot via A8h) → SCC+ sound", rK.sound && !rK.note.Contains("scc 0 "), rK.note);
             }
         }
+        // fmbios: archive="winsltn_msx,fmpac_msx" — FMPAC.ROM은 같이 쓰는 zip (fmpac_msx.zip)에서
+        string zipF = Path.Combine(folder, "winsltn_msx.zip");
+        if (File.Exists(zipF) && File.Exists(Path.Combine(folder, "fmpac_msx.zip")))
+        {
+            string dirF = ZipFolder.Extract(zipF);
+            var eF = Directory.GetFiles(dirF, "*" + HootArchive.Extension).Select(HootArchive.Load).FirstOrDefault(x => x.Roms.Any(rm => rm.Type == "fmbios"));
+            if (eF == null) check("hoot msx winsltn: fmbios entry (archive \"winsltn_msx,fmpac_msx\")", false, "none");
+            else
+            {
+                var rF = Measure(eF, dirF, eF.Titles[0].Code, 10);
+                check("hoot msx winsltn (OPLL, fmbios from fmpac_msx.zip): first song makes sound", rF.sound && !rF.note.Contains("opll 0 ") && !rF.note.Contains("missing"), rF.note);
+            }
+        }
         // hoot ds4.cpp (Legacy of the Wizard 롬): 뱅크 7000h · 7800h, IPL, 포트 00h · 01h · 02h
         string zip4 = Path.Combine(folder, "slayer42.zip");
         if (!File.Exists(zip4)) { Console.WriteLine("SKIP  hoot msx slayer42 (zip not found)"); return; }
@@ -121,7 +134,7 @@ public static class HootMsxTests
     /// <summary>항목 · 곡을 seconds초 돌려 소리가 나는지 (PSG 볼륨 · OPLL 키온 · SCC 볼륨 · MSX-AUDIO 키온).</summary>
     public static (bool sound, string cause, string note) Measure(HootArchive.Entry e, string dir, int code, double seconds)
     {
-        var m = HootMsx.Boot(e, name => { string f = HootArchive.FindFile(dir, name); return f != null ? File.ReadAllBytes(f) : null; });
+        var m = HootMsx.Boot(e, HootArchive.Files(e, dir));
         bool waiting = m.Waiting;
         m.Play(code);
         m.RunSeconds(seconds);

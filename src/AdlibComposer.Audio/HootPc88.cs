@@ -24,7 +24,7 @@ public static class HootPc88
 
     public static VgmSong Render(HootArchive.Entry e, string dir, int code, double seconds = DefaultSeconds, double fade = DefaultFade)
     {
-        var m = Boot(e, name => { string f = HootArchive.FindFile(dir, name); return f != null ? File.ReadAllBytes(f) : null; });
+        var m = Boot(e, HootArchive.Files(e, dir));
         m.Play(code);
         m.RunSeconds(seconds);
         return m.ToVgm(seconds, fade);

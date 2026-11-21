@@ -111,7 +111,7 @@ public static class HootPc88
         public readonly List<(double t, int port, int reg, int val)> Log = new List<(double, int, int, int)>();
         public int Loads, Interrupts, Ignored;
 
-        private int addr0, addr1, command, code, waitReads, portE6;
+        private int addr0, addr1, command, code, waitReads, portE6, portSintm;   // portSintm: 32h (· 사운드 보드 II AAh) bit7 = 사운드 인터럽트 막음
         private long playStart = -1;
         private readonly byte[] regs = new byte[0x200];
 
@@ -192,10 +192,9 @@ public static class HootPc88
 
         private void Overflow(int which)
         {
-            if ((timerCtl & (which == 0 ? 4 : 8)) == 0) return;
-            bool was = timerFlags != 0;
+            // hoot ssFMTimer · mucom88.cpp: 깃발은 LOAD만으로 서고, IRQ는 ENABLE일 때 넘칠 때마다 (32h bit7 = SINTM이면 버림)
             timerFlags |= which == 0 ? 1 : 2;
-            if (!was) opnPending = true;
+            if ((timerCtl & (which == 0 ? 4 : 8)) != 0 && (portSintm & 0x80) == 0) opnPending = true;
         }
 
         private void Interrupt(int level)
@@ -272,10 +271,11 @@ public static class HootPc88
                 case 0x02: return (byte)(code >> 8);
                 case 0x03: return (byte)(code >> 16);
                 case 0x80: return (byte)(code >> 24);
-                case 0x44: return (byte)(timerFlags & 3);
-                case 0x45: return addr0 == 0xFF ? (byte)(Opna ? 1 : 0) : regs[addr0 & 0xFF];
-                case 0x46: return (byte)((timerFlags & 3) | (Opna ? 0x08 : 0));
-                case 0x47: return regs[0x100 + (addr1 & 0xFF)];
+                case 0x44: case 0xA8: return (byte)(timerFlags & 3);   // A8h~ADh = 사운드 보드 II (hoot ed2 · mistyblue: 같은 칩)
+                case 0x45: case 0xA9: return addr0 == 0xFF ? (byte)(Opna ? 1 : 0) : regs[addr0 & 0xFF];
+                case 0x46: case 0xAC: return (byte)((timerFlags & 3) | (Opna ? 0x08 : 0));   // OPN 판도 FFh (바쁨)로 두면 f_crisis가 기다리다 멈춘다
+                case 0x47: case 0xAD: return regs[0x100 + (addr1 & 0xFF)];
+                case 0x32: case 0xAA: return (byte)portSintm;
                 case 0x40: return 0xFF ^ 0x20;   // 시스템 포트: VRTC 비트 등 (대략)
                 default: return 0xFF;
             }
@@ -288,10 +288,11 @@ public static class HootPc88
             {
                 case 0x00: command = 0; break;
                 case 0x01: Load(v); break;
-                case 0x44: addr0 = v; break;
-                case 0x45: OpnWrite(0, addr0, v); break;
-                case 0x46: if (Opna) addr1 = v; break;
-                case 0x47: if (Opna) OpnWrite(1, addr1, v); break;
+                case 0x44: case 0xA8: addr0 = v; break;
+                case 0x45: case 0xA9: OpnWrite(0, addr0, v); break;
+                case 0x46: case 0xAC: if (Opna) addr1 = v; break;
+                case 0x47: case 0xAD: if (Opna) OpnWrite(1, addr1, v); break;
+                case 0x32: case 0xAA: portSintm = v; break;
                 case 0xE6: portE6 = v; break;
             }
         }

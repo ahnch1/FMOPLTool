@@ -31,6 +31,7 @@
 | 2.0.4 | 8-6 (메가드라이브) | hoot megadrive generic_z80 · iyinc: `Audio/HootMegaDrive.cs` (Z80 사운드 쪽 · 카트리지의 Z80 드라이버를 RAM에, 요청 주소) |
 | 2.0.5 | 8-7 (X68000) | MC68000 `Audio/Cpu/M68000.cs` + hoot x68k generic: `Audio/HootX68k.cs` (OPM · ADPCM · DMA · MFP, E00010h = hoot가 대신 하는 IOCS · DOS) |
 | 2.0.6 | 8-7 (X68000 MIDI) | x68k MIDI 판: YM3802 MIDI 보드 (EAFA00h) → 살아 있는 MIDI 곡 (`HootX68k.LoadMidi`) |
+| 2.3.3 | PC-88 (hoot 원본) | mucom88.cpp · ed2.cpp · mistyblue.cpp: OPN 타이머 깃발 = LOAD만, IRQ = ENABLE일 때 넘칠 때마다 (깃발을 안 지워도), 32h · AAh bit7 = SINTM (사운드 인터럽트 버림), 사운드 보드 II A8h · A9h · ACh · ADh = 같은 칩. 487 → 499 / 527 (rst88v1 · xzr × 2 · liberty · luxsor · tnmbox · thexder88 · andrgyns · saziri × 2 · ginga). OPN 판 46h/47h = FFh는 f_crisis가 멈춰서 안 함 |
 | 2.3.2 | X68000 (hoot 원본) | x68k.cpp: 24비트 버스 (`cpu_init_memmap24`, wasp · wa3 예외 2 해결), DMA ch3 SCR = 04h (MAC 증가 — 시작 코드 142개가 C6h를 안 써서 ADPCM이 한 바이트 되풀이 = 무음이었음, 진짜 ADPCM 48 → 112항목), PPI C = 08h (ssMSM6258V), zmusic.x 대신 zip 안 ZMSC.X (판 차이 9). 499 → 510 / 553 (조사는 ADPCM 바이트가 500번 넘게 바뀌어야 소리로 셈). 남은 무음: cos68snd.bin + tank.x 묶음 약 13 (xml 오프셋 ↔ zip의 큰 TANK.X), boot-not-waiting 23 · missing 10 · no-keyon 10 |
 | 2.3.1 | X1 (hoot 원본) | mucomx1.cpp: data 줄 = I/O 포트 메모리 (`IoRam`, KOEI `.CIM`), 나머지 포트 = 쓴 값을 되읽음, CTC 카운터는 시간 상수 없이도 256으로 셈. 143 → 148 / 152 (三国志 II · Blassty 등). 남은 무음: Super Laydock × 2 (use_psgpcm), 維新の嵐 · 水滸伝 (본체 CTC ch0을 안 세움, ch3만 D5h:01) |
 | 2.3.0 | hoot 원본 소스 | `_incoming/hoot code` (hoot 2001년판 소스) 대조 시작. PC-98: `Pc98Machine` OPN 타이머 = hoot `ssFMTimer` (깃발 = LOAD만, IRQ = ENABLE일 때 넘칠 때마다 — 깃발을 안 지우는 드라이버도 틱), 종 PIC가 막은 동안의 요청을 지우지 않음 (주 IRQ7 = 종의 열린 요청), VA 사운드 보드 II (A8h~ADh, AAh = 32h). 300 zip 표본 283 → 285 / 303 (usodom · cheryjam), msqrade · hiiro · roseblod 틱 정상 |
@@ -137,7 +138,7 @@
 | MIDI 판 PC/AT | 571 / 586 | `--hootmidisurvey pc 1000 20` |
 | MIDI 판 PC-98 | 360 / 641 | `--hootmidisurvey pc98 1709 20` |
 | MSX generic (PSG · OPLL · SCC · SCC+ · MSX-AUDIO) | 481 / 498 (첫 곡이 조용하면 다음 곡 5개까지) | `--hootmsxsurvey msx 1000 8` |
-| PC-88 (opn · opna) | 487 / 527 — opn 357/385 · opna 130/142 | `--hoot88survey pc88 1000 6` |
+| PC-88 (opn · opna) | 499 / 527 — opn 365/385 · opna 134/142 (v2.3.3) | `--hoot88survey pc88 1000 6` |
 | FM-7 · FM77AV (generic) | 29 / 29, 곡 279 / 308 | `--test hootfm7` (HOOT_SONGS=1) |
 | X1 (psg · opm) | 148 / 152 — opm 68/71 · psg 80/81 (v2.3.1) | `--hootx1survey x1 1000 8` |
 | 네오지오 | 137 / 146 (음악일 만한 코드 10h 이상 3곡까지) | `--hootneosurvey roms 200 6` |

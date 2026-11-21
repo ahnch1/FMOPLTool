@@ -74,6 +74,20 @@ public static class HootPc88Tests
         m2.RunSeconds(1);
         int ticks = m2.Ram[0x5010];
         check("hoot pc88: OPN timer B interrupt (level 4) ≈ 13.5 per second", ticks >= 12 && ticks <= 15, ticks + " ticks");
+        // hoot mucom88.cpp: 32h bit7 (SINTM) = 사운드 인터럽트 막음, 사운드 보드 II A8h · A9h = 같은 칩, 깃발은 LOAD만으로
+        var m3 = HootPc88.Boot(e, n => files.TryGetValue(n, out var d) ? d : null);
+        m3.Rtc = false;
+        m3.Out(0x32, 0x80);
+        m3.Out(0xA8, 0x26); m3.Out(0xA9, 0x00);
+        m3.Out(0xA8, 0x27); m3.Out(0xA9, 0x2A);
+        m3.RunSeconds(1);
+        int masked = m3.Ram[0x5010];
+        m3.Out(0xAA, 0x00);
+        m3.RunSeconds(1);
+        check("hoot pc88: SINTM (32h / AAh bit7) masks the OPN IRQ; Sound Board II ports A8h / A9h reach the chip", masked == 0 && m3.Ram[0x5010] >= 12, masked + " → " + m3.Ram[0x5010] + " ticks");
+        m3.Out(0x44, 0x27); m3.Out(0x45, 0x32);   // B LOAD만 (ENABLE 없음) · 깃발 지우기
+        m3.RunSeconds(0.2);
+        check("hoot pc88: OPN timer flag set by LOAD alone, without IRQ enable (hoot ssFMTimer)", (m3.In(0x44) & 2) != 0, m3.In(0x44).ToString("X2"));
         var v = m.ToVgm(1, 0);
         check("hoot pc88: VGM YM2203", v.Ym2203Clock > 0 && v.IsPlayable, v.ChipSummary);
     }
@@ -83,7 +97,7 @@ public static class HootPc88Tests
         string root = SopTests.FindDir("_incoming");
         string folder = root == null ? null : Path.Combine(root, "Hootarchive", "pc88");
         if (folder == null || !Directory.Exists(folder)) { Console.WriteLine("SKIP  hoot pc88 real files (_incoming/Hootarchive/pc88 not found)"); return; }
-        foreach (var arc in new[] { "starcruiser88", "reviver" })
+        foreach (var arc in new[] { "starcruiser88", "reviver", "tnmbox_88", "xzr" })
         {
             string zip = Path.Combine(folder, arc + ".zip");
             if (!File.Exists(zip)) { Console.WriteLine("SKIP  hoot pc88 " + arc + " (zip not found)"); continue; }

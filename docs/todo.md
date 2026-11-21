@@ -1,6 +1,7 @@
 # FMOPLTool 할 일 (2026-11-21, v2.2.0 기준)
 
 - 이 파일 = **해야 할 일**과 **남겨 둔 일**(보류)을 체크박스로. 끝난 일의 자세한 내용 · 진단 명령 · 원인 분석은 [`hoot-status.md`](hoot-status.md), 사용법 · 구조는 [`../README.md`](../README.md).
+- hoot 원본 소스 대조 · 무음 정리 작업 노트 (v2.3.0~v2.3.28, 규칙 · 도구 · 남은 원인 · 다음 할 일): `docs/hoot-reconcile-notes.md`
 - 옛 할 일 기록(v1.x ~ v2.0 진행 일지)은 `_incoming/Todo.md`(git에 안 들어감)에 그대로 둔다.
 - 두 PC에서 푸시한다 → 작업 시작 전에 `git fetch` 후 `main..origin/main` 확인.
 

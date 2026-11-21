@@ -22,7 +22,45 @@ public sealed class Pc98Machine : DosMachine, IHootMachine
     bool IHootMachine.KeepRunning { get { return AutoIdle; } set { AutoIdle = value; } }
     int IHootMachine.HootCount { get { return HootDelivered; } }
 
-    public enum Board { None, Opn, Opna }
+    /// <summary>사운드 보드: 없음 · 26K (OPN) · 86 (OPNA) · PC-98용 Sound Blaster 16 (OPL3 20D2h · 21D2h · 22D2h · 23D2h, OPN 없음).</summary>
+    /// SB16 포트 = 20D2h + (SB 오프셋 × 100h): OPL3 0~3, 믹서 4 · 5, DSP 리셋 6 · 읽기 A · 쓰기 C · 상태 E, 그리고 81D2h (bit6 = 0 → 있음). PCM DMA는 없음.
+    public enum Board { None, Opn, Opna, Sb16 }
+
+    // ------------------------------------------------------------ OPL3 (PC-98 Sound Blaster 16)
+
+    private int oplAddr0, oplAddr1, oplT1, oplT2, oplCtl, oplFlags, sbMixerAddr;
+    private bool sbReset;
+    private readonly int[] sbMixer = new int[256];
+    private readonly Queue<int> sbDspOut = new Queue<int>();
+    private long oplStart1 = long.MaxValue, oplStart2 = long.MaxValue;
+
+    private void OplWrite(int port, int reg, int v)
+    {
+        if (port == 0)
+        {
+            switch (reg)
+            {
+                case 0x02: oplT1 = v; return;
+                case 0x03: oplT2 = v; return;
+                case 0x04:
+                    if ((v & 0x80) != 0) { oplFlags = 0; return; }   // IRQ 깃발 지움
+                    oplCtl = v;
+                    oplStart1 = (v & 1) != 0 ? Cpu.Cycles : long.MaxValue;
+                    oplStart2 = (v & 2) != 0 ? Cpu.Cycles : long.MaxValue;
+                    return;
+            }
+        }
+        Log.Add((Cpu.Cycles, port, reg & 0xFF, v));
+    }
+
+    /// <summary>OPL3 상태: 타이머가 넘쳤으면 bit6 (T1) · bit5 (T2) + bit7 (드라이버의 OPL 찾기용, IRQ는 내지 않음).</summary>
+    private int OplStatus()
+    {
+        long now = Cpu.Cycles;
+        if (oplStart1 != long.MaxValue && now - oplStart1 >= (long)(80e-6 * (256 - oplT1) * CpuHz) && (oplCtl & 0x40) == 0) oplFlags |= 0x40;
+        if (oplStart2 != long.MaxValue && now - oplStart2 >= (long)(320e-6 * (256 - oplT2) * CpuHz) && (oplCtl & 0x20) == 0) oplFlags |= 0x20;
+        return oplFlags != 0 ? oplFlags | 0x80 : 0;
+    }
 
     public const double PitClock = 2457600, VsyncHz = 56.4229, OpnBaseClock = 3993600;
     public readonly Board Sound;
@@ -455,7 +493,20 @@ public sealed class Pc98Machine : DosMachine, IHootMachine
             if (port >= 0x7D2) return genericParams[port - 0x7D2];
             return 0;
         }
-        if (Sound != Board.None)
+        if (Sound == Board.Sb16)
+        {
+            switch (port)
+            {
+                case 0x20D2: case 0x22D2: return (byte)OplStatus();
+                case 0x21D2: case 0x23D2: return 0xFF;
+                case 0x25D2: return (byte)sbMixer[sbMixerAddr];
+                case 0x2AD2: return (byte)(sbDspOut.Count > 0 ? sbDspOut.Dequeue() : 0xFF);   // DSP 읽기
+                case 0x2CD2: return 0x00;                                                         // DSP 쓰기 준비됨
+                case 0x2ED2: case 0x2FD2: return (byte)(sbDspOut.Count > 0 ? 0x80 : 0x00);         // DSP 읽을 것 있음
+                case 0x81D2: return 0x00;                                                         // bit6 = 0: 카드 있음 (드라이버의 찾기)
+            }
+        }
+        if (Sound == Board.Opn || Sound == Board.Opna)
         {
             switch (port)
             {
@@ -515,7 +566,26 @@ public sealed class Pc98Machine : DosMachine, IHootMachine
             else if (port >= 0x7D2) genericParams[port - 0x7D2] = value;
             return;
         }
-        if (Sound != Board.None)
+        if (Sound == Board.Sb16)
+        {
+            switch (port)
+            {
+                case 0x20D2: oplAddr0 = v; return;
+                case 0x21D2: OplWrite(0, oplAddr0, v); return;
+                case 0x22D2: oplAddr1 = v; return;
+                case 0x23D2: OplWrite(1, oplAddr1 | 0x100, v); return;
+                case 0x24D2: sbMixerAddr = v; return;
+                case 0x25D2: sbMixer[sbMixerAddr] = v; return;
+                case 0x26D2:   // DSP 리셋: 1 → 0이면 AAh
+                    if ((v & 1) != 0) sbReset = true;
+                    else if (sbReset) { sbReset = false; sbDspOut.Clear(); sbDspOut.Enqueue(0xAA); }
+                    return;
+                case 0x2CD2:   // DSP 명령: 판 (E1h → 4.05)만, 그 밖은 버림 (PCM 없음)
+                    if (v == 0xE1) { sbDspOut.Enqueue(4); sbDspOut.Enqueue(5); }
+                    return;
+            }
+        }
+        if (Sound == Board.Opn || Sound == Board.Opna)
         {
             switch (port)
             {

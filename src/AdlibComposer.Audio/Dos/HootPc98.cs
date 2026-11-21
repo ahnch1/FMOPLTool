@@ -64,6 +64,7 @@ public static class HootPc98
         {
             case "opn": return Pc98Machine.Board.Opn;
             case "opna": case "86": return Pc98Machine.Board.Opna;
+            case "soundblaster16": return Pc98Machine.Board.Sb16;
             default: return Pc98Machine.Board.None;
         }
     }
@@ -92,14 +93,14 @@ public static class HootPc98
             if (c == PcAtMachine.Card.Tandy) return new Chips.Sn76489(TandyClock, 44100, 0x0006, 16);   // NCR 8496 (MAME tandy: 탭 0006h)
             return c == PcAtMachine.Card.Beep ? null : new OplChip(c == PcAtMachine.Card.SoundBlaster16);
         }
-        return HootDosChip.OpnFor(BoardOf(e));
+        return HootDosChip.ChipFor(BoardOf(e));
     }
 
     private static string ChipLabel(HootArchive.Entry e)
     {
         if (IsPcAt(e)) { var c = CardOf(e); return "PC/AT (" + (c == PcAtMachine.Card.AdLib ? "OPL2" : c == PcAtMachine.Card.SoundBlaster16 ? "OPL3" : c == PcAtMachine.Card.GameBlaster ? "SAA1099 × 2" : c == PcAtMachine.Card.Tandy ? "SN76489" : "BEEP") + ")"; }
         var b = BoardOf(e);
-        return "PC-98" + (IsGeneric(e) ? "" : " DOS") + " (" + (b == Pc98Machine.Board.Opn ? "YM2203" : b == Pc98Machine.Board.Opna ? "YM2608" : "BEEP") + ")";
+        return "PC-98" + (IsGeneric(e) ? "" : " DOS") + " (" + (b == Pc98Machine.Board.Opn ? "YM2203" : b == Pc98Machine.Board.Opna ? "YM2608" : b == Pc98Machine.Board.Sb16 ? "YMF262" : "BEEP") + ")";
     }
 
     /// <summary>"항목.hoot::n" → 곡 (길이만 든 VGM + 스스로 도는 기계 칩).</summary>
@@ -418,6 +419,13 @@ public class HootDosChip : ISoundChip, ISelfRunningChip
     private bool failed;
     private readonly bool[] muted;
 
+    /// <summary>PC-98 보드의 음원 칩: OPN · OPNA, SB16 = OPL3, 없으면 null.</summary>
+    public static ISoundChip ChipFor(Pc98Machine.Board board)
+    {
+        if (board == Pc98Machine.Board.Sb16) return new OplChip(true);
+        return OpnFor(board);
+    }
+
     public static OpnChip OpnFor(Pc98Machine.Board board)
     {
         if (board == Pc98Machine.Board.Opn) return new OpnChip(OpnChip.Variant.Ym2203, Pc98Machine.OpnBaseClock);
@@ -534,5 +542,5 @@ public class HootDosChip : ISoundChip, ISelfRunningChip
 /// <summary>PC-98 기계 칩 (<see cref="HootDosChip"/> + OPN / OPNA).</summary>
 public sealed class Pc98Chip : HootDosChip
 {
-    public Pc98Chip(Func<Pc98Machine> boot, Pc98Machine.Board board, int code) : base(() => boot(), OpnFor(board), Beeper.Pc98Clock, code, "PC-98 DOS") { }
+    public Pc98Chip(Func<Pc98Machine> boot, Pc98Machine.Board board, int code) : base(() => boot(), ChipFor(board), Beeper.Pc98Clock, code, "PC-98 DOS") { }
 }

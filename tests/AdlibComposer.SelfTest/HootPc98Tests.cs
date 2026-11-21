@@ -149,6 +149,33 @@ public static class HootPc98Tests
         }
         Real(check);
         RealFiles(check);
+        RealSb16(check);
+    }
+
+    /// <summary>PC-98용 Sound Blaster 16 (Board.Sb16): get_98 SB16 항목을 Jukebox 길 (OPL3 칩)으로 5초.</summary>
+    private static void RealSb16(Action<string, bool, string> check)
+    {
+        string inc = SopTests.FindDir("_incoming");
+        string zip = inc == null ? null : Path.Combine(inc, "Hootarchive", "pc98", "get_98.zip");
+        if (zip == null || !File.Exists(zip)) { Console.WriteLine("SKIP  real hoot pc98dos soundblaster16 (get_98.zip not found)"); return; }
+        string root = Path.Combine(Path.GetTempPath(), "fmopl_hootsb_" + Guid.NewGuid().ToString("N").Substring(0, 8));
+        string oldCache = ZipFolder.CacheBase;
+        try
+        {
+            ZipFolder.CacheBase = root;
+            string dir = ZipFolder.Extract(zip);
+            string hp = Directory.GetFiles(dir, "*" + HootArchive.Extension).FirstOrDefault(h => { var e = HootArchive.Load(h); return e.Driver == "pc98dos" && e.Type == "soundblaster16"; });
+            if (hp == null) { check("Real hoot pc98dos soundblaster16: .hoot entry", false, "none"); return; }
+            var tracks = ChipSongs.Tracks(hp);
+            var v = ChipSongs.Load(tracks[0].path);
+            double r = Rms(v, 5, out _);
+            check("Real hoot pc98dos soundblaster16: get_98 '" + tracks[0].title + "' plays OPL3 through the jukebox path (" + v.ChipSummary + ")", r > 200 && v.ChipSummary.Contains("YMF262"), "rms " + r.ToString("0"));
+        }
+        finally
+        {
+            ZipFolder.CacheBase = oldCache;
+            try { Directory.Delete(root, true); } catch (Exception) { }
+        }
     }
 
     /// <summary>
@@ -271,7 +298,9 @@ public static class HootPc98Tests
                     int logBoot = m.Log.Count;
                     m.Play(FirstCode(e));
                     m.Run((long)(m.CpuHz * seconds));
-                    int keyOns = m.Log.Count(x => x.kind == 0 && ((x.reg == 0x28 && (x.val & 0xF0) != 0) || (x.reg == 0x10 && (x.val & 0xBF) != 0 && (x.val & 0x80) == 0) || (x.reg >= 8 && x.reg <= 10 && (x.val & 0x1F) != 0))), beeps = m.Log.Count(x => x.kind == 2 && x.val != 0);
+                    bool opl = m.Sound == Pc98Machine.Board.Sb16;
+                    int keyOns = opl ? m.Log.Count(x => x.kind <= 1 && x.reg >= 0xB0 && x.reg <= 0xB8 && (x.val & 0x20) != 0)   // OPL3 키온
+                        : m.Log.Count(x => x.kind == 0 && ((x.reg == 0x28 && (x.val & 0xF0) != 0) || (x.reg == 0x10 && (x.val & 0xBF) != 0 && (x.val & 0x80) == 0) || (x.reg >= 8 && x.reg <= 10 && (x.val & 0x1F) != 0))), beeps = m.Log.Count(x => x.kind == 2 && x.val != 0);
                     int fmWrites = m.Log.Count(x => x.kind <= 1);
                     bool sound = keyOns > 0 || beeps > 0;
                     if (sound) st.sound++;

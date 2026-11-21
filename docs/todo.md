@@ -103,7 +103,8 @@
 - [ ] YM2151 + OKI 작은 보드: banpresto (dbz 2 · agallet 2 · ultraman · godzilla · sdgndmps · metmqstr) · raizing (mahou 2 · bgaregga · batrider — NMK112 뱅크) · dooyong superx · technosoft hyperduel · atlus wingforc · tatsumi apache3 · toaplan enmadaio · tp 3 — 각 1~3항목, 보드마다 사운드 ROM을 읽어 `HootOpmBoard.Layout`에 줄 더하기
 - [x] PC/AT Game Blaster 8 · Tandy 4 — v2.1.72 `PcAtMachine` Card.GameBlaster (220h~223h → `Saa1099Pair`) · Card.Tandy (C0h → SN76489, Tandy BIOS 표시), 12 / 12 (Broderbund Wibarm은 BIOS 표시가 있어야 소리)
 - [x] pc9821dos 12 — v2.1.73 pc98dos 기계 그대로 4 / 12 → v2.1.74 **386 리얼 모드** (`Cpu/X86.386.cs`, pc9821dos만 켬) + 86 PCM 포트 흉내 (A466h · A468h · A46Ah · A46Ch, 소리는 아직) → 12 / 12. 코에이 BGMSEQ · FMOPN은 386 판별 (FLAGS bit12~14, PUSHFD AC)에서 끝났고 (TSRMAN은 문제 없음), FMOPNA의 사운드 IRQ는 A468h bit4가 내려갈 때까지 돎
-- [ ] PC-98 DOS soundblaster16 9 · pc98 rashin 5 · pc98vx amd98 4 (AY × 3) — 기존 PC-98 기계 변형
+- [x] PC-98 DOS soundblaster16 9 (zip 있음 6) — v2.2.4 `Pc98Machine.Board.Sb16` (SB 레지스터 = 20D2h + 오프셋 × 100h: OPL3 · 믹서 · DSP 리셋 AAh · 판, 81D2h bit6 = 0), 6 / 6
+- [ ] pc98 rashin 5 (리버힐 전용 hoot 드라이버: dataaddr · filesize · datamax, 일반 OPN으로는 부팅 코드가 깨짐) · pc98vx amd98 4 (AY × 3 보드, 곡 목록 없이 게임 전체)
 - [ ] PC-88VA (pc88va opna 12 · opn 12 · pc88vados opn 11 · opna 7) — V30 (x86 있음) + OPN/OPNA, PC-88VA 기계 새로
 
 ### 3.2 새 칩이 필요 (CPU는 있음)

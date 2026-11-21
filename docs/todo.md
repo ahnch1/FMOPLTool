@@ -113,7 +113,8 @@
 - [x] 타이토 F3 · Super Z (f3system) 36 · 688곡 — v2.2.7 `HootTaitoF3` (68000 + 새 칩 `Chips/Es5505.cs` + MC68681 DUART 타이머 + ES5510은 호스트 기억만, 곡 요청 = DPRAM 메시지 고리 [3][81h][s], tbloffs = 메인 ROM 소리 표 → 메인 CPU 재생 루틴 흉내 (형 0~3), 표본 ROM이 커서 스스로 도는 칩), 36 / 36, 곡 469 / 688 (4초 안 소리)
 - [x] 타이토 ringrage · ridingf · gseeker 3 · 46곡 — v2.3.24 같은 F3 보드 (`HootTaitoF3.GameTypes`), 43곡. galastrm 1은 zip 표본 ROM 이름이 목록과 다름
 - [x] 타이토 rainbow · opwolf · daisenpuu 3 · 60곡 — v2.3.25 `HootTaitoOpm` (rainbow · opwolf = Rastan 배치, daisenpuu = 타이토 X 배치)
-- [ ] 타이토 남은 형식: flstory 5 · nycaptor 3 · msisaac · lsasquad · buggychl (Z80 + AY + MSM5232 — 새 칩), tnzs 2 · kageki · chukatai · plumppop · arkanoid2 · insectx · kabukiz · kicknrun · kikikai (YM2203 계열), volfied · darius · ashnojoe · mlanding · lkage · halleysc 2 · darkmist · panicr · cybertnk · bshark (68000 사운드) · mmpanic 2 · funkyfig · chaknpop · arkanoid · empcity · kurikint · fhawk · daikaiju · flipull · galastrm
+- [x] 타이토 volfied 1 · 12곡 — v2.3.26 `HootTaitoOpm` Volfied 배치
+- [ ] 타이토 남은 형식: flstory 5 · nycaptor 3 · msisaac · lsasquad · buggychl (Z80 + AY + MSM5232 — 새 칩), tnzs 2 · kageki · chukatai · plumppop · arkanoid2 · insectx · kabukiz · kicknrun · kikikai (YM2203 계열), darius · ashnojoe · mlanding · lkage · halleysc 2 · darkmist · panicr · cybertnk · bshark (68000 사운드) · mmpanic 2 · funkyfig · chaknpop · arkanoid · empcity · kurikint · fhawk · daikaiju · flipull · galastrm
 - [x] 코나미 K053260 11 · 616곡 — v2.1.43 `HootKonami53260` + K053260 칩, 606곡
 - [x] 코나미 K054539 Z80 판 (054539 4 · 054539x2 6) · 267곡 — v2.1.44 `HootKonami54539` + K054539 칩, 266곡
 - [ ] 아이렘 M92 (m92) 16 — V35 (x86 계열) + YM2151 + **GA20**

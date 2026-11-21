@@ -32,7 +32,7 @@ public static class HootTaitoOpm
         if (!string.Equals((driver ?? "").Trim(), "taito", StringComparison.OrdinalIgnoreCase)) return false;
         string t = (type ?? "").Trim().ToLowerInvariant();
         return t == "fullt" || t == "masterw" || t == "viofight"
-            || t == "rainbow" || t == "daisenpuu" || t == "opwolf";   // MAME rainbow · taito_x (twinhawk) · opwolf: Rastan과 같은 사운드 맵 (9000h YM2151 · A000h TC0140SYT)
+            || t == "rainbow" || t == "daisenpuu" || t == "opwolf" || t == "volfied";   // MAME rainbow · taito_x (twinhawk) · opwolf: Rastan과 같은 사운드 맵 (9000h YM2151 · A000h TC0140SYT)
     }
 
     public static VgmSong Render(HootArchive.Entry e, string dir, int code, double seconds = DefaultSeconds, double fade = DefaultFade)
@@ -67,7 +67,7 @@ public static class HootTaitoOpm
             return r;
         }
         string ty = (e.Type ?? "").Trim().ToLowerInvariant();
-        var m = new Machine(Join(code, 0x8000), Join(pcm, 0), (e.Name ?? "").IndexOf("Top Speed", StringComparison.OrdinalIgnoreCase) >= 0) { Opn = ty == "masterw" || ty == "viofight", Oki = ty == "viofight", XSystem = ty == "daisenpuu" };
+        var m = new Machine(Join(code, 0x8000), Join(pcm, 0), (e.Name ?? "").IndexOf("Top Speed", StringComparison.OrdinalIgnoreCase) >= 0) { Opn = ty == "masterw" || ty == "viofight" || ty == "volfied", Oki = ty == "viofight", XSystem = ty == "daisenpuu", Volfied = ty == "volfied" };
         m.Missing.AddRange(missing);
         foreach (var u in unsupported) m.Unsupported.Add(u);
         m.RunSeconds(1);
@@ -95,6 +95,8 @@ public static class HootTaitoOpm
         public bool Opn, Oki;
         /// <summary>타이토 X 배치 (MAME taito_x · twinhawk): RAM C000h~DFFFh, YM2151 E000h, TC0140SYT E200h · E201h, 뱅크 F200h.</summary>
         public bool XSystem;
+        /// <summary>Volfied 배치 (MAME volfied_sound_map): Taito B와 같고 TC0140SYT만 8800h · 8801h (RAM 8000h~87FFh).</summary>
+        public bool Volfied;
         public readonly byte[] Ram = new byte[0x2000];
         public readonly Z80 Cpu;
         public readonly List<string> Missing = new List<string>();
@@ -260,6 +262,7 @@ public static class HootTaitoOpm
             }
             if (a < 0x4000) return a < Rom.Length ? Rom[a] : (byte)0xFF;
             if (a < 0x8000) return Rom.Length <= 0x8000 ? Rom[a % Rom.Length] : Rom[((long)bank * 0x4000 + (a - 0x4000)) % Rom.Length];
+            if (Volfied && a == 0x8801) return CommRead();
             if (a < 0x9000) return Ram[a - 0x8000];
             if (a == 0x9000 || a == 0x9001) return (byte)(timerFlags & 3);   // YM2151 · YM2203 상태 (바쁨 없음)
             if (Oki && (a == 0xB000 || a == 0xB001)) return 0;   // OKIM6295 상태: 모두 쉼
@@ -283,6 +286,8 @@ public static class HootTaitoOpm
                 }
                 return;
             }
+            if (Volfied && a == 0x8800) { subMode = v & 15; return; }
+            if (Volfied && a == 0x8801) { CommWrite(v & 15); return; }
             if (a >= 0x8000 && a < 0x9000) { Ram[a - 0x8000] = v; return; }
             switch (a)
             {

@@ -93,6 +93,7 @@ public static class HootMsx
             if (d == null && m.Missing.Count < 64) m.Missing.Add(name);
             return d;
         };
+        m.SeedFmBiosWork();
         m.Start(e.Option("init_pc", 0x0400) & 0xFFFF);
         m.Run((long)(CpuClock * 2), untilWaiting: true);
         return m;
@@ -192,6 +193,24 @@ public static class HootMsx
         private int bankAt = -1;
 
         /// <summary>주소 공간을 넘는 rom: 16KB 뱅크 카트리지로 (보이는 곳 = at~at+16KB, at+3FF7h에 쓰면 뱅크).</summary>
+        /// <summary>
+        /// FM-PAC · MSX-MUSIC 롬 ("…OPLL", 401Ch)이 4000h~에 있으면 실기 부팅 때 롬 초기화가 해 두는 것처럼 SLTWRK (슬롯 0 · 페이지 1 = FD0Bh)에 작업 영역 3000h를 넣어 둔다.
+        /// Ryu Kyu는 INIOPL 전에 MSTOP을 불러, 0인 SLTWRK로 0000h+3Dh부터 11바이트 걸음으로 0을 써 BIOS 흉내 (인터럽트 처리기)를 지웠다.
+        /// </summary>
+        public void SeedFmBiosWork()
+        {
+            if (Ram[0x401C] != (byte)'O' || Ram[0x401D] != (byte)'P' || Ram[0x401E] != (byte)'L' || Ram[0x401F] != (byte)'L') return;
+            // 슬롯 0 = 확장 (FM-PAC = 0-1: 시작 코드가 OUT A8,3Fh · (FFFFh) ← 04h로 고른다). 확장이 아니면 슬롯을 찾는 드라이버가 슬롯 0 (= BIOS 자리)에서
+            // "OPLL"을 찾아 슬롯 번호 0을 "없음"으로 본다 (Yoshida Konzern)
+            Ram[0xFCC1] |= 0x80;
+            for (int i = 0x3000; i < 0x3100; i++) Ram[i] = 0;
+            for (int sec = 0; sec < 4; sec++)
+            {
+                int at = 0xFD09 + sec * 8 + 2;   // SLTWRK: 슬롯 0-sec · 페이지 1
+                if (Ram[at] == 0 && Ram[at + 1] == 0) { Ram[at] = 0x00; Ram[at + 1] = 0x30; }
+            }
+        }
+
         public void PutBanked(int at, byte[] d)
         {
             banked = d;

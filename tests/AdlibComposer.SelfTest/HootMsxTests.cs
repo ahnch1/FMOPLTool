@@ -117,6 +117,17 @@ public static class HootMsxTests
                 check("hoot msx winsltn (OPLL, fmbios from fmpac_msx.zip): first song makes sound", rF.sound && !rF.note.Contains("opll 0 ") && !rF.note.Contains("missing"), rF.note);
             }
         }
+        // FM-PAC 롬: 실기 부팅 때처럼 SLTWRK 작업 영역 · 슬롯 0 확장 (Ryu Kyu = INIOPL 전 MSTOP, Yoshida Konzern = 슬롯 0에서 찾으면 "없음")
+        foreach (var (arc, pick) in new[] { ("ryukyu_msx", "(OPLL)"), ("yosikon_msx", "") })
+        {
+            string zf = Path.Combine(folder, arc + ".zip");
+            if (!File.Exists(zf) || !File.Exists(Path.Combine(folder, "fmpac_msx.zip"))) continue;
+            string df = ZipFolder.Extract(zf);
+            var ef = Directory.GetFiles(df, "*" + HootArchive.Extension).Select(HootArchive.Load).FirstOrDefault(x => x.Driver == "msx" && x.Name.Contains(pick));
+            if (ef == null) { check("hoot msx " + arc + ": entry", false, "none"); continue; }
+            var rf = Measure(ef, df, ef.Titles[0].Code, 10);
+            check("hoot msx " + arc + " (FM-PAC BIOS work area seeded like the ROM's boot init): first song makes sound", rf.sound, rf.note);
+        }
         // hoot ds4.cpp (Legacy of the Wizard 롬): 뱅크 7000h · 7800h, IPL, 포트 00h · 01h · 02h
         string zip4 = Path.Combine(folder, "slayer42.zip");
         if (!File.Exists(zip4)) { Console.WriteLine("SKIP  hoot msx slayer42 (zip not found)"); return; }

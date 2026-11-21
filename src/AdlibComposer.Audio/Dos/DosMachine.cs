@@ -350,7 +350,7 @@ public class DosMachine : IX86Bus
             Cpu.Push(0);
         }
         Cpu.DS = Cpu.ES = psp;
-        Cpu.AX = 0; Cpu.BX = 0; Cpu.CX = 0xFF; Cpu.DX = psp; Cpu.SI = Cpu.IP; Cpu.DI = Cpu.SP; Cpu.BP = 0x91C;
+        Cpu.AX = 0; Cpu.BX = 0; Cpu.CX = 0xFF; Cpu.DX = psp; Cpu.SI = Cpu.IP; Cpu.DI = 0; Cpu.BP = 0x91C;   // DI = 0: hoot의 DOS (실제 DOS는 SP) — syakyulm SS_98은 곡 이름 주소를 XOR DI,DX로 만든다
         Cpu.Flags = 0x0202;
         currentPsp = psp;
         LastLoadedPsp = psp;

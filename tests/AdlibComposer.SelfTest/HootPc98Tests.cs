@@ -263,7 +263,7 @@ public static class HootPc98Tests
                     tracks.Count == 15 && daydream >= 0 && rms > 300 && speed > 1.5, tracks.Count + " songs, rms " + rms.ToString("0") + ", " + speed.ToString("0.0") + "x realtime");
             }
             // 목록의 파일 이름이 zip과 다를 때: DISC_1/AMUS.DAT → 뿌리의 AMUS.DAT (rance3h), file01.MUS → zip 순서 첫 .MUS (koroshi)
-            foreach (var (arc, what) in new[] { ("rance3h_98", "folder-less file bind (DISC_1/AMUS.DAT → AMUS.DAT)"), ("koroshi_98", "fileNN.MUS → N-th .MUS in zip order") })
+            foreach (var (arc, what) in new[] { ("rance3h_98", "folder-less file bind (DISC_1/AMUS.DAT → AMUS.DAT)"), ("koroshi_98", "fileNN.MUS → N-th .MUS in zip order"), ("syakyulm_98", "program starts with DI = 0 (SS_98 builds the song-name pointer with XOR DI,DX)") })
             {
                 string zr = Path.Combine(inc, "Hootarchive", "pc98", arc + ".zip");
                 if (!File.Exists(zr)) continue;

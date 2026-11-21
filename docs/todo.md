@@ -155,7 +155,7 @@
 
 ## 4. 해야 할 일 — 재생은 되지만 무음 · 품질 문제
 
-- [ ] PC-98 DOS FM 무음 (300 zip 표본, v2.2.1 뒤 20개 — 처음 75개): v2.1.75 DOS 로더 고침 (64KB 넘는 EXE · 4B03h · device= DS · NUL)으로 vector-not-hooked 25 → 2, unknown-op 9 → 0; v2.2.1 사용자 벡터 40h~7Fh = 0060:xxxx ("ＦＭ音源ドライバー" MUSIC.COM 6) · 닫힌 곡 핸들 다시 열기 (FUGA OPNDRV 6). v2.3.0 hoot 타이머 규칙 (깃발 = LOAD만 · 넘칠 때마다 IRQ) · 종 PIC 요청 보존으로 writes-no-keyon 15 → 13 (usodom · cheryjam). v2.3.17 파일 이름 맞추기로 rance3h (MAKO) · xix · koroshi. 남은 것: writes-no-keyon 10 (MAKO · KUAN · NIHON CREATE · UKKY · koroshi), no-chip-writes 0 (majoriko = v2.3.16 dummysndrom → 메모리 스위치 4 bit3), no-memory 1, 이름 불일치 (koroshi: xml file01.MUS ↔ zip 원래 이름)
+- [ ] PC-98 DOS FM 무음 (300 zip 표본, v2.2.1 뒤 20개 — 처음 75개): v2.1.75 DOS 로더 고침 (64KB 넘는 EXE · 4B03h · device= DS · NUL)으로 vector-not-hooked 25 → 2, unknown-op 9 → 0; v2.2.1 사용자 벡터 40h~7Fh = 0060:xxxx ("ＦＭ音源ドライバー" MUSIC.COM 6) · 닫힌 곡 핸들 다시 열기 (FUGA OPNDRV 6). v2.3.0 hoot 타이머 규칙 (깃발 = LOAD만 · 넘칠 때마다 IRQ) · 종 PIC 요청 보존으로 writes-no-keyon 15 → 13 (usodom · cheryjam). v2.3.17 파일 이름 맞추기로 rance3h (MAKO) · xix · koroshi. v2.3.18 시작 DI = 0으로 NIHON CREATE (syakyulm · syakyu2). 남은 것: writes-no-keyon 8 (MAKO · KUAN · NIHON CREATE · UKKY · koroshi), no-chip-writes 0 (majoriko = v2.3.16 dummysndrom → 메모리 스위치 4 bit3), no-memory 1, 이름 불일치 (koroshi: xml file01.MUS ↔ zip 원래 이름)
 - [ ] PC-98 MIDI 무음: DOFMDX98 50 · FUGA 50 · ARTDI 32 · FMX 16 · MINT/NLP 16 · MFD 12 · valky 11, RS-MIDI (내장 8251)
 - [ ] pc98vx 무음 40: writes-no-keyon 19 · no-chip-writes 13 · unknown-op 2 · vector 2 · hoot 끔 2
 - [ ] PC/AT 무음 6 (rakuen · kurodan · eshoutei · darksun · globaleffect · nestory2), SB16 PCM (DSP DMA)

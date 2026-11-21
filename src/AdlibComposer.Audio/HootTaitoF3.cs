@@ -24,10 +24,14 @@ public static class HootTaitoF3
     public const double CpuClock = 30476180 / 2.0, ChipClock = 30476180 / 2.0, DuartClock = 16000000 / 4.0;
     public const double DefaultSeconds = 180, DefaultFade = 4, BootSeconds = 1;
 
+    /// <summary>게임 이름 형식이지만 같은 F3 사운드 보드 (main0~3 · sub0~1 · pcm, 옵션 없음): Ring Rage · Riding Fight · Grid Seeker.</summary>
+    public static readonly string[] GameTypes = { "ringrage", "ridingf", "gseeker" };   // galastrm: zip의 표본 ROM 이름 (c99-06~09)이 목록 (c99-07~10)과 달라 뺌
+
     public static bool Handles(string driver, string type)
     {
-        return string.Equals((driver ?? "").Trim(), "taito", StringComparison.OrdinalIgnoreCase)
-            && string.Equals((type ?? "").Trim(), "f3system", StringComparison.OrdinalIgnoreCase);
+        if (!string.Equals((driver ?? "").Trim(), "taito", StringComparison.OrdinalIgnoreCase)) return false;
+        string t = (type ?? "").Trim().ToLowerInvariant();
+        return t == "f3system" || Array.IndexOf(GameTypes, t) >= 0;
     }
 
     /// <summary>"항목.hoot::n" → 곡 (길이만 든 VGM + 스스로 도는 F3 사운드 칩).</summary>

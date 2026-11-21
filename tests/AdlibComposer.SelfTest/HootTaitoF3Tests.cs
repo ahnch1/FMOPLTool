@@ -61,6 +61,18 @@ public static class HootTaitoF3Tests
             if (!all) check("hoot taito f3 " + arc + ": a song makes sound in 4 s", any, note);
         }
         if (all) Console.WriteLine("  f3 entries " + sound + " / " + entries + ", songs " + songSound + " / " + songs);
+        // 게임 이름 형식의 F3 보드 (ringrage · ridingf · gseeker · galastrm): 곡마다
+        foreach (var arc in HootTaitoF3.GameTypes)
+        {
+            string zip = Path.Combine(folder, arc + ".zip");
+            if (!File.Exists(zip)) continue;
+            string dir = ZipFolder.Extract(zip);
+            var hoot = Directory.GetFiles(dir, "*" + HootArchive.Extension).Select(HootArchive.Load).FirstOrDefault(x => HootTaitoF3.Handles(x.Driver, x.Type));
+            if (hoot == null) { check("hoot taito " + arc + ": .hoot entry", false, "none"); continue; }
+            int ok = 0; string first = "";
+            foreach (var t in hoot.Titles) { var r = Measure(hoot, dir, t.Code, 4); if (r.sound) ok++; else if (first.Length == 0) first = " (0x" + t.Code.ToString("X2") + " " + r.note + ")"; }
+            check("hoot taito " + arc + " (F3 sound board, game-named type): songs make sound", HootArchive.Playable(hoot.Driver, hoot.Type) && ok * 2 >= hoot.Titles.Count, ok + " / " + hoot.Titles.Count + first);
+        }
         if (all) return;
         // Jukebox 길: .hoot 곡 → ChipSongs.Load → 스스로 도는 칩 (VgmPlayer)
         string gz = Path.Combine(folder, "groundfx.zip");

@@ -39,7 +39,43 @@ dotnet build src/AdlibComposer.Android -c Debug -t:Install            # USB로 �
 | A1 | v2.3.29 | `AdlibComposer.Player`: `JukeboxSession`(곡 열기 · 재생 · 일시정지 · 정지 · 이동 · 끝 알림, ROL · IMS · MUS · SOP · 트래커 · XM · IT · MIDI(FM) · VGM 계열 · hoot 항목), `SongFolder`(폴더 · zip(언제나 캐시에 풀기) · 곡 여럿 든 파일). SelfTest `player` | 끝 |
 | A2 | v2.3.30 | 안드로이드 앱 뼈대 + `AudioTrack` 출력(`IAudioOutput`) + 리소스(STANDARD.BNK · GENMIDI.OP2 · systems.json) 복사 → 내장 데모 곡 재생 (시험 화면) | 끝 |
 | A3 | v2.3.31 | Jukebox 화면 최소판: 저장소 권한(모든 파일 접근), 폴더 목록 · zip · 곡 여럿 든 파일, 재생 · 일시정지 · 정지 · 이전 · 다음 · 위치 막대, 다음 곡 자동 · 한 곡 반복, 마지막 폴더 기억 | 끝 (기기 확인 전) |
-| A4 | | 성능 확인 · AOT, 백그라운드 재생 중 화면 꺼짐 처리, 서명한 릴리스 APK 만들기 | |
+| A4 | v2.3.32 | 전경 서비스 (화면 꺼도 재생, 알림) + 부분 wake lock, 렌더 부하 표시, Release = 전체 AOT (arm64, 약 9.7MB), 서명 키 설정 자리 | 끝 (기기 확인 전) |
+
+## 태블릿에 설치 (권장: Release)
+
+```
+dotnet publish src/AdlibComposer.Android -c Release
+```
+
+→ `src/AdlibComposer.Android/bin/Release/net10.0-android/publish/net.fmopltool.jukebox-Signed.apk` 를 태블릿에 복사해 설치 (출처를 알 수 없는 앱 허용). USB 디버깅이 켜져 있으면 `adb install -r <apk>`.
+
+- Release = 전체 AOT (엔진을 미리 기계어로): Debug(JIT)보다 칩 · CPU 에뮬레이션이 빠르다. arm64 전용.
+- 데크 아래 **렌더 부하 %** = 소리 블록 하나를 만드는 데 든 시간 ÷ 그 소리 길이. 80%를 넘으면 끊길 수 있다 (무거운 hoot 항목 · 칩 많은 VGM).
+- 재생 중에는 알림이 뜨고 (전경 서비스) 화면을 꺼도 계속 재생한다. 정지 · 일시정지하면 알림이 없어진다.
+
+### 서명 키 (선택)
+
+키를 정하지 않으면 이 PC의 .NET 디버그 키로 서명된다. 다른 PC에서 만든 APK로 덮어 설치하려면 같은 키가 필요하다 → 키를 한 번 만들고 두 PC에 같은 파일을 둔다 (저장소에 넣지 않음, `.gitignore`).
+
+```
+%LOCALAPPDATA%\Android\jdkin\keytool -genkeypair -v -keystore %USERPROFILE%mopl-jukebox.keystore -alias jukebox -keyalg RSA -keysize 2048 -validity 36500
+```
+
+`src/AdlibComposer.Android/signing.local.props`:
+
+```xml
+<Project>
+  <PropertyGroup>
+    <AndroidKeyStore>true</AndroidKeyStore>
+    <AndroidSigningKeyStore>$(USERPROFILE)mopl-jukebox.keystore</AndroidSigningKeyStore>
+    <AndroidSigningKeyAlias>jukebox</AndroidSigningKeyAlias>
+    <AndroidSigningStorePass>비밀번호</AndroidSigningStorePass>
+    <AndroidSigningKeyPass>비밀번호</AndroidSigningKeyPass>
+  </PropertyGroup>
+</Project>
+```
+
+이미 디버그 키로 설치한 앱은 키가 바뀌면 덮어 설치가 안 된다 → 한 번 지우고 설치.
 
 ## 화면 (A3)
 

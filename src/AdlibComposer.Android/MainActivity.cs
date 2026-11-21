@@ -48,6 +48,8 @@ public class MainActivity : Activity
     private readonly Handler handler = new Handler(Looper.MainLooper);
     private Action tick;
     private ISharedPreferences prefs;
+    private TextView loadText;
+    private bool servicePlaying;
 
     private static string StorageRoot { get { return Android.OS.Environment.ExternalStorageDirectory.AbsolutePath; } }
 
@@ -64,6 +66,10 @@ public class MainActivity : Activity
 
         tick = () => { Refresh(); handler.PostDelayed(tick, 100); };
         handler.Post(tick);
+
+        // 재생 알림 (안드로이드 13+는 알림 권한을 묻는다 — 거절해도 재생은 된다)
+        if (Build.VERSION.SdkInt >= BuildVersionCodes.Tiramisu && CheckSelfPermission(Android.Manifest.Permission.PostNotifications) != Permission.Granted)
+            RequestPermissions(new[] { Android.Manifest.Permission.PostNotifications }, 2);
 
         if (HasStorageAccess()) OpenStart();
         else RequestStorageAccess();
@@ -160,6 +166,8 @@ public class MainActivity : Activity
 
         statusText = DeckText(13, "#E0A060");
         deck.AddView(statusText);
+        loadText = DeckText(12, "#6E7784");
+        deck.AddView(loadText);
         body.AddView(deck, new LinearLayout.LayoutParams(0, 0, 1) { Weight = 1 });
 
         SetContentView(root);
@@ -436,6 +444,11 @@ public class MainActivity : Activity
         }
         seek.Enabled = s.HasSong;
         playButton.Text = s.State == PlayState.Playing ? "❚❚" : "▶";
+
+        // 재생 중이면 전경 서비스 (화면을 꺼도 계속)
+        bool playing = s.State == PlayState.Playing;
+        if (playing != servicePlaying) { servicePlaying = playing; PlaybackService.Update(this, playing, s.Title); }
+        loadText.Text = playing ? "렌더 부하 " + (int)Math.Round(AndroidAudioOutput.Load * 100) + "%" + (AndroidAudioOutput.Load > 0.8 ? " — 끊길 수 있음" : "") : "";
     }
 
     private static string Clock(double sec)
@@ -447,6 +460,7 @@ public class MainActivity : Activity
     protected override void OnDestroy()
     {
         handler.RemoveCallbacks(tick);
+        if (IsFinishing && !servicePlaying) PlaybackService.Update(this, false, null);
         base.OnDestroy();
     }
 

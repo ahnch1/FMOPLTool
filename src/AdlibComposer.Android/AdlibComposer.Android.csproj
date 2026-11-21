@@ -21,6 +21,18 @@
     <!-- Debug APK도 어셈블리를 APK 안에 (빠른 배포 끔): APK 파일만 태블릿에 복사해 설치해도 돈다 -->
     <EmbedAssembliesIntoApk>true</EmbedAssembliesIntoApk>
   </PropertyGroup>
+  <!-- Release: 전부 미리 컴파일 (AOT) — 칩 · CPU 에뮬레이션이 JIT 준비 없이 바로 빠르게. APK는 커진다 -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <RunAOTCompilation>true</RunAOTCompilation>
+    <AndroidEnableProfiledAot>false</AndroidEnableProfiledAot>
+    <AndroidPackageFormat>apk</AndroidPackageFormat>
+    <RuntimeIdentifiers>android-arm64</RuntimeIdentifiers>
+  </PropertyGroup>
+  <!--
+    서명 키 (저장소에 넣지 않음): 이 폴더에 signing.local.props가 있으면 그 키로 서명 (docs/android.md). 없으면 이 PC의 디버그 키.
+    두 PC에서 만든 APK를 덮어 설치하려면 같은 키를 써야 한다.
+  -->
+  <Import Project="signing.local.props" Condition="Exists('signing.local.props')" />
   <!-- SDK · JDK 위치: 따로 정하지 않았으면 InstallAndroidDependencies로 받은 사용자 폴더 -->
   <PropertyGroup>
     <AndroidSdkDirectory Condition="'$(AndroidSdkDirectory)' == '' And '$(ANDROID_HOME)' == '' And Exists('$(LOCALAPPDATA)\Android\Sdk')">$(LOCALAPPDATA)\Android\Sdk</AndroidSdkDirectory>

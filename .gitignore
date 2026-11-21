@@ -369,3 +369,8 @@ FMOPLTool.cfg
 
 # Munt 빌드 작업 폴더 (src/AdlibComposer.Mt32/build_mt32emu.bat)
 src/AdlibComposer.Mt32/build/
+
+# 안드로이드 서명 키 설정 (비밀번호 포함, 사용자별)
+src/AdlibComposer.Android/signing.local.props
+*.keystore
+*.jks

@@ -31,6 +31,12 @@ public sealed class AndroidAudioOutput : IAudioOutput
 
     public bool IsOpen { get { return track != null; } }
 
+    /// <summary>
+    /// 렌더 부하: 블록 하나를 채우는 데 걸린 시간 ÷ 그 블록의 소리 길이 (부드럽게). 1에 가까우면 소리가 끊긴다.
+    /// 화면이 보여 준다 (태블릿이 그 곡을 따라가는지 보기).
+    /// </summary>
+    public static double Load { get; private set; }
+
     public void Start()
     {
         if (track != null) return;
@@ -57,10 +63,15 @@ public sealed class AndroidAudioOutput : IAudioOutput
         var t = track;
         if (t == null) return;
         var buf = new short[frames * channels];
+        var sw = new System.Diagnostics.Stopwatch();
+        double blockSeconds = frames / (double)sampleRate, load = 0;
         while (running)
         {
+            sw.Restart();
             try { fill(buf, frames); }
             catch (Exception) { Array.Clear(buf, 0, buf.Length); }
+            load += (sw.Elapsed.TotalSeconds / blockSeconds - load) * 0.05;
+            Load = load;
             int off = 0;
             while (running && off < buf.Length)
             {

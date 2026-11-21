@@ -106,26 +106,28 @@ public sealed class Pc98Machine : DosMachine, IHootMachine
     private void RaiseIrq(int irq)
     {
         if (irq < 8) master.Irr |= 1 << irq;
-        else { slave.Irr |= 1 << (irq - 8); master.Irr |= 1 << 7; }
+        else slave.Irr |= 1 << (irq - 8);   // 주 IRQ7 (종 연결)은 DeliverIrq가 종의 열린 요청으로 그때그때 정한다
     }
 
     private void LowerIrq(int irq)
     {
         if (irq < 8) master.Irr &= ~(1 << irq);
-        else { slave.Irr &= ~(1 << (irq - 8)); if ((slave.Irr & ~slave.Imr) == 0) master.Irr &= ~(1 << 7); }
+        else slave.Irr &= ~(1 << (irq - 8));
     }
 
     /// <summary>CPU에 넣을 수 있는 인터럽트가 있으면 넣는다.</summary>
     private bool DeliverIrq()
     {
         if (!Cpu.GetFlag(X86.IF)) return false;
+        // 종 INT 출력 = 열린 요청이 있는가: 종이 막은 동안 온 요청도 나중에 열면 살아난다 (예전엔 주 IRQ7을 지워 영영 잃었다)
+        if (slave.Pending() >= 0) master.Irr |= 0x80; else master.Irr &= ~0x80;
         int m = master.Pending();
         if (m < 0) return false;
         int vector;
         if (m == 7)
         {
             int s = slave.Pending();
-            if (s < 0) { master.Irr &= ~0x80; return false; }
+            if (s < 0) return false;
             vector = slave.Base + s;
             if (!Cpu.HardwareInterrupt(vector)) return false;
             if (Trace) { Count(TraceVectors, vector); TraceIoAdd("IRQ>" + vector.ToString("X2")); }
@@ -266,13 +268,10 @@ public sealed class Pc98Machine : DosMachine, IHootMachine
 
     private void TimerOverflow(int which)
     {
-        bool enabled = (timerCtl & (which == 0 ? 4 : 8)) != 0;
-        if (enabled)
-        {
-            bool was = timerFlags != 0;
-            timerFlags |= which == 0 ? 1 : 2;
-            if (!was && !(va && vaSoundMasked)) RaiseIrq(SoundIrq);
-        }
+        // hoot ssFMTimer · ssSoundDriverManager: 플래그는 LOAD만으로 선다 (ENABLE 없이 188h를 읽어 기다리는 보드 찾기),
+        // IRQ는 ENABLE일 때 넘칠 때마다 한 번씩 (플래그를 안 지우는 드라이버도 계속 틱을 받는다)
+        timerFlags |= which == 0 ? 1 : 2;
+        if ((timerCtl & (which == 0 ? 4 : 8)) != 0 && !(va && vaSoundMasked)) RaiseIrq(SoundIrq);
     }
 
     // ------------------------------------------------------------ PC-88VA (hoot pc88va): 포트만 다른 PC-98 기계
@@ -290,6 +289,7 @@ public sealed class Pc98Machine : DosMachine, IHootMachine
         switch (port)
         {
             case 0x44: return 0x188; case 0x45: return 0x18A; case 0x46: return 0x18C; case 0x47: return 0x18E;
+            case 0xA8: return 0x188; case 0xA9: return 0x18A; case 0xAC: return 0x18C; case 0xAD: return 0x18E;   // hoot PC-88 드라이버: 사운드 보드 II
             case 0x188: return 0x00; case 0x18A: return 0x02; case 0x184: return 0x08; case 0x186: return 0x0A;
             case 0x1A0: return 0x71; case 0x1A2: return 0x73; case 0x1A4: return 0x75; case 0x1A6: return 0x77;
         }
@@ -474,7 +474,7 @@ public sealed class Pc98Machine : DosMachine, IHootMachine
     {
         if (va)
         {
-            if (port == 0x32) return (byte)va32;
+            if (port == 0x32 || port == 0xAA) return (byte)va32;
             if (port == 0x18C || port == 0x18E || port == 0x00 || port == 0x02 || port == 0x08 || port == 0x0A || (port >= 0x71 && port <= 0x77)) return 0xFF;   // PC-98 자리는 VA에 없음
             port = VaPort(port);
         }
@@ -557,7 +557,7 @@ public sealed class Pc98Machine : DosMachine, IHootMachine
     {
         if (va)
         {
-            if (port == 0x32) { va32 = value; vaSoundMasked = (value & 0x80) != 0; return; }
+            if (port == 0x32 || port == 0xAA) { va32 = value; vaSoundMasked = (value & 0x80) != 0; return; }
             if (port == 0x197 || port == 0x18C || port == 0x18E || port == 0x00 || port == 0x02 || port == 0x08 || port == 0x0A || (port >= 0x71 && port <= 0x77)) return;
             port = VaPort(port);
         }

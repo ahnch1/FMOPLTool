@@ -31,6 +31,7 @@
 | 2.0.4 | 8-6 (메가드라이브) | hoot megadrive generic_z80 · iyinc: `Audio/HootMegaDrive.cs` (Z80 사운드 쪽 · 카트리지의 Z80 드라이버를 RAM에, 요청 주소) |
 | 2.0.5 | 8-7 (X68000) | MC68000 `Audio/Cpu/M68000.cs` + hoot x68k generic: `Audio/HootX68k.cs` (OPM · ADPCM · DMA · MFP, E00010h = hoot가 대신 하는 IOCS · DOS) |
 | 2.0.6 | 8-7 (X68000 MIDI) | x68k MIDI 판: YM3802 MIDI 보드 (EAFA00h) → 살아 있는 MIDI 곡 (`HootX68k.LoadMidi`) |
+| 2.2.3 | 곡 목록 | titlelist · range가 없는 항목은 bgm 파일이 곧 곡 목록 (코드 = bgm 번호, 제목 = 파일 이름 — FM-7 Reviver · WiBARM 등이 트리에서 재생됨) |
 | 2.2.2 | FM-7 · FM77AV | hoot fm7 · fm77av generic: `Audio/HootFm7.cs` (6809 + 타이머 IRQ · PSG · OPN · WHG, hoot FD58h~FD5Ch), 29 / 29항목 · 곡 279 / 308 |
 | 2.2.1 | PC-98 벡터 · 곡 핸들 | 사용자 벡터 40h~7Fh를 0060:xxxx 함정으로 (NEC MS-DOS — MUSIC.COM "ＦＭ音源ドライバー"는 INT 48h 세그먼트가 0060h가 아니면 이미 상주로 보고 풀어 버림), 곡 요청 때 닫힌 곡 핸들 다시 열기 (FUGA OPNDRV가 상주 전에 핸들 0~31을 닫음) → pc98dos 300 표본 271 → 283 / 303, PC/AT 그대로 |
 | 2.2.0 | 판 올림 | 2.1.x 정리: 아케이드 보드 70여 가지 · 386 리얼 모드 · DOS 로더 · Game Blaster / Tandy · Hoot 페이지 화면 — docs/todo.md 현황 다시 잼 |

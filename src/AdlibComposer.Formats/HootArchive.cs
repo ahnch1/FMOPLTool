@@ -376,6 +376,10 @@ public static class HootArchive
                     for (long c = lo; c <= hi && r.Titles.Count < 256; c++) r.Titles.Add(((int)c, RangeTitle(fmt, c)));
                 }
         }
+        // 제목도 range도 없으면 bgm 파일이 곧 곡 목록 (코드 = bgm 번호, 제목 = 파일 이름 — FM-7 Reviver · WiBARM 등)
+        if (r.Titles.Count == 0)
+            foreach (var (type, off, text) in r.Roms)
+                if (type == "bgm" && off >= 0 && r.Titles.Count < 256) r.Titles.Add(((int)off, Path.GetFileNameWithoutExtension(text)));
         return r;
     }
 

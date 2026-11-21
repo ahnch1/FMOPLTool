@@ -11,6 +11,8 @@ public static class HootFm7Tests
 {
     public static void Run(Action<string, bool, string> check)
     {
+        var noTitles = HootArchive.Parse("<game><name>X</name><driver type=\"generic\">fm7</driver><romlist archive=\"x\"><rom type=\"bgm\" offset=\"0x00\">MUS00.BIN</rom><rom type=\"bgm\" offset=\"0x01\">MUS01.BIN</rom></romlist><titlelist></titlelist></game>");
+        check("hoot entry without titles or range: bgm files become the song list", noTitles.Titles.Count == 2 && noTitles.Titles[1].Code == 1 && noTitles.Titles[1].Title == "MUS01", string.Join(",", noTitles.Titles));
         check("hoot fm7 / fm77av generic: playable, own machine", HootArchive.Playable("fm7", "generic") && HootArchive.Playable("fm77av", "generic") && HootFm7.Handles("FM77AV", "Generic") && !HootFm7.Handles("fm7", "xanadu"), "");
 
         // 기계: 시작 코드가 OPN에 쓰기 (FD16h 자료, FD15h 명령 3 주소 · 2 쓰기) → 칩 기록, 타이머 IRQ (FD02h bit2) → FD03h bit2 = 0
@@ -55,11 +57,7 @@ public static class HootFm7Tests
     }
 
     /// <summary>곡 코드: titlelist, 없으면 bgm 번호.</summary>
-    public static int[] Codes(HootArchive.Entry e)
-    {
-        if (e.Titles.Count > 0) return e.Titles.Select(t => t.Code).ToArray();
-        return e.Roms.Where(r => r.Type == "bgm").Select(r => (int)r.Offset).ToArray();
-    }
+    public static int[] Codes(HootArchive.Entry e) { return e.Titles.Select(t => t.Code).ToArray(); }
 
     public static (bool sound, string note) Measure(HootArchive.Entry e, string dir, int code, double seconds)
     {

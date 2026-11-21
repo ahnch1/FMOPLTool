@@ -66,6 +66,11 @@ public static class HootPc98Tests
         var mv = new Pc98Machine(new DosFileSystem(), Pc98Machine.Board.Opn, 8);
         check("PC-98 user vectors 40h-7Fh point into DOS segment 0060h (NEC MS-DOS), still stubs; 3Fh / 80h stay F000", mv.PeekWord(0, 0x48 * 4 + 2) == 0x0060 && mv.VectorIsStub(0x48) && mv.PeekWord(0, 0x3F * 4 + 2) == DosMachine.StubSeg && mv.PeekWord(0, 0x80 * 4 + 2) == DosMachine.StubSeg && mv.PeekByte(0x60, (0x48 - 0x40) * 4 + 1) == 0x48,
             mv.PeekWord(0, 0x48 * 4 + 2).ToString("X4") + ":" + mv.PeekWord(0, 0x48 * 4).ToString("X4"));
+        var va = new Pc98Machine(new DosFileSystem(), Pc98Machine.Board.Opn, 8) { Va = true };
+        va.Out(0x44, 0x28); va.Out(0x45, 0xF0);   // OPN 44h · 45h
+        va.Out(0x32, 0x80);
+        check("PC-88VA ports: OPN 44h/45h → chip log, 32h latch (sound IRQ mask), slave IRQ4 open", va.Log.Any(x => x.kind == 0 && x.reg == 0x28 && x.val == 0xF0) && va.In(0x32) == 0x80 && va.In(0x186) == 0xEF,
+            "slave IMR " + va.In(0x186).ToString("X2"));
         var m86 = new Pc98Machine(new DosFileSystem(), Pc98Machine.Board.Opna, 8);
         m86.Out(0xA468, 0xB5);
         check("PC-98 86 board PCM ports: A468h latch (IRQ flag bit4 reads 0), A466h bit0 only", m86.In(0xA468) == 0xA5 && (m86.In(0xA466) & 0xFE) == 0 && HootPc98.Is386(new HootArchive.Entry { Driver = "pc9821dos" }), m86.In(0xA468).ToString("X2"));
@@ -284,7 +289,7 @@ public static class HootPc98Tests
             foreach (var h in Directory.GetFiles(dir, "*" + HootArchive.Extension))
             {
                 var e = HootArchive.Load(h);
-                if (!e.Driver.Equals("pc98dos", StringComparison.OrdinalIgnoreCase) && !e.Driver.Equals("pc9821dos", StringComparison.OrdinalIgnoreCase) && !HootPc98.IsGeneric(e)) continue;
+                if (!e.Driver.Equals("pc98dos", StringComparison.OrdinalIgnoreCase) && !e.Driver.Equals("pc9821dos", StringComparison.OrdinalIgnoreCase) && !e.Driver.Equals("pc88vados", StringComparison.OrdinalIgnoreCase) && !HootPc98.IsGeneric(e)) continue;
                 if (HootPc98.IsMidiEntry(e)) continue;
                 string key = (HootPc98.IsGeneric(e) ? e.Driver.ToLowerInvariant() + " " : "") + e.Type.ToLowerInvariant();
                 stats.TryGetValue(key, out var st);
@@ -350,7 +355,7 @@ public static class HootPc98Tests
     public static int TraceEntry(string zip, int which, double seconds)
     {
         string dir = ZipFolder.Extract(zip);
-        var hoots = Directory.GetFiles(dir, "*" + HootArchive.Extension).Where(h => { var he = HootArchive.Load(h); return he.Driver == "pc98dos" || he.Driver == "pc9821dos" || HootPc98.IsGeneric(he); }).OrderBy(x => x, StringComparer.Ordinal).ToList();
+        var hoots = Directory.GetFiles(dir, "*" + HootArchive.Extension).Where(h => { var he = HootArchive.Load(h); return he.Driver == "pc98dos" || he.Driver == "pc9821dos" || he.Driver == "pc88vados" || HootPc98.IsGeneric(he); }).OrderBy(x => x, StringComparer.Ordinal).ToList();
         if (hoots.Count == 0) { Console.WriteLine("no pc98dos entry"); return 1; }
         var e = HootArchive.Load(hoots[Math.Min(which, hoots.Count - 1)]);
         Console.WriteLine(e.Name + "  " + e.Type + "  " + string.Join(", ", e.Options.Select(o => o.Key + "=" + o.Value)));

@@ -247,6 +247,7 @@ public static class HootPc98
         if (IsPcAt(e)) m = new PcAtMachine(fs, CardOf(e), Math.Max(1, e.Option("clockmul", 4)));
         else m = new Pc98Machine(fs, BoardOf(e), Math.Max(1, e.Option("clockmul", 8))) { Trace = TraceBoot };
         m.Cpu.Is386 = Is386(e);
+        if (m is Pc98Machine va) va.Va = e.Driver.Equals("pc88vados", StringComparison.OrdinalIgnoreCase);   // PC-88VA DOS = 포트만 다른 같은 기계
         var hm = (IHootMachine)m;
         hm.HootVector = e.Option("funcvect", 0x7F) & 0xFF;
         shells = new List<DosMachine.ShellResult>();
@@ -314,6 +315,7 @@ public static class HootPc98
     {
         var m = new Pc98Machine(fs, BoardOf(e), Math.Max(1, e.Option("clockmul", 8))) { Trace = TraceBoot };
         if (e.Driver.Equals("pc98", StringComparison.OrdinalIgnoreCase)) m.SetAutoEoi(true);
+        m.Va = e.Driver.Equals("pc88va", StringComparison.OrdinalIgnoreCase);   // PC-88VA = 포트만 다른 같은 기계
         m.MpuPresent = IsMidiEntry(e);   // hoot는 MIDI 판에만 MPU를 붙인다
         ((IHootMachine)m).HootVector = e.Option("funcvect", 0x7F) & 0xFF;
         bool real = e.Option("addressing", e.Option("adressing", 0)) == 1;

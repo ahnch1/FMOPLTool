@@ -271,8 +271,29 @@ public sealed class Pc98Machine : DosMachine, IHootMachine
         {
             bool was = timerFlags != 0;
             timerFlags |= which == 0 ? 1 : 2;
-            if (!was) RaiseIrq(SoundIrq);
+            if (!was && !(va && vaSoundMasked)) RaiseIrq(SoundIrq);
         }
+    }
+
+    // ------------------------------------------------------------ PC-88VA (hoot pc88va): 포트만 다른 PC-98 기계
+
+    /// <summary>
+    /// PC-88VA 포트 배치 (MAME pc88va · 사운드 BIOS로 확인): OPN · OPNA 44h~47h, 8259 주 188h · 18Ah · 종 184h · 186h, 8253 1A0h~1A6h,
+    /// 32h bit7 = 사운드 인터럽트 막음 (SINTM). 나머지 (hoot 7E0h~ · 7D0h~)는 PC-98 기계 그대로. 사운드 IRQ = 종 IRQ4 (IRQ12, PC-98과 같음).
+    /// </summary>
+    public bool Va { get { return va; } set { va = value; if (value) slave.Imr &= ~0x10; } }   // VA BIOS가 사운드 (종 IRQ4)를 열어 둔 채로 넘긴다 (R-Type은 스스로 열지 않음)
+    private bool va, vaSoundMasked;
+    private int va32;
+
+    private static int VaPort(int port)
+    {
+        switch (port)
+        {
+            case 0x44: return 0x188; case 0x45: return 0x18A; case 0x46: return 0x18C; case 0x47: return 0x18E;
+            case 0x188: return 0x00; case 0x18A: return 0x02; case 0x184: return 0x08; case 0x186: return 0x0A;
+            case 0x1A0: return 0x71; case 0x1A2: return 0x73; case 0x1A4: return 0x75; case 0x1A6: return 0x77;
+        }
+        return port;
     }
 
     // ------------------------------------------------------------ VSYNC · BEEP · hoot
@@ -451,6 +472,12 @@ public sealed class Pc98Machine : DosMachine, IHootMachine
 
     public override byte In(int port)
     {
+        if (va)
+        {
+            if (port == 0x32) return (byte)va32;
+            if (port == 0x18C || port == 0x18E || port == 0x00 || port == 0x02 || port == 0x08 || port == 0x0A || (port >= 0x71 && port <= 0x77)) return 0xFF;   // PC-98 자리는 VA에 없음
+            port = VaPort(port);
+        }
         if (Trace) Count(TracePorts, port);
         if (Trace && MpuPresent && (port == 0xE0D0 || port == 0xE0D2))
         {
@@ -528,6 +555,12 @@ public sealed class Pc98Machine : DosMachine, IHootMachine
 
     public override void Out(int port, byte value)
     {
+        if (va)
+        {
+            if (port == 0x32) { va32 = value; vaSoundMasked = (value & 0x80) != 0; return; }
+            if (port == 0x197 || port == 0x18C || port == 0x18E || port == 0x00 || port == 0x02 || port == 0x08 || port == 0x0A || (port >= 0x71 && port <= 0x77)) return;
+            port = VaPort(port);
+        }
         if (Trace) Count(TracePorts, port | 0x10000);
         if (Trace && (port == 0xE0D0 || port == 0xE0D2 || port == 0x02 || port == 0x00 || port == 0x08 || port == 0x0A)) TraceIoAdd("w" + port.ToString("X") + "=" + value.ToString("X2") + (Cpu.GetFlag(X86.IF) ? "" : "!IF") + "@" + Cpu.CS.ToString("X4") + ":" + Cpu.IP.ToString("X4"));
         int v = value;

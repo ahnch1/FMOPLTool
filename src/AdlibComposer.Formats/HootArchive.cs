@@ -19,7 +19,7 @@ public static class HootArchive
 {
     public const string Extension = ".hoot";
     /// <summary>항목을 써 둔 표시 (재생할 수 있는 드라이버가 늘면 이름을 바꿔 이미 푼 zip에도 다시 쓴다: 2 = SPC · KSS · NSF · GBS 더함, 3 = PC/AT DOS, 4 = MIDI 판, 5 = pc98vx · pc98).</summary>
-    private const string Mark = ".fmopl_hoot57";
+    private const string Mark = ".fmopl_hoot58";
 
     /// <summary>
     /// 재생할 수 있는 hoot 드라이버 · 형식: pc98dos opn · opna · 86 · beep · pcatdos adlib · soundblaster16 · beep (기계 흉내), 그리고 이미 읽는 파일을 곡 코드로 고르는 것 —
@@ -31,7 +31,7 @@ public static class HootArchive
         string d = (driver ?? "").Trim().ToLowerInvariant(), t = (type ?? "").Trim().ToLowerInvariant();
         switch (d)
         {
-            case "pc98dos": case "pc9821dos": case "pc98vx": case "pc98": return t == "opn" || t == "opna" || t == "86" || t == "beep" || (d == "pc98dos" && t == "soundblaster16");
+            case "pc98dos": case "pc9821dos": case "pc88vados": case "pc98vx": case "pc98": case "pc88va": return t == "opn" || t == "opna" || t == "86" || t == "beep" || (d == "pc98dos" && t == "soundblaster16");
             case "pcatdos": return t == "adlib" || t == "soundblaster16" || t == "beep" || t == "gameblaster" || t == "tandy";
             case "snes": return t == "spc";
             case "msx": return t == "kss" || t == "generic";
@@ -95,14 +95,14 @@ public static class HootArchive
     public static bool MidiPlayable(string driver)
     {
         string d = (driver ?? "").Trim().ToLowerInvariant();
-        return d == "pc98dos" || d == "pc9821dos" || d == "pcatdos" || IsPc98Generic(d) || d == "x68k";
+        return d == "pc98dos" || d == "pc9821dos" || d == "pc88vados" || d == "pcatdos" || IsPc98Generic(d) || d == "x68k";
     }
 
     /// <summary>DOS 없는 PC-98 (hoot PC-98generic): pc98vx, 옛 방식 pc98.</summary>
     public static bool IsPc98Generic(string driver)
     {
         string d = (driver ?? "").Trim().ToLowerInvariant();
-        return d == "pc98vx" || d == "pc98";
+        return d == "pc98vx" || d == "pc98" || d == "pc88va";
     }
 
     /// <summary>항목 하나를 재생할 수 있는가 (드라이버 · 형식 · MIDI 판).</summary>

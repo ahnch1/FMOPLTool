@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -238,8 +238,9 @@ public static class JukeboxTests
     }
 
     /// <summary>진단: 곡을 스테레오로 3초 렌더해 모노 끔/켬에서 L−R 크기를 찍는다.</summary>
-    public static int StereoCheck(string songPath, string bankPath)
+    public static int StereoCheck(string songPath, string bankPath, bool nuked = false)
     {
+        if (nuked) OplChip.GlobalCore = OplCore.Nuked;
         Song s; InstrumentBank b;
         using (var fs = File.OpenRead(songPath)) s = songPath.EndsWith(".rol", StringComparison.OrdinalIgnoreCase) ? new RolFormat().Read(fs) : new ImsFormat().Read(fs);
         using (var fs = File.OpenRead(bankPath)) b = new BnkFormat().Read(fs);

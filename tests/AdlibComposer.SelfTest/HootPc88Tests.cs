@@ -91,6 +91,12 @@ public static class HootPc88Tests
         var e4 = HootArchive.Parse(xml.Replace("<options>", "<options><option name=\"baseclock\" value=\"0x04\"/>"));
         var m4 = HootPc88.Boot(e4, n => files.TryGetValue(n, out var d) ? d : null);
         check("hoot pc88: Z80 clock = baseclock option (MHz), default 8 MHz (hoot)", m.CpuHz == 7987200 && m4.CpuHz == 3993600, m.CpuHz + " / " + m4.CpuHz);
+        var m5 = HootPc88.Boot(e, n => files.TryGetValue(n, out var d) ? d : null);
+        m5.Rtc = false;
+        int i0 = m5.Interrupts;
+        m5.Out(0xE6, 0x03);
+        m5.RunSeconds(0.1);
+        check("hoot pc88: port E6h does not start RTC / VRTC interrupts (hoot: only use_rtc / use_vrtc options)", m5.Interrupts == i0, (m5.Interrupts - i0) + " interrupts");
         var v = m.ToVgm(1, 0);
         check("hoot pc88: VGM YM2203", v.Ym2203Clock > 0 && v.IsPlayable, v.ChipSummary);
     }
@@ -100,7 +106,7 @@ public static class HootPc88Tests
         string root = SopTests.FindDir("_incoming");
         string folder = root == null ? null : Path.Combine(root, "Hootarchive", "pc88");
         if (folder == null || !Directory.Exists(folder)) { Console.WriteLine("SKIP  hoot pc88 real files (_incoming/Hootarchive/pc88 not found)"); return; }
-        foreach (var arc in new[] { "starcruiser88", "reviver", "tnmbox_88", "xzr", "snatcher", "lmpereur" })
+        foreach (var arc in new[] { "starcruiser88", "reviver", "tnmbox_88", "xzr", "snatcher", "lmpereur", "kami", "100yen2" })
         {
             string zip = Path.Combine(folder, arc + ".zip");
             if (!File.Exists(zip)) { Console.WriteLine("SKIP  hoot pc88 " + arc + " (zip not found)"); continue; }

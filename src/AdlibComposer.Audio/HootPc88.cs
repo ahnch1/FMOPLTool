@@ -275,8 +275,8 @@ public static class HootPc88
             while (Cpu.Cycles < end)
             {
                 long now = Cpu.Cycles;
-                if (now >= nextVrtc) { nextVrtc += vrtcPeriod; if (Vrtc || (portE6 & 2) != 0) vrtcPending = true; }
-                if (now >= nextRtc) { nextRtc += rtcPeriod; if (Rtc || (portE6 & 1) != 0) rtcPending = true; }
+                if (now >= nextVrtc) { nextVrtc += vrtcPeriod; if (Vrtc) vrtcPending = true; }
+                if (now >= nextRtc) { nextRtc += rtcPeriod; if (Rtc) rtcPending = true; }
                 if (now >= nextTimerA) { nextTimerA += TimerAPeriod; Overflow(0); }
                 if (now >= nextTimerB) { nextTimerB += TimerBPeriod; Overflow(1); }
                 if (Cpu.Iff1 && (vrtcPending || rtcPending || opnPending))
@@ -403,7 +403,7 @@ public static class HootPc88
                 case 0x46: case 0xAC: if (Opna) addr1 = v; break;
                 case 0x47: case 0xAD: if (Opna) OpnWrite(1, addr1, v); break;
                 case 0x32: case 0xAA: portSintm = v; break;
-                case 0xE6: portE6 = v; break;
+                case 0xE6: portE6 = v; break;   // 기억만: hoot는 RTC · VRTC를 옵션 use_rtc · use_vrtc로만 낸다 (Kami no Machi는 E6h ← 3 뒤 RTC 벡터가 EI 없는 RET라 인터럽트가 영영 꺼졌다)
             }
         }
 

@@ -115,7 +115,8 @@
 - [x] 타이토 rainbow · opwolf · daisenpuu 3 · 60곡 — v2.3.25 `HootTaitoOpm` (rainbow · opwolf = Rastan 배치, daisenpuu = 타이토 X 배치)
 - [x] 타이토 volfied 1 · 12곡 — v2.3.26 `HootTaitoOpm` Volfied 배치
 - [x] 타이토 darius 1 · 19곡 — v2.3.27 `HootTaitoOpm` Darius 배치 (YM2203 둘), 18곡 (ADPCM Z80 아직)
-- [ ] 타이토 남은 형식: flstory 5 · nycaptor 3 · msisaac · lsasquad · buggychl (Z80 + AY + MSM5232 — 새 칩), tnzs 2 · kageki · chukatai · plumppop · arkanoid2 · insectx · kabukiz · kicknrun · kikikai (YM2203 계열),  ashnojoe · mlanding · lkage · halleysc 2 · darkmist · panicr · cybertnk · bshark (68000 사운드) · mmpanic 2 · funkyfig · chaknpop · arkanoid · empcity · kurikint · fhawk · daikaiju · flipull · galastrm
+- [x] 타이토 mlanding 1 · 7곡 — v2.3.28 `HootTaitoOpm` Rastan 배치
+- [ ] 타이토 남은 형식: flstory 5 · nycaptor 3 · msisaac · lsasquad · buggychl (Z80 + AY + MSM5232 — 새 칩), tnzs 2 · kageki · chukatai · plumppop · arkanoid2 · insectx · kabukiz · kicknrun · kikikai (YM2203 계열),  ashnojoe ·  lkage · halleysc 2 · darkmist · panicr · cybertnk · bshark (68000 사운드) · mmpanic 2 · funkyfig · chaknpop · arkanoid · empcity · kurikint · fhawk · daikaiju · flipull · galastrm
 - [x] 코나미 K053260 11 · 616곡 — v2.1.43 `HootKonami53260` + K053260 칩, 606곡
 - [x] 코나미 K054539 Z80 판 (054539 4 · 054539x2 6) · 267곡 — v2.1.44 `HootKonami54539` + K054539 칩, 266곡
 - [ ] 아이렘 M92 (m92) 16 — V35 (x86 계열) + YM2151 + **GA20**

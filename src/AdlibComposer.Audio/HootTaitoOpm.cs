@@ -32,7 +32,7 @@ public static class HootTaitoOpm
         if (!string.Equals((driver ?? "").Trim(), "taito", StringComparison.OrdinalIgnoreCase)) return false;
         string t = (type ?? "").Trim().ToLowerInvariant();
         return t == "fullt" || t == "masterw" || t == "viofight"
-            || t == "rainbow" || t == "daisenpuu" || t == "opwolf" || t == "volfied" || t == "darius";   // MAME rainbow · taito_x (twinhawk) · opwolf: Rastan과 같은 사운드 맵 (9000h YM2151 · A000h TC0140SYT)
+            || t == "rainbow" || t == "daisenpuu" || t == "opwolf" || t == "volfied" || t == "darius" || t == "mlanding";   // MAME rainbow · taito_x (twinhawk) · opwolf · mlanding: Rastan과 같은 사운드 맵 (volfied · darius = 자기 배치) (9000h YM2151 · A000h TC0140SYT)
     }
 
     public static VgmSong Render(HootArchive.Entry e, string dir, int code, double seconds = DefaultSeconds, double fade = DefaultFade)
@@ -239,7 +239,7 @@ public static class HootTaitoOpm
 
         private void MsmStart(int chip)
         {
-            if (msmOn[chip]) return;
+            if (msmOn[chip] || Pcm.Length == 0) return;   // ADPCM ROM이 없는 항목 (mlanding): 빈 바이트를 흘리지 않음
             msmOn[chip] = true;
             MsmStarts++;
             if (msmOwner < 0 || msmOwner == chip || !msmOn[msmOwner]) { msmOwner = chip; Emit(1, 0, 1); Emit(1, 0, 2); }

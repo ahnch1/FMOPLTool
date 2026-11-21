@@ -10,7 +10,7 @@ namespace AdlibComposer.SelfTest;
 /// <summary>hoot 타이토 YM2151 보드 (HootTaitoOpm, type fullt): 만든 Z80 프로그램으로 명령 · MSM5205 시작 / 멈춤 시험, 실제 zip 9개.</summary>
 public static class HootTaitoOpmTests
 {
-    public static readonly string[] Archives = { "rastan", "topspeed", "asuka", "mofflott", "cadash", "exzisus", "galmedes", "earthjkr", "eto", "masterw", "tetrista", "champwr", "viofight", "hitice", "cameltrya", "rainbow", "twinhawk", "opwolf", "volfied", "darius" };
+    public static readonly string[] Archives = { "rastan", "topspeed", "asuka", "mofflott", "cadash", "exzisus", "galmedes", "earthjkr", "eto", "masterw", "tetrista", "champwr", "viofight", "hitice", "cameltrya", "rainbow", "twinhawk", "opwolf", "volfied", "darius", "mlanding" };
 
     public static void Run(Action<string, bool, string> check)
     {

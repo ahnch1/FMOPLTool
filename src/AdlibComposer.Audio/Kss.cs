@@ -265,7 +265,7 @@ public static class Kss
         // VGM으로
         var w = new VgmWriter { System = m.Sys.Name + " (KSS)", Notes = "KSS" };
         if (m.UsedPsg) { w.SetClock(VgmWriter.ClockAy8910, m.ChipClock("AY-3-8910", CpuClock / 2)); w.SetHeaderByte(0x78, 0x00); }
-        if (m.UsedScc || m.UsedSccPlus) w.SetClock(VgmWriter.ClockK051649, m.ChipClock(m.UsedSccPlus ? "SCC+" : "SCC", CpuClock), m.UsedSccPlus ? 0x80000000u : 0);
+        if (m.UsedScc || m.UsedSccPlus) w.SetClock(VgmWriter.ClockK051649, SccEmulator.VgmClock(m.ChipClock(m.UsedSccPlus ? "SCC+" : "SCC", CpuClock)), m.UsedSccPlus ? 0x80000000u : 0);
         if (m.UsedOpll) w.SetClock(VgmWriter.ClockYm2413, m.ChipClock("YM2413", CpuClock));
         if (m.UsedAudio) w.SetClock(VgmWriter.ClockY8950, m.ChipClock("Y8950", CpuClock));
         if (m.UsedSn) w.SetClock(VgmWriter.ClockSn76489, m.ChipClock("SN76489", CpuClock));

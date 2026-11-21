@@ -768,7 +768,7 @@ public sealed class VgmPlayer
     {
         int n = sccFreq[ch];
         bool audible = (sccEnable & (1 << ch)) != 0 && sccVol[ch] > 0 && n > 8;
-        SetVoice(sccBase + ch, audible, audible ? song.SccClock / (32.0 * (n + 1)) : 0, sccVol[ch] / 15f);
+        SetVoice(sccBase + ch, audible, audible ? SccEmulator.InputClock(song.SccClock) / (32.0 * (n + 1)) : 0, sccVol[ch] / 15f);
     }
 
     // ================================================================ OPL

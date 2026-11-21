@@ -203,6 +203,9 @@ public static class ExtraTests
 
         var s = Kss.Render(MakeKss(true), 0, 1, 0);
         check("KSS (synthetic): SCC memory writes → SCC chip", s.HasScc && !s.SccPlus && s.HasPsg, s.ChipSummary);
+        // VGM K051649 클럭 규약 (VGM · MAME · hoot): 1.789772MHz, 음 = 클럭 / (16 × (n + 1)) = 입력 3.58MHz / (32 × (n + 1))
+        check("SCC clock: written as VGM-standard 1.789772 MHz; player reads < 2.5 MHz as half the input clock (old 3.58 MHz files unchanged)",
+            Math.Abs(s.SccClock - 1789772.5) < 1 && Math.Abs(SccEmulator.InputClock(1789772.5) - 3579545) < 1 && SccEmulator.InputClock(3579545) == 3579545, s.SccClock.ToString("0"));
         var ch = VgmPlayer.ChannelsOf(s);
         var su = VgmPlayer.ScanUsed(s);
         int s1 = ch.FindIndex(x => x.Label == "S1");

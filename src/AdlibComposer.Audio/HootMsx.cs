@@ -477,7 +477,7 @@ public static class HootMsx
         {
             var w = new VgmWriter { System = "MSX (hoot generic)", Notes = "hoot msx generic" };
             if (UsedPsg) { w.SetClock(VgmWriter.ClockAy8910, CpuClock / 2); w.SetHeaderByte(0x78, 0x00); }
-            if (UsedScc || UsedSccPlus) w.SetClock(VgmWriter.ClockK051649, CpuClock, UsedSccPlus ? 0x80000000u : 0);
+            if (UsedScc || UsedSccPlus) w.SetClock(VgmWriter.ClockK051649, SccEmulator.VgmClock(CpuClock), UsedSccPlus ? 0x80000000u : 0);
             if (UsedOpll) w.SetClock(VgmWriter.ClockYm2413, CpuClock);
             if (UsedAudio) w.SetClock(VgmWriter.ClockY8950, CpuClock);
             double total = seconds * VgmSong.Rate;

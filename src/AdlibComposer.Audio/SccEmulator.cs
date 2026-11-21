@@ -25,13 +25,22 @@ public sealed class SccEmulator : ISoundChip
 
     public SccEmulator(double clock = MsxClock, int rate = 44100, bool sccPlus = false)
     {
-        Clock = clock;
+        Clock = InputClock(clock);
         Rate = rate;
         IsSccPlus = sccPlus;
         Reset();
     }
 
     public double Clock { get; }
+
+    /// <summary>
+    /// VGM K051649 클럭 → 칩 입력 클럭 (음 = 입력 / (32 × (n + 1))). VGM 규약 · MAME · hoot는 1.79MHz에 ÷16을 쓰므로 2.5MHz 아래면 두 배로 본다
+    /// (예전 이 앱이 적던 3.58MHz 파일은 그대로).
+    /// </summary>
+    public static double InputClock(double vgmClock) { return vgmClock > 0 && vgmClock < 2500000 ? vgmClock * 2 : vgmClock; }
+
+    /// <summary>VGM에 적을 K051649 클럭 (규약 = 입력 클럭의 절반, MSX 1.789772MHz).</summary>
+    public static double VgmClock(double inputClock) { return inputClock / 2; }
     public int Rate { get; }
     /// <summary>true = SCC+ (K052539): 채널 5도 자기 파형.</summary>
     public bool IsSccPlus { get; set; }

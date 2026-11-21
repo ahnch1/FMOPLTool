@@ -31,6 +31,7 @@
 | 2.0.4 | 8-6 (메가드라이브) | hoot megadrive generic_z80 · iyinc: `Audio/HootMegaDrive.cs` (Z80 사운드 쪽 · 카트리지의 Z80 드라이버를 RAM에, 요청 주소) |
 | 2.0.5 | 8-7 (X68000) | MC68000 `Audio/Cpu/M68000.cs` + hoot x68k generic: `Audio/HootX68k.cs` (OPM · ADPCM · DMA · MFP, E00010h = hoot가 대신 하는 IOCS · DOS) |
 | 2.0.6 | 8-7 (X68000 MIDI) | x68k MIDI 판: YM3802 MIDI 보드 (EAFA00h) → 살아 있는 MIDI 곡 (`HootX68k.LoadMidi`) |
+| 2.3.15 | PC-88 곡 덩어리 위치 | hoot snatcher.cpp (OUT 00h → bgm[code]에서 3000h)와 KOEI PATCH (IN 01h → OUT 01h, DE = 4000h를 바로 드라이버에, IN 02h/03h는 안 읽음)로: mfile_size > mdata_size면 파일 = 버퍼, 곡 코드 8~23비트 = 버퍼 안 위치에서 mdata_size만 mdata_addr에. 예전엔 늘 0에서 → KOEI 곡이 모두 첫 덩어리, 첫 덩어리가 곡이 아니면 무음. 새로 소리: 大航海時代 · L'Empereur · 伊忍道 · Operation Europe · Snatcher × 2 → PC-88 517 / 535 (KOEI 12항목 곡마다 다른 덩어리) |
 | 2.3.14 | archive="a,b" · fmbios | 색인은 archive의 첫 zip 이름으로 (예전엔 "rona_msx,fmpac_msx" 전체가 이름이라 어떤 zip과도 안 맞음 — MSX 34 · PC-88 1), 파일은 `HootArchive.Files` (푼 zip → 같은 폴더의 뒤 zip들), MSX fmbios = FMPAC.ROM 4000h~ 16KB 뱅크. 푼 zip 표시 62 (v2.3.7 ds4 · v2.3.13 mxdrv처럼 Playable이 는 형식은 전에 푼 zip에 .hoot가 없었음). MSX 495 / 498 → 524 / 530 (새 항목 32 중 29), PC-88 511 / 535 |
 | 2.3.13 | X68000 mxdrv | x68k mxdrv (sz2w68snd · chorensha68snd · kowin368snd): 2001년 mxdrv.cpp (자체 mxdrv.bin + MDX 한 파일)와 다른 뒤 형식 — data 줄 offset = 곡 코드, 파일 = MDX → `Mdx.Load` (PDX는 같은 폴더). 로컬 zip 2 (sz2w · kowin3) |
 | 2.3.12 | HES · PC-98 OPN 읽기 | hoot hes.cpp: VBlank IRQ1을 VDC 레지스터 5 bit3과 상관없이 → VDC 설정을 뺀 HES 립도 (레지스터 5를 쓴 곡은 예전처럼 bit3을 따름). PC-98 OPN 데이터 읽기: FM 레지스터 = 0, SSG = 쓴 값 (fmgen GetReg) — 300 zip 표본 그대로 |
@@ -149,7 +150,7 @@
 | MIDI 판 PC/AT | 571 / 586 | `--hootmidisurvey pc 1000 20` |
 | MIDI 판 PC-98 | 360 / 641 | `--hootmidisurvey pc98 1709 20` |
 | MSX generic (PSG · OPLL · SCC · SCC+ · MSX-AUDIO) | 524 / 530 (v2.3.14, 첫 곡이 조용하면 다음 곡 5개까지) | `--hootmsxsurvey msx 1000 8` |
-| PC-88 (opn · opna) | 511 / 535 — opn 370/385 · opna 135/143 · 8801-11 · generic 2 · xanadu · xanadu2 · asteka2 (v2.3.14) | `--hoot88survey pc88 1000 6` |
+| PC-88 (opn · opna) | 517 / 535 — opn 375/385 · opna 136/143 · 8801-11 · generic 2 · xanadu · xanadu2 · asteka2 (v2.3.15) | `--hoot88survey pc88 1000 6` |
 | FM-7 · FM77AV (generic) | 29 / 29, 곡 279 / 308 | `--test hootfm7` (HOOT_SONGS=1) |
 | X1 (psg · opm) | 150 / 152 — opm 70/71 · psg 80/81 (v2.3.10) | `--hootx1survey x1 1000 8` |
 | 네오지오 | 137 / 146 (음악일 만한 코드 10h 이상 3곡까지) | `--hootneosurvey roms 200 6` |

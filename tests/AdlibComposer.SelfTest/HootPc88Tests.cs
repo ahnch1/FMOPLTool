@@ -100,7 +100,7 @@ public static class HootPc88Tests
         string root = SopTests.FindDir("_incoming");
         string folder = root == null ? null : Path.Combine(root, "Hootarchive", "pc88");
         if (folder == null || !Directory.Exists(folder)) { Console.WriteLine("SKIP  hoot pc88 real files (_incoming/Hootarchive/pc88 not found)"); return; }
-        foreach (var arc in new[] { "starcruiser88", "reviver", "tnmbox_88", "xzr" })
+        foreach (var arc in new[] { "starcruiser88", "reviver", "tnmbox_88", "xzr", "snatcher", "lmpereur" })
         {
             string zip = Path.Combine(folder, arc + ".zip");
             if (!File.Exists(zip)) { Console.WriteLine("SKIP  hoot pc88 " + arc + " (zip not found)"); continue; }
@@ -111,6 +111,20 @@ public static class HootPc88Tests
                 if (!e.Driver.Equals("pc88", StringComparison.OrdinalIgnoreCase) || e.Titles.Count == 0) continue;
                 var r = Measure(e, dir, e.Titles[0].Code, 10);
                 check("hoot pc88 " + arc + " (" + e.Type + "): first song makes sound in 10 s", r.sound, r.note);
+            }
+        }
+        // mfile_size > mdata_size: 곡 코드 8~23비트 = 파일 안 위치 (KOEI: 곡마다 다른 덩어리가 4000h에)
+        string zipL = Path.Combine(folder, "lmpereur.zip");
+        if (File.Exists(zipL))
+        {
+            string dirL = ZipFolder.Extract(zipL);
+            var eL = Directory.GetFiles(dirL, "*" + HootArchive.Extension).Select(HootArchive.Load).FirstOrDefault(x => x.Driver == "pc88");
+            if (eL != null && eL.Titles.Count >= 2)
+            {
+                byte[] Chunk(int code) { var mm = HootPc88.Boot(eL, HootArchive.Files(eL, dirL)); mm.Play(code); mm.RunSeconds(0.2); return mm.Ram.Skip(0x4000).Take(0x100).ToArray(); }
+                var c0 = Chunk(eL.Titles[0].Code); var c1 = Chunk(eL.Titles[1].Code);
+                check("hoot pc88 lmpereur (mfile_size > mdata_size): each song code loads its own chunk (code bits 8-23 = file offset, hoot snatcher.cpp)", !c0.SequenceEqual(c1),
+                    eL.Titles[0].Code.ToString("X8") + " vs " + eL.Titles[1].Code.ToString("X8"));
             }
         }
         // hoot oldfalcom.cpp 규약 (xanadu · xanadu2 · asteka2): 곡마다 prog · 주소 표 · OUT 02h bgm

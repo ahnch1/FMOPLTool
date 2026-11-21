@@ -413,8 +413,19 @@ public static class HootPc88
             if (d != null)
             {
                 for (int i = 0; i < DataSize && DataAddr + i < 0x10000; i++) Ram[DataAddr + i] = 0;
-                int len = FileSize > 0 ? Math.Min(FileSize, d.Length) : d.Length;
-                for (int i = 0; i < len && DataAddr + i < 0x10000; i++) Ram[DataAddr + i] = d[i];
+                if (FileSize > DataSize && DataSize > 0)
+                {
+                    // mfile_size > mdata_size: 파일 (mfile_size까지) = 버퍼, 곡 코드 8~23비트 = 버퍼 안 위치에서 mdata_size만 (hoot snatcher.cpp:
+                    // OUT 00h → bgm[code]에서 3000h; KOEI PATCH는 DE = 4000h를 바로 드라이버에 넘긴다 — 예전엔 늘 0에서 읽어 모든 곡이 첫 곡)
+                    int ofs = (code >> 8) & 0xFFFF;
+                    int lim = Math.Min(FileSize, d.Length);
+                    for (int i = 0; i < DataSize && ofs + i < lim && DataAddr + i < 0x10000; i++) Ram[DataAddr + i] = d[ofs + i];
+                }
+                else
+                {
+                    int len = FileSize > 0 ? Math.Min(FileSize, d.Length) : d.Length;
+                    for (int i = 0; i < len && DataAddr + i < 0x10000; i++) Ram[DataAddr + i] = d[i];
+                }
                 Loads++;
             }
             var vd = Voice(n);

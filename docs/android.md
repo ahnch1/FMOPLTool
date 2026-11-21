@@ -26,6 +26,7 @@ dotnet build src/AdlibComposer.Android -c Debug                       # bin/Debu
 dotnet build src/AdlibComposer.Android -c Debug -t:Install            # USB로 붙은 태블릿에 바로 설치 (adb)
 ```
 
+- Debug APK도 어셈블리를 APK 안에 넣는다 (`EmbedAssembliesIntoApk`): 빠른 배포 APK는 파일만 복사해 설치하면 바로 죽는다. 대신 Debug APK는 약 45MB이고 최적화(AOT)가 없다 → 소리가 끊기면 Release(A4)로.
 - 앱 이름 FMOPL Jukebox, 패키지 `net.fmopltool.jukebox`, 버전 = `Directory.Build.props`의 Version (번호 = 주 × 1000000 + 부 × 1000 + 마지막).
 - 처음 실행할 때 (앱 버전이 바뀌면 다시) APK 안 `resource`(STANDARD.BNK · GENMIDI.OP2 · systems.json)와 데모 곡을 앱 폴더로 복사한다. zip 캐시는 앱 캐시 폴더/zip.
 
@@ -37,8 +38,17 @@ dotnet build src/AdlibComposer.Android -c Debug -t:Install            # USB로 �
 |---|---|---|---|
 | A1 | v2.3.29 | `AdlibComposer.Player`: `JukeboxSession`(곡 열기 · 재생 · 일시정지 · 정지 · 이동 · 끝 알림, ROL · IMS · MUS · SOP · 트래커 · XM · IT · MIDI(FM) · VGM 계열 · hoot 항목), `SongFolder`(폴더 · zip(언제나 캐시에 풀기) · 곡 여럿 든 파일). SelfTest `player` | 끝 |
 | A2 | v2.3.30 | 안드로이드 앱 뼈대 + `AudioTrack` 출력(`IAudioOutput`) + 리소스(STANDARD.BNK · GENMIDI.OP2 · systems.json) 복사 → 내장 데모 곡 재생 (시험 화면) | 끝 |
-| A3 | | Jukebox 화면 최소판: 저장소 권한(모든 파일 접근), 폴더 목록 · zip · 곡 여럿 든 파일, 재생 · 일시정지 · 정지 · 이전 · 다음 · 위치 막대, 다음 곡 자동, 마지막 폴더 기억 | |
+| A3 | v2.3.31 | Jukebox 화면 최소판: 저장소 권한(모든 파일 접근), 폴더 목록 · zip · 곡 여럿 든 파일, 재생 · 일시정지 · 정지 · 이전 · 다음 · 위치 막대, 다음 곡 자동 · 한 곡 반복, 마지막 폴더 기억 | 끝 (기기 확인 전) |
 | A4 | | 성능 확인 · AOT, 백그라운드 재생 중 화면 꺼짐 처리, 서명한 릴리스 APK 만들기 | |
+
+## 화면 (A3)
+
+- 가로 화면: 왼쪽 폴더 목록 | 오른쪽 재생 데크. 세로 화면: 목록 위 · 데크 아래.
+- 위 막대: [▲ 위로] [저장소] (내부 저장소 맨 위) [데모] (내장 데모 곡) + 지금 경로.
+- 목록: 📁 폴더 · 🗜 zip (누르면 캐시에 풀고 안으로, 처음은 시간이 걸림) · ♪ 곡 · ▸ 곡 여럿 든 파일 (누르면 곡 목록). 곡을 누르면 그 목록이 재생 목록이 된다.
+- 데크: 제목 · 형식 · 게임 정보, 위치 막대 (끌어서 이동), ⏮ ▶/❚❚ ■ ⏭, 다음 곡 자동 · 한 곡 반복 (기억).
+- 저장소 권한: 안드로이드 11 이상은 처음 실행할 때 '모든 파일 접근' 설정 화면이 열린다 → FMOPL Jukebox를 켜고 돌아오면 목록이 보인다. 10 이하는 읽기 권한을 묻는다.
+- 곡 열기 · 폴더 읽기 · zip 풀기는 뒤 스레드 (hoot 항목은 미리 렌더해서 몇 초 걸릴 수 있다).
 
 ## 빠진 것 (최소판)
 

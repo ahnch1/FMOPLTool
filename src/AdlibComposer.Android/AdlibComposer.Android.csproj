@@ -18,6 +18,8 @@
     <TrimMode>partial</TrimMode>
     <!-- 태블릿 = arm64. 에뮬레이터 시험용 x64도 -->
     <RuntimeIdentifiers>android-arm64;android-x64</RuntimeIdentifiers>
+    <!-- Debug APK도 어셈블리를 APK 안에 (빠른 배포 끔): APK 파일만 태블릿에 복사해 설치해도 돈다 -->
+    <EmbedAssembliesIntoApk>true</EmbedAssembliesIntoApk>
   </PropertyGroup>
   <!-- SDK · JDK 위치: 따로 정하지 않았으면 InstallAndroidDependencies로 받은 사용자 폴더 -->
   <PropertyGroup>

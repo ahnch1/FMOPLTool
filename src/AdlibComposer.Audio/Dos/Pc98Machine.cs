@@ -101,7 +101,7 @@ public sealed class Pc98Machine : DosMachine, IHootMachine
     // ------------------------------------------------------------ PIC 8259
 
     // BIOS가 남기는 마스크: 주 = 키보드 · 종(IRQ7)만 열림, 종 = 모두 닫힘 (드라이버가 자기 IRQ를 연다)
-    private readonly Pic8259 master = new Pic8259 { Base = 0x08, Imr = 0x7D }, slave = new Pic8259 { Base = 0x10, Imr = 0xFF };
+    private readonly Pic8259 master = new Pic8259 { Base = 0x08, Imr = 0x7D, Sfnm = true, Cascade = 0x80 }, slave = new Pic8259 { Base = 0x10, Imr = 0xFF };
 
     private void RaiseIrq(int irq)
     {

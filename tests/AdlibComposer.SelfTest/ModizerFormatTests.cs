@@ -19,6 +19,7 @@ public static class ModizerFormatTests
         NsfeTest(check);
         SapTest(check);
         KssDriverTest(check);
+        SgcTest(check);
     }
 
     internal static string SampleDir()
@@ -347,5 +348,93 @@ public static class ModizerFormatTests
             check("OPX → KSS (driver 100h, OPLL tag 401Ch, FMTONE 4C00h)", oc.Title == "OPX Title" && System.Text.Encoding.ASCII.GetString(oc.Kss, 0x20 + 0x401C - 0x100, 4) == "OPLL" && oc.Kss[0x20 + 0x4C00 - 0x100] == 0x3A, oc.Title);
         }
         finally { KssDrivers.Folders.Remove(drvDir); }
+    }
+
+    // ------------------------------------------------------------ M1-5 SGC
+
+    internal static byte[] MakeSgc(int system, int load, byte[] data, int init, int play, int songs = 1, int firstSfx = 0, int lastSfx = 0, bool pal = false, byte[] mapper = null)
+    {
+        var d = new byte[0xA0 + data.Length];
+        System.Text.Encoding.ASCII.GetBytes("SGC\x1a").CopyTo(d, 0);
+        d[4] = 1; d[5] = (byte)(pal ? 1 : 0);
+        d[8] = (byte)load; d[9] = (byte)(load >> 8); d[0x0A] = (byte)init; d[0x0B] = (byte)(init >> 8);
+        d[0x0C] = (byte)play; d[0x0D] = (byte)(play >> 8); d[0x0E] = 0xF0; d[0x0F] = 0xDF;
+        (mapper ?? new byte[] { 0, 0, 1, 2 }).CopyTo(d, 0x20);
+        d[0x25] = (byte)songs; d[0x26] = (byte)firstSfx; d[0x27] = (byte)lastSfx; d[0x28] = (byte)system;
+        System.Text.Encoding.ASCII.GetBytes("SGC Test").CopyTo(d, 0x40);
+        System.Text.Encoding.ASCII.GetBytes("Tester").CopyTo(d, 0x60);
+        data.CopyTo(d, 0xA0);
+        return d;
+    }
+
+    private static int CountSn(VgmSong v, int mask, int value)
+    {
+        int n = 0;
+        for (int p = v.DataOffset; p < v.DataEnd; p += Math.Max(1, VgmFormat.CommandLength(v.Data, p)))
+            if (v.Data[p] == 0x50 && (v.Data[p + 1] & mask) == value) n++;
+        return n;
+    }
+
+    private static void SgcTest(Action<string, bool, string> check)
+    {
+        // SMS: 0400h init = 톤 0 주기 0FEh · 음량 최대, GG 스테레오 (포트 06h) · FM 유닛 (F0h/F1h)도 써 봄 / 0420h play = $C000을 늘려 톤 0 낮은 4비트로
+        var code = new byte[0x40];
+        new byte[]
+        {
+            0x3E, 0x8E, 0xD3, 0x7F, 0x3E, 0x0F, 0xD3, 0x7F, 0x3E, 0x90, 0xD3, 0x7F,   // 톤 0
+            0x3E, 0xF0, 0xD3, 0x06,                                                   // GG 스테레오 (SMS면 무시)
+            0x3E, 0x30, 0xD3, 0xF0, 0x3E, 0x10, 0xD3, 0xF1,                           // FM 유닛 레지스터 30h
+            0xC9,
+        }.CopyTo(code, 0);
+        new byte[] { 0x3A, 0x00, 0xC0, 0x3C, 0x32, 0x00, 0xC0, 0xE6, 0x0F, 0xF6, 0x80, 0xD3, 0x7F, 0xC9 }.CopyTo(code, 0x20);
+        var sms = MakeSgc(0, 0x400, code, 0x400, 0x420, 3, 3, 4);
+        var h = Sgc.ReadHeader(sms);
+        var tr = Sgc.Tracks(h, "x");
+        check("SGC: header (SMS, songs 3 + SFX 3~4)", h.System == 0 && h.Songs == 3 && h.FirstSfx == 3 && h.LastSfx == 4 && h.TotalSongs == 5 && tr.Count == 5 && tr[3].Song == 3 && tr[3].Title.Contains("SFX") && h.Title == "SGC Test", tr.Count + " " + h.Title);
+        var v = Sgc.Render(sms, 0, 1, 0);
+        int plays = CountSn(v, 0xF0, 0x80);
+        check("SGC SMS: play each NTSC frame (≈ 60 / s) → SN76489 VGM", plays >= 59 && plays <= 63 && v.Sn76489Clock == Sgc.CpuClock && v.SnFeedback == 9 && v.SnWidth == 16, plays + " tone writes, fb " + v.SnFeedback + " w " + v.SnWidth);
+        check("SGC SMS: FM unit → YM2413, GG stereo port ignored", v.Ym2413Clock > 0 && !HasCmd(v, 0x4F), v.ChipSummary);
+        check("SGC SMS: sounds", Rms(Render(v, 0.5)) > 200, Rms(Render(v, 0.5)).ToString("0"));
+        int palPlays = CountSn(Sgc.Render(MakeSgc(0, 0x400, code, 0x400, 0x420, pal: true), 0, 1, 0), 0xF0, 0x80);
+        check("SGC PAL: ≈ 50 plays / s", palPlays >= 49 && palPlays <= 53, palPlays.ToString());
+
+        // GG: 스테레오 포트 → VGM 4Fh, FM 유닛 없음
+        var gg = Sgc.Render(MakeSgc(1, 0x400, code, 0x400, 0x420), 0, 0.5, 0);
+        check("SGC GG: stereo 06h → VGM 4Fh, no FM", HasCmd(gg, 0x4F) && gg.Ym2413Clock == 0, gg.ChipSummary);
+
+        // 뱅크: play 코드를 뱅크 3 (파일 안 0xC000)에 두고 init에서 FFFFh = 3으로 8000h에 비춤
+        var big = new byte[0x10000 - 0x400];
+        new byte[] { 0x3E, 0x03, 0x32, 0xFF, 0xFF, 0x3E, 0x90, 0xD3, 0x7F, 0xC9 }.CopyTo(big, 0);          // init: FFFFh = 3, 음량
+        new byte[] { 0x3A, 0x00, 0xC0, 0x3C, 0x32, 0x00, 0xC0, 0xE6, 0x0F, 0xF6, 0x80, 0xD3, 0x7F, 0xC9 }.CopyTo(big, 0xC000 - 0x400);   // 뱅크 3 처음 = 8000h
+        int bp = CountSn(Sgc.Render(MakeSgc(0, 0x400, big, 0x400, 0x8000), 0, 1, 0), 0xF0, 0x80);
+        check("SGC SMS: mapper FFFFh switches 8000h bank (play in bank 3)", bp >= 59 && bp <= 63, bp.ToString());
+
+        // 콜레코비전: 8000h에 코드, 포트 FFh = SN76489, RAM 7000h
+        var cvc = new byte[0x40];
+        new byte[] { 0x3E, 0x90, 0xD3, 0xFF, 0xC9 }.CopyTo(cvc, 0);
+        new byte[] { 0x3A, 0x00, 0x70, 0x3C, 0x32, 0x00, 0x70, 0xE6, 0x0F, 0xF6, 0x80, 0xD3, 0xFF, 0xC9 }.CopyTo(cvc, 0x20);
+        var cvd = MakeSgc(2, 0x8000, cvc, 0x8000, 0x8020);
+        cvd[0x0E] = 0xF0; cvd[0x0F] = 0x73;   // 스택 73F0h
+        var cv = Sgc.Render(cvd, 0, 1, 0);
+        int cp = CountSn(cv, 0xF0, 0x80);
+        check("SGC ColecoVision: ROM 8000h, RAM 6000h, port FFh, SN76489AN noise", cp >= 59 && cp <= 63 && cv.SnFeedback == 3 && cv.SnWidth == 15, cp + " fb " + cv.SnFeedback);
+
+        string tmp = Path.Combine(Path.GetTempPath(), "fmopl_sgc_test.sgc");
+        File.WriteAllBytes(tmp, sms);
+        try
+        {
+            var list = ChipSongs.Tracks(tmp);
+            var lv = ChipSongs.Load(list[1].path);
+            check("SGC: ChipSongs 5 tracks (3 songs + 2 SFX), load song 2", list.Count == 5 && lv.SourceFormat.StartsWith("SGC Sega Master System · 곡 2") && lv.GameEn == "SGC Test", list.Count + " " + lv.SourceFormat);
+        }
+        finally { File.Delete(tmp); }
+    }
+
+    private static bool HasCmd(VgmSong v, int cmd)
+    {
+        for (int p = v.DataOffset; p < v.DataEnd; p += Math.Max(1, VgmFormat.CommandLength(v.Data, p)))
+            if (v.Data[p] == cmd) return true;
+        return false;
     }
 }

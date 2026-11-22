@@ -119,6 +119,8 @@
 - [x] M2-2 D00 (EdLib) (v2.4.8, `D00Player`, AdPlug testref 2곡 줄 단위 일치)
 - [ ] M2-3 A2M · A2T (AdLib Tracker 2, 큰 편 — OPL3 · 4op)
 - [ ] M2-4 나머지 묶음: HSP · SA2 · AMD · DTM · LDS · KSM · BAM · RIX · ADL · XAD · CFF · DMO · MTK · JBM · GOT · SNG · MAD · MKJ — 실제 파일 많은 순으로 몇 개씩
+  - [x] 작은 형식 12가지 HSP · SNG · MAD · GOT · MTK · MKJ · BAM · AMD · SA2 · JBM · DTM · KSM (v2.4.9, `AdPlugMod` · `AdPlugHsc` · `AdPlugSmall`, testref 12곡 줄 단위 일치)
+  - [ ] 남음: LDS · RIX · ADL · XAD · CFF · DMO, SNG의 다른 두 형식 (adtrack · fmc)
 - 실제 파일 확인: Modland AdLib 폴더 등으로 표본 모으기, AdPlug 결과와 귀로 비교
 
 ### M3 — 일본 FM 드라이버 단독 파일
@@ -148,11 +150,11 @@
 
 ---
 
-## 4.1 진행 기록 · 이어 하기 (2026-11-23, v2.4.8 — RAD · D00까지)
+## 4.1 진행 기록 · 이어 하기 (2026-11-23, v2.4.9)
 
 - 끝난 단계 (커밋 하나씩, SelfTest 1676 통과): v2.4.0 GYM · v2.4.1 NSFE · v2.4.2 SAP (+ VGM 둘째 POKEY · 스테레오) · v2.4.3 MGS · BGM · MPK · OPX (`KssDrivers`, + `Kss.Render` 확장 I/O 끝 · 되풀이 감지) · v2.4.4 SGC · v2.4.5 LHA 풀기 · YM · VTX · PSG · LZH 압축 폴더 · v2.4.6 PSF 컨테이너 (`PsfFile`) + QSF · MINIQSF (`Qsf`, `HootCps2.Machine` 재사용 + `PlainShared`).
 - 시험: `SelfTest --modizer` = 이 계획의 시험만 (`tests/AdlibComposer.SelfTest/ModizerFormatTests.cs`). 실제 표본은 `D:\Retro\fmopldata\Modizer` (환경 변수 `FMOPL_MODIZER_SAMPLES`), 지금 있는 것은 GYM · NSF · GBS · KSS · GSF · PSF2 · SPC. SAP · SGC · MGS · YM · VTX 실제 파일은 없음 → 만든 파일로만 시험함. 표본을 구하면 귀로 확인할 것.
-- M1 (있는 CPU · 칩만으로) 전부 끝. M2-1 RAD v2.4.7 · M2-2 D00 v2.4.8 (사용자가 "RAD · D00까지"로 정함 — 여기서 멈춤). 다음 후보 (사용자 결정 대기): M2-4 작은 형식 묶음 (HSP · SNG · MAD · GOT · MTK · MKJ · BAM · AMD · SA2 · JBM · DTM · KSM, 각 수백 줄 · testref 있는 것 많음) → M2-3 A2M (약 4,300줄, 가장 큼).
+- M1 (있는 CPU · 칩만으로) 전부 끝. M2-1 RAD v2.4.7 · M2-2 D00 v2.4.8 · M2-4 작은 형식 12가지 v2.4.9. 다음 후보 (사용자 결정 대기): M2-4 남은 것 (LDS · RIX · ADL · XAD · CFF · DMO) · M2-3 A2M (약 4,300줄, 가장 큼).
 - M2 시험 방법: AdPlug `test/testmus` 곡을 `AdPlugHost.Trace`로 돌린 글 기록이 `test/testref/*.ref`와 줄마다 같아야 함 (`ModizerFormatTests.AdPlugRef`). AdPlug에서 옮긴 파일은 LGPL 2.1 (파일 머리에 적음). PSF 컨테이너가 생겼으므로 M6의 xSF (GSF · PSF2 …)는 CPU만 더하면 됨 — 사용자 표본에 GSF 155개 · PSF2가 있다.
 - QSF는 만든 파일로만 확인 (라이브러리 + 미니, 태그, 실제 wof Kabuki 열쇠로 암호화한 작은 롬). 실제 QSF 표본으로 귀 확인 아직.
 - 남긴 것: MBM (MoonBlaster — MSX-AUDIO ADPCM + MBK, `mbm2kss.c`), YM5/6 특수 효과 (SID 음 · 디지드럼 · Sinus-SID · Sync-Buzzer), VTX 스테레오 방식 (ABC · ACB …), SAP TYPE R · 코복스, SGC를 hoot SG-1000 7항목에, LZH -lh1-.

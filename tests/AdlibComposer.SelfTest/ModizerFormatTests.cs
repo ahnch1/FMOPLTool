@@ -24,6 +24,7 @@ public static class ModizerFormatTests
         QsfTest(check);
         RadTest(check);
         D00Test(check);
+        AdPlugSmallTest(check);
     }
 
     internal static string SampleDir()
@@ -765,5 +766,57 @@ public static class ModizerFormatTests
             check("D00 " + f + ": tracks, loads as VGM (OPL2), sounds", list.Count >= 1 && v.Ym3812Clock > 0 && v.LengthSeconds > 10 && r > 100,
                 list.Count + " track(s) '" + list[0].title + "', " + v.SourceFormat + ", " + v.LengthSeconds.ToString("0") + " s, rms " + r.ToString("0"));
         }
+    }
+
+    private static void AdPlugSmallTest(Action<string, bool, string> check)
+    {
+        string mus = AdPlugTestDir("testmus");
+        byte[] insts = mus != null && File.Exists(Path.Combine(mus, "insts.dat")) ? File.ReadAllBytes(Path.Combine(mus, "insts.dat")) : null;
+        var cases = new (string file, Func<OplPlayer> make)[]
+        {
+            ("SATNIGHT.HSP", () => new HspPlayer()),
+            ("PLAYMUS1.SNG", () => new SngPlayer()),
+            ("TOCCATA.MAD", () => new MadPlayer()),
+            ("menu.got", () => new GotPlayer()),
+            ("opensong.got", () => new GotPlayer()),
+            ("2001.MKJ", () => new MkjPlayer()),
+            ("ARAB.BAM", () => new BamPlayer()),
+            ("TU_BLESS.AMD", () => new AmdPlayer()),
+            ("SCALES.SA2", () => new Sa2Player()),
+            ("DEMO4.JBM", () => new JbmPlayer()),
+            ("DTM-TRK1.DTM", () => new DtmPlayer()),
+            ("BEGIN.KSM", () => new KsmPlayer { Insts = insts }),
+        };
+        foreach (var (file, make) in cases) AdPlugRef(check, make, file);
+        check("AdPlug small formats: ChipSongs knows all 12 extensions", new[] { ".hsp", ".sng", ".mad", ".got", ".mtk", ".mkj", ".bam", ".amd", ".sa2", ".jbm", ".dtm", ".ksm" }.All(e => ChipSongs.Extensions.Contains(e)), "");
+        if (mus == null) return;
+        int ok = 0; var notes = new List<string>();
+        foreach (var (file, _) in cases)
+        {
+            try
+            {
+                var v = ChipSongs.Load(Path.Combine(mus, file));
+                double r = Rms(Render(v, 2, 22050));
+                if (v.LengthSeconds > 1 && r > 50) ok++; else notes.Add(file + " " + v.LengthSeconds.ToString("0") + "s rms " + r.ToString("0"));
+            }
+            catch (Exception e) { notes.Add(file + " " + e.Message); }
+        }
+        check("AdPlug small formats: all 12 test songs load via ChipSongs and sound", ok == cases.Length, ok + "/" + cases.Length + (notes.Count > 0 ? " — " + string.Join("; ", notes) : ""));
+
+        // MTK: AdPlug 시험 곡이 없음 → 만든 파일 (압축 없이, 모든 제어 비트 0)로 머리말 · 해제 · 재생만
+        const int dataSize = 34 * 2 + 34 * 0x80 + 0x80 * 12 + 0x80 + 1;
+        var org = new byte[dataSize + 64 * 9 * 2];
+        System.Text.Encoding.ASCII.GetBytes("Mtk Song").CopyTo(org, 1);
+        System.Text.Encoding.ASCII.GetBytes("Mtk Author").CopyTo(org, 35);
+        int insAt = 34 * 2 + 34 * 0x80;
+        new byte[] { 0x01, 0x01, 0x10, 0x10, 0xF0, 0xF0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }.CopyTo(org, insAt);
+        org[insAt + 128 * 12] = 0x00; org[insAt + 128 * 12 + 1] = 0xFF;   // 순서표: 패턴 0, 끝
+        org[dataSize] = 0x31; org[dataSize + 1] = 0x00;                  // 패턴 0 첫 줄 채널 0: 음
+        var mtk = new List<byte>(System.Text.Encoding.Latin1.GetBytes("mpu401tr\x92kk\xeer@data"));
+        mtk.AddRange(BitConverter.GetBytes((ushort)0)); mtk.AddRange(BitConverter.GetBytes((ushort)org.Length));
+        for (int i = 0; i < org.Length; i++) { if (i % 16 == 0) { mtk.Add(0); mtk.Add(0); } mtk.Add(org[i]); }
+        var mp = new MtkPlayer();
+        string trace = AdPlugHost.Trace(mp, mtk.ToArray(), 100);
+        check("MTK (synthetic, uncompressed): title / author, plays a note", mp.Title == "Mtk Song" && mp.Author == "Mtk Author" && trace.Contains("b0 <- 2"), mp.Title + " / " + mp.Author);
     }
 }

@@ -39,6 +39,7 @@ public static class ChipSongs
         (AdlibStreamFormats.RawExtensions, AdlibStreamFormats.LoadRaw),
         (RadPlayer.Extensions, RadPlayer.Load),
         (D00Player.Extensions, D00Player.Load),
+        (AdPlugFormats.Extensions, AdPlugFormats.Load),
     };
 
     /// <summary>곡이 여럿 든 형식: 확장자 → 곡 제목 목록 (목록 안 번호 = "경로::번호").</summary>

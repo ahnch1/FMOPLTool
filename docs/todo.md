@@ -193,7 +193,7 @@
 - [ ] 곡 길이 자동 (KSS · NSF · HES는 m3u 없으면 2분): 무음 · 되풀이 감지
 - [ ] 칩 음량 맞추기 (N163 · FDS · 아케이드 칩 사이 비율)
 - [ ] VRC7 내장 악기 표를 emu2413 원본과 대조
-- [ ] modizer 대조 형식 추가 — 계획 · 진행은 [`modizer-plan.md`](modizer-plan.md) (M1-1 GYM v2.4.0 · M1-2 NSFE v2.4.1 · M1-3 SAP v2.4.2 · M1-4 MGS · BGM · MPK · OPX v2.4.3 · M1-5 SGC v2.4.4 · M1-6 LHA · YM · VTX · PSG v2.4.5 · M1-7 PSF · QSF v2.4.6 · M2-1 RAD v2.4.7 · M2-2 D00 v2.4.8)
+- [ ] modizer 대조 형식 추가 — 계획 · 진행은 [`modizer-plan.md`](modizer-plan.md) (M1-1 GYM v2.4.0 · M1-2 NSFE v2.4.1 · M1-3 SAP v2.4.2 · M1-4 MGS · BGM · MPK · OPX v2.4.3 · M1-5 SGC v2.4.4 · M1-6 LHA · YM · VTX · PSG v2.4.5 · M1-7 PSF · QSF v2.4.6 · M2-1 RAD v2.4.7 · M2-2 D00 v2.4.8 · M2-4 작은 AdPlug 형식 12가지 v2.4.9)
 - [ ] 형식: .ay (ZX · CPC) · ~~.ym (아타리 ST, LHA 풀기 필요)~~ (v2.4.5, 특수 효과는 아직) · ~~D00~~ (v2.4.8) · ~~RAD~~ (v2.4.7) · A2M (AdLib 트래커)
 - [ ] 형식: ~~SAP (6502 + POKEY)~~ (v2.4.2) · SID (6502 + SID)
 - [ ] VGM 듀얼 칩 나머지: YM2151 둘째 칩 (YM2203 v2.1.25 · AY-3-8910 v2.1.38은 됨) (3.1의 robokid · gaiden · taitosj에 필요)

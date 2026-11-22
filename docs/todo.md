@@ -193,7 +193,7 @@
 - [ ] 곡 길이 자동 (KSS · NSF · HES는 m3u 없으면 2분): 무음 · 되풀이 감지
 - [ ] 칩 음량 맞추기 (N163 · FDS · 아케이드 칩 사이 비율)
 - [ ] VRC7 내장 악기 표를 emu2413 원본과 대조
-- [ ] modizer 대조 형식 추가 — 계획 · 진행은 [`modizer-plan.md`](modizer-plan.md) (M1-1 GYM v2.4.0 · M1-2 NSFE v2.4.1 · M1-3 SAP v2.4.2)
+- [ ] modizer 대조 형식 추가 — 계획 · 진행은 [`modizer-plan.md`](modizer-plan.md) (M1-1 GYM v2.4.0 · M1-2 NSFE v2.4.1 · M1-3 SAP v2.4.2 · M1-4 MGS · BGM · MPK · OPX v2.4.3)
 - [ ] 형식: .ay (ZX · CPC) · .ym (아타리 ST, LHA 풀기 필요) · D00 · RAD · A2M (AdLib 트래커)
 - [ ] 형식: ~~SAP (6502 + POKEY)~~ (v2.4.2) · SID (6502 + SID)
 - [ ] VGM 듀얼 칩 나머지: YM2151 둘째 칩 (YM2203 v2.1.25 · AY-3-8910 v2.1.38은 됨) (3.1의 robokid · gaiden · taitosj에 필요)
@@ -224,7 +224,7 @@
 
 - [ ] XM · IT를 Tracker 화면에서 열기 · S3M으로 저장 — main은 다른 PC의 `ExtModule` (Jukebox 재생 전용)을 쓰기로 함. 이 세션의 다른 구현 (`XmItFormat` · `XmItPlayer`, Tracker 화면 · S3M 저장 · `SelfTest --tracker`)은 로컬 브랜치 `backup/xmit-2.0.11`에만 있음 (푸시 안 함)
 - [ ] PMD · FMP · mucom88 드라이버 이식 — 지금은 x86 · Z80 위에서 원래 드라이버를 돌리는 길로 대신함
-- [ ] MGS (MSX, MGSDRV 바이너리 필요)
+- [x] MGS (MSX, MGSDRV 바이너리 필요) — v2.4.3 `KssDrivers` (드라이버는 resource\kssdrv에 직접)
 - [ ] YMF278B (OPL4) — 샘플 ROM 덤프 필요
 - [ ] OPNA 리듬 ROM 쓰기 (`2608_BD.wav` 등을 사용자가 넣으면), OPN SSG-EG · CSM, Y8950 ADPCM
 - [ ] Nuked-OPN2 · Nuked-OPM 급 정확도 (지금은 근사)

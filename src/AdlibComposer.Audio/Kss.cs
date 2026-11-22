@@ -118,6 +118,10 @@ public static class Kss
         private readonly byte[] psgReg = new byte[16];
         public long CpuStart;
         public Z80 Cpu;
+        /// <summary>libkss 확장 I/O (40h에 7Fh = 41h~44h 켬): 41h = 1이면 곡 끝, 42h = 되풀이 횟수 (MGS · BGM · MPK · OPX 드라이버 틀이 알린다).</summary>
+        private bool extIo;
+        public bool StopRequested;
+        public int LoopCount;
 
         // 시스템 정의에서 온 배치 (msx / sms)
         public readonly SystemDefinition Sys;
@@ -210,6 +214,9 @@ public static class Kss
                 else if (port == bankPort && h.BankCount > 0) SelectBank(v, 0x8000, 0x4000);
                 return;
             }
+            if (port == 0x40) { extIo = v == 0x7F; return; }
+            if (extIo && port == 0x41) { if (v == 1) StopRequested = true; return; }
+            if (extIo && port == 0x42) { LoopCount = v; return; }
             if (port == pAddr) psgAddr = v & 0x0F;
             else if (port == pData) { UsedPsg = true; psgReg[psgAddr] = v; Emit(0xA0, (byte)psgAddr, v); }
             else if (port == oAddr) opllAddr = v;
@@ -223,7 +230,13 @@ public static class Kss
     private const int Trap = 0x0000;
 
     /// <summary>곡 하나를 seconds초 돌려 VGM으로 (끝 fade초 동안 줄인다).</summary>
-    public static VgmSong Render(byte[] file, int song, double seconds, double fade = DefaultFade)
+    public static VgmSong Render(byte[] file, int song, double seconds, double fade = DefaultFade) { return Render(file, song, seconds, fade, 0, 2); }
+
+    /// <summary>
+    /// detectSeconds &gt; 0: 드라이버가 확장 I/O로 끝 (41h) · 되풀이 횟수 (42h)를 알리면 그것으로 길이를 정한다 —
+    /// 끝 = 그 자리 + 1초, 되풀이가 loops번 = 그 자리 + 페이드. 아무것도 알리지 않으면 detectSeconds까지 돌려 보고 seconds로 자른다.
+    /// </summary>
+    public static VgmSong Render(byte[] file, int song, double seconds, double fade, double detectSeconds, int loops)
     {
         var h = ReadHeader(file);
         var m = new Machine(h);
@@ -255,12 +268,20 @@ public static class Kss
         // init
         Call(cpu, m, h.InitAddr, song, (int)(m.Clock * 2));
         double frame = VgmSong.Rate / (m.Sys.FrameRate > 0 ? m.Sys.FrameRate : 60.0);
-        double total = seconds * VgmSong.Rate;
+        double total = (detectSeconds > seconds ? detectSeconds : seconds) * VgmSong.Rate;
+        bool found = false;
         for (double t = 0; t < total; t += frame)
         {
             m.Now = t;
             Call(cpu, m, h.PlayAddr, -1, (int)(m.Clock / 60 * 4));
+            if (detectSeconds > 0 && !found && t > 0.2 * VgmSong.Rate)
+            {
+                if (m.StopRequested) { found = true; fade = Math.Min(fade, 1); total = Math.Min(total, t + 1.0 * VgmSong.Rate); }
+                else if (m.LoopCount >= loops) { found = true; total = Math.Min(total, t + fade * VgmSong.Rate); }
+            }
         }
+        if (detectSeconds > 0 && !found) total = seconds * VgmSong.Rate;
+        seconds = total / VgmSong.Rate;
 
         // VGM으로
         var w = new VgmWriter { System = m.Sys.Name + " (KSS)", Notes = "KSS" };

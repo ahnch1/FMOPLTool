@@ -109,7 +109,7 @@
 - [x] M1-1 GYM → VgmSong (v2.4.0, `GymFormat`)
 - [x] M1-2 NSFE 청크 · NSF/GBS 곁 M3U 곡 이름 · 길이 (v2.4.1, `Nsfe` — m3u는 NSF · GBS 모두 이미 `NezM3u`)
 - [x] M1-3 SAP (type B · C · D) — 6502 + POKEY, 곡 여럿 (`ChipSongs.multi`) (v2.4.2, `Sap` + TYPE S, STEREO = VGM 둘째 POKEY)
-- [ ] M1-4 MGS · BGM · OPX · MPK · MBM → KSS 이미지 (libkss 드라이버 바이너리를 리소스로, 라이선스 확인)
+- [x] M1-4 MGS · BGM · OPX · MPK · MBM → KSS 이미지 (libkss 드라이버 바이너리를 리소스로, 라이선스 확인) (v2.4.3, `KssDrivers` — 드라이버는 저작물이라 사용자가 resource\kssdrv에 둠 (.bin 또는 libkss .h), 확장 I/O 끝 · 되풀이 감지. MBM은 남김, 실제 곡 파일로 귀 확인 아직)
 - [ ] M1-5 SGC (SMS · GG · Coleco) — 다음에 hoot SG-1000 7항목에 같은 코드
 - [ ] M1-6 LHA -lh5- 풀기 (Formats) → YM · VTX 재생 + LZH 압축 폴더 (todo 5장 항목 같이 닫음)
 - [ ] M1-7 PSF 컨테이너 공통 (zlib · `_lib` · 태그 · 길이) + QSF (Z80 + QSound, CPS-2 코드 재사용)

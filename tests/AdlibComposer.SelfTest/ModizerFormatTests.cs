@@ -18,6 +18,7 @@ public static class ModizerFormatTests
         Gym(check);
         NsfeTest(check);
         SapTest(check);
+        KssDriverTest(check);
     }
 
     internal static string SampleDir()
@@ -250,5 +251,101 @@ public static class ModizerFormatTests
             check("SAP: ChipSongs 2 songs, song 1 = 1.5 s (TIME)", list.Count == 2 && Math.Abs(lv.LengthSeconds - 1.5) < 0.05 && lv.SourceFormat.StartsWith("SAP B"), list.Count + " " + lv.LengthSeconds.ToString("0.00") + " " + lv.SourceFormat);
         }
         finally { File.Delete(tmp); }
+    }
+
+    // ------------------------------------------------------------ M1-4 MGS · BGM · MPK · OPX (KSS 드라이버 틀)
+
+    /// <summary>KSSX (RAM, 곡 0) 이미지: 코드를 load부터.</summary>
+    private static byte[] MakeKss(int load, byte[] code, int init, int play)
+    {
+        var b = new byte[0x20 + code.Length];
+        System.Text.Encoding.ASCII.GetBytes("KSSX").CopyTo(b, 0);
+        b[4] = (byte)load; b[5] = (byte)(load >> 8); b[6] = (byte)code.Length; b[7] = (byte)(code.Length >> 8);
+        b[8] = (byte)init; b[9] = (byte)(init >> 8); b[10] = (byte)play; b[11] = (byte)(play >> 8);
+        b[0x0E] = 0x10; b[0x0F] = 0x05;
+        code.CopyTo(b, 0x20);
+        return b;
+    }
+
+    private static void KssDriverTest(Action<string, bool, string> check)
+    {
+        // 확장 I/O 끝 알림: init = PSG 톤 A 켜기 + OUT (40h),7Fh / play = 프레임 셈 ($C000), 120프레임(2초)이 되면 OUT (41h),1
+        var code = new byte[0x200];
+        new byte[]
+        {
+            0x3E, 0x07, 0xD3, 0xA0, 0x3E, 0x3E, 0xD3, 0xA1,   // R7 = 3Eh (톤 A만)
+            0x3E, 0x08, 0xD3, 0xA0, 0x3E, 0x0F, 0xD3, 0xA1,   // R8 = 15
+            0x3E, 0x00, 0xD3, 0xA0, 0x3E, 0x80, 0xD3, 0xA1,   // R0 = 80h
+            0x3E, 0x7F, 0xD3, 0x40, 0xAF, 0xD3, 0x41, 0xD3, 0x42,
+            0xC9,
+        }.CopyTo(code, 0);
+        // play ($4100): LD HL,($C000) INC HL LD ($C000),HL LD A,L CP 120 RET NZ LD A,1 OUT (41h),A RET
+        new byte[] { 0x2A, 0x00, 0xC0, 0x23, 0x22, 0x00, 0xC0, 0x7D, 0xFE, 120, 0xC0, 0x3E, 0x01, 0xD3, 0x41, 0xC9 }.CopyTo(code, 0x100);
+        var stopKss = MakeKss(0x4000, code, 0x4000, 0x4100);
+        var sv = Kss.Render(stopKss, 0, 120, 4, 60, 2);
+        check("KSS ext I/O 41h stop → length = stop + 1 s", Math.Abs(sv.LengthSeconds - 3.0) < 0.1 && Rms(Render(sv, 1)) > 100, sv.LengthSeconds.ToString("0.00") + " s");
+        // 되풀이 횟수: 60프레임마다 OUT (42h),n → 2번째 (2초) + 페이드 4초
+        var loopCode = (byte[])code.Clone();
+        // play: $C000 = 프레임 (60에서 0으로), $C001 = 초 → OUT (42h)
+        new byte[] { 0x21, 0x00, 0xC0, 0x34, 0x7E, 0xFE, 60, 0x20, 0x04, 0x36, 0x00, 0x23, 0x34, 0x3A, 0x01, 0xC0, 0xD3, 0x42, 0xC9 }.CopyTo(loopCode, 0x100);
+        var lv = Kss.Render(MakeKss(0x4000, loopCode, 0x4000, 0x4100), 0, 120, 4, 60, 2);
+        check("KSS ext I/O 42h loop count 2 → length = loop + fade", Math.Abs(lv.LengthSeconds - 6.0) < 0.2, lv.LengthSeconds.ToString("0.00") + " s");
+        var nv = Kss.Render(MakeKss(0x4000, code.Take(0x100).Concat(new byte[] { 0xC9 }).ToArray(), 0x4000, 0x4100), 0, 3, 1, 10, 2);
+        check("KSS ext I/O: nothing reported → given length", Math.Abs(nv.LengthSeconds - 3.0) < 0.05, nv.LengthSeconds.ToString("0.00") + " s");
+
+        check("KSS drivers: ChipSongs knows .mgs .bgm .mpk .opx", new[] { ".mgs", ".bgm", ".mpk", ".opx" }.All(e => ChipSongs.Extensions.Contains(e)), "");
+        var hb = KssDrivers.ParseCHeader("/* MGSDRV 0x99 */\n0xc3,0x9d, // 0x11\n0x18,0x4D\n");
+        check("KSS drivers: C header parse skips comments", hb.Length == 4 && hb[0] == 0xC3 && hb[3] == 0x4D, string.Join(" ", hb.Select(x => x.ToString("X2"))));
+
+        // 드라이버 없으면 알기 쉬운 오류
+        var saved = KssDrivers.Folders.ToList();
+        KssDrivers.Folders.Clear();
+        KssDrivers.Folders.Add(Path.Combine(Path.GetTempPath(), "fmopl_no_such_dir"));
+        bool missing = false;
+        try { KssDrivers.Mgs(System.Text.Encoding.ASCII.GetBytes("MGS314\r\n\x1aNo driver\r\n".PadRight(64, '\0'))); }
+        catch (FileNotFoundException e) { missing = e.Message.Contains("mgsdrv"); }
+        check("KSS drivers: missing driver → FileNotFoundException naming the file", missing, "");
+        KssDrivers.Folders.Clear();
+        KssDrivers.Folders.AddRange(saved);
+
+        // 목록 제목은 드라이버 없이 머리말에서 (돌리지 않음)
+        string tmg = Path.Combine(Path.GetTempPath(), "fmopl_title_test.mgs");
+        File.WriteAllBytes(tmg, System.Text.Encoding.ASCII.GetBytes("MGS314\r\nQuick\tTitle\r\n\x1a".PadRight(64, '\0')));
+        try { check("MGS: ChipSongs.Title from header (no driver run)", ChipSongs.Title(tmg) == "Quick Title", ChipSongs.Title(tmg)); }
+        finally { File.Delete(tmg); }
+
+        // libkss kss-drivers 헤더 (modizer 참고 소스가 있으면)
+        string inc = SopTests.FindDir("_incoming");
+        string drvDir = inc == null ? null : Path.Combine(inc, "modizer-master", "libs", "libkss", "libkss", "modules", "drivers");
+        if (drvDir == null || !Directory.Exists(drvDir)) { Console.WriteLine("SKIP  KSS drivers from libkss headers (_incoming/modizer-master not found)"); return; }
+        KssDrivers.Folders.Insert(0, drvDir);
+        try
+        {
+            var mgsdrv = KssDrivers.Find(KssDrivers.Driver.Mgsdrv);
+            check("KSS drivers: mgsdrv.h → MGSDRV.COM bytes", mgsdrv != null && mgsdrv.Length > 0x1000 && System.Text.Encoding.ASCII.GetString(mgsdrv, 3, 6) == "MGSDRV", mgsdrv == null ? "null" : mgsdrv.Length.ToString());
+            var all = Enum.GetValues(typeof(KssDrivers.Driver)).Cast<KssDrivers.Driver>().Select(d => (d, b: KssDrivers.Find(d))).ToList();
+            check("KSS drivers: all 5 headers found", all.All(x => x.b != null && x.b.Length > 0x800), string.Join(", ", all.Select(x => x.d + " " + (x.b?.Length ?? 0))));
+            var fake = new byte[0x400];
+            System.Text.Encoding.ASCII.GetBytes("MGS314\r\nTest\tTitle\r\n\x1a").CopyTo(fake, 0);
+            var c = KssDrivers.Mgs(fake);
+            var h = Kss.ReadHeader(c.Kss);
+            check("MGS → KSS layout (load 200h, init 8000h, play 8100h, MGSDRV+0Dh at 6000h)", h.LoadAddr == 0x200 && h.InitAddr == 0x8000 && h.PlayAddr == 0x8100 && c.Kss[0x20 + 0x6000 - 0x200] == mgsdrv[0x0D] && c.Title == "Test Title" && h.FmPac,
+                c.Title + " / " + c.Format);
+            var t0 = System.Diagnostics.Stopwatch.StartNew();
+            var v = Kss.Render(c.Kss, 0, 2, 1, 10, 2);   // 잘못된 곡 자료: 멈추지 않고 끝나기만
+            check("MGS → KSS: driver runs (bad song data, no hang)", v.LengthSeconds > 0.5 && t0.ElapsedMilliseconds < 20000, v.LengthSeconds.ToString("0.0") + " s, " + t0.ElapsedMilliseconds + " ms");
+            var mp = new byte[0x200];
+            System.Text.Encoding.ASCII.GetBytes("MPK106\r\nSong\r\nComposer X\r\nArr Y\r\nMemo\r\n").CopyTo(mp, 0);
+            var mc = KssDrivers.Mpk(mp);
+            var mh = Kss.ReadHeader(mc.Kss);
+            check("MPK 1.06 → KSS (driver 4000h, song 200h patched into init)", mc.Driver == KssDrivers.Driver.Mpk106 && mh.InitAddr == 0x6000 && mc.Kss[0x20 + 0x6000 - 0x200 + 14] == 0x00 && mc.Kss[0x20 + 0x6000 - 0x200 + 15] == 0x02 && mc.Title == "Song" && mc.Extra.Contains("Composer X"),
+                mc.Title + " | " + mc.Extra);
+            var opx = new byte[0x200];
+            System.Text.Encoding.ASCII.GetBytes("OPX Title".PadRight(53)).CopyTo(opx, 0);
+            opx[0x7D] = 0x1A;
+            var oc = KssDrivers.Opx(opx);
+            check("OPX → KSS (driver 100h, OPLL tag 401Ch, FMTONE 4C00h)", oc.Title == "OPX Title" && System.Text.Encoding.ASCII.GetString(oc.Kss, 0x20 + 0x401C - 0x100, 4) == "OPLL" && oc.Kss[0x20 + 0x4C00 - 0x100] == 0x3A, oc.Title);
+        }
+        finally { KssDrivers.Folders.Remove(drvDir); }
     }
 }

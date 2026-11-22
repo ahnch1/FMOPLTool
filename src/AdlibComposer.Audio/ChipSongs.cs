@@ -18,6 +18,7 @@ public static class ChipSongs
         (S98Format.Extensions, S98Format.Load),
         (GymFormat.Extensions, GymFormat.Load),
         (Kss.Extensions, Kss.Load),
+        (KssDrivers.Extensions, KssDrivers.Load),
         (Nsf.Extensions, Nsf.Load),
         (Nsfe.Extensions, Nsfe.Load),
         (Sap.Extensions, Sap.Load),
@@ -45,6 +46,12 @@ public static class ChipSongs
         (HootSongs.Extensions, p => HootSongs.Tracks(p).Select(t => t.Title).ToList()),
         // XMI는 MIDI로 재생하지만 곡이 여럿 든 파일이라 목록만 같이 쓴다
         (new[] { ".xmi" }, p => Enumerable.Range(1, MidiFiles.SequenceCount(p)).Select(i => Path.GetFileNameWithoutExtension(p) + " #" + i).ToList()),
+    };
+
+    /// <summary>돌리지 않고 머리말에서 제목을 읽는 형식 (불러오기가 무거운 것: 드라이버를 돌려 길이를 재는 MSX 드라이버 곡).</summary>
+    private static readonly List<(string[] ext, Func<string, string> title)> quickTitles = new List<(string[], Func<string, string>)>
+    {
+        (KssDrivers.Extensions, KssDrivers.Title),
     };
 
     /// <summary>곡이 여럿 들 수 있는 형식인가 (KSS · NSF · HES): 파일 목록이 곡마다 줄을 펼친다.</summary>
@@ -119,6 +126,9 @@ public static class ChipSongs
             var t = titles(FilePart(path));
             return t.Count > 0 ? t[Math.Max(0, Math.Min(n, t.Count - 1))] : "";
         }
+        string qext = Path.GetExtension(FilePart(path) ?? "");
+        foreach (var (exts, quick) in quickTitles)
+            if (exts.Any(x => string.Equals(x, qext, StringComparison.OrdinalIgnoreCase))) return quick(FilePart(path));
         var v = Load(path);
         return v.TitleEn.Length > 0 ? v.TitleEn : v.TitleJp;
     }

@@ -21,6 +21,7 @@ public static class ModizerFormatTests
         KssDriverTest(check);
         SgcTest(check);
         LhaYmTest(check);
+        QsfTest(check);
     }
 
     internal static string SampleDir()
@@ -601,5 +602,108 @@ public static class ModizerFormatTests
         for (int p = v.DataOffset; p < v.DataEnd; p += Math.Max(1, VgmFormat.CommandLength(v.Data, p)))
             if (v.Data[p] == 0xA0 && v.Data[p + 1] == reg) return v.Data[p + 2];
         return -1;
+    }
+
+    // ------------------------------------------------------------ M1-7 PSF 컨테이너 · QSF
+
+    /// <summary>PSF 파일: 판 바이트, zlib 프로그램, 태그.</summary>
+    internal static byte[] MakePsf(int version, byte[] program, string tags)
+    {
+        var ms = new MemoryStream();
+        using (var z = new System.IO.Compression.ZLibStream(ms, System.IO.Compression.CompressionLevel.Optimal, true)) z.Write(program);
+        var comp = ms.ToArray();
+        var f = new List<byte> { (byte)'P', (byte)'S', (byte)'F', (byte)version };
+        f.AddRange(BitConverter.GetBytes(0)); f.AddRange(BitConverter.GetBytes(comp.Length)); f.AddRange(BitConverter.GetBytes(0));
+        f.AddRange(comp);
+        if (tags != null) f.AddRange(System.Text.Encoding.UTF8.GetBytes("[TAG]" + tags));
+        return f.ToArray();
+    }
+
+    internal static byte[] QsfSection(string name, int start, byte[] data)
+    {
+        var o = new List<byte>(System.Text.Encoding.ASCII.GetBytes(name));
+        o.AddRange(BitConverter.GetBytes(start)); o.AddRange(BitConverter.GetBytes(data.Length)); o.AddRange(data);
+        return o.ToArray();
+    }
+
+    /// <summary>
+    /// QSound 쓰는 작은 Z80 롬: LD SP · EI · JR $, 38h (IRQ 250Hz) = D000h/D001h에 1234h, D002h에 reg. 반환 = (롬, 명령 바이트 자리 표시).
+    /// </summary>
+    private static (byte[] rom, bool[] op) QsfProgram(int reg)
+    {
+        var rom = new byte[0x8000];
+        var op = new bool[0x8000];
+        int at = 0;
+        void Emit(params (int b, bool isOp)[] bytes) { foreach (var x in bytes) { rom[at] = (byte)x.b; op[at] = x.isOp; at++; } }
+        Emit((0x31, true), (0xF0, false), (0xFF, false), (0xFB, true), (0x18, true), (0xFE, false));
+        at = 0x38;
+        Emit((0x3E, true), (0x12, false), (0x32, true), (0x00, false), (0xD0, false),
+             (0x3E, true), (0x34, false), (0x32, true), (0x01, false), (0xD0, false),
+             (0x3E, true), (reg, false), (0x32, true), (0x02, false), (0xD0, false),
+             (0xFB, true), (0xC9, true));
+        return (rom, op);
+    }
+
+    private static void QsfTest(Action<string, bool, string> check)
+    {
+        check("PSF length tags: m:ss.sss · h:mm:ss · seconds", PsfFile.ParseLength("3:25.5") == 205.5 && PsfFile.ParseLength("1:02:03") == 3723 && PsfFile.ParseLength("95") == 95 && PsfFile.ParseLength("x") == 0, "");
+        var tg = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        PsfFile.ParseTags("title=A\r\ncomment=line1\ncomment=line2\n bad line\nLength = 0:05\n", tg);
+        check("PSF tags: case-insensitive, repeated lines joined", tg["TITLE"] == "A" && tg["comment"] == "line1\nline2" && tg["length"] == "0:05", string.Join("|", tg.Select(x => x.Key + "=" + x.Value)));
+
+        string dir = Path.Combine(Path.GetTempPath(), "fmopl_qsf_test_" + Environment.ProcessId);
+        Directory.CreateDirectory(dir);
+        try
+        {
+            // 라이브러리: Z80 롬 (reg 05h) + 샘플 롬 / 미니: Z80 한 바이트만 고침 (reg → 06h) + 태그
+            var (rom, _) = QsfProgram(0x05);
+            var smp = new byte[0x1000]; for (int i = 0; i < smp.Length; i++) smp[i] = (byte)(i * 7);
+            File.WriteAllBytes(Path.Combine(dir, "game.qsflib"), MakePsf(0x41, QsfSection("Z80", 0, rom).Concat(QsfSection("SMP", 0, smp)).ToArray(), "title=lib title\n"));
+            var mini = QsfSection("Z80", 0x38 + 11, new byte[] { 0x06 });
+            string miniPath = Path.Combine(dir, "song01.miniqsf");
+            File.WriteAllBytes(miniPath, MakePsf(0x41, mini, "_lib=game.qsflib\ntitle=Song One\ngame=Test Game\nartist=Capcom\nlength=0:02\nfade=1\n"));
+            var img = Qsf.Read(miniPath);
+            check("QSF: _lib then mini (mini patches Z80), tags from mini", img.Parts == 2 && img.Z80.Length == 0x8000 && img.Z80[0x38 + 11] == 0x06 && img.Sample.Length == 0x1000 && img.Title == "Song One" && img.Seconds == 2 && img.Fade == 1,
+                img.Parts + " parts, Z80 " + img.Z80.Length + ", title " + img.Title);
+            var v = ChipSongs.Load(miniPath);
+            int writes = 0, reg6 = 0;
+            for (int p = v.DataOffset; p < v.DataEnd; p += Math.Max(1, VgmFormat.CommandLength(v.Data, p)))
+                if (v.Data[p] == 0xC4) { writes++; if (v.Data[p + 3] == 0x06 && v.Data[p + 1] == 0x12 && v.Data[p + 2] == 0x34) reg6++; }
+            check("QSF: Z80 IRQ 250 Hz → QSound C4h writes (reg from mini), length = length + fade, sample ROM block",
+                Math.Abs(v.LengthSeconds - 3.0) < 0.02 && reg6 >= 740 && reg6 == writes && v.QsoundClock > 0 && v.TitleEn == "Song One" && v.SourceFormat.Contains("라이브러리 1"),
+                v.LengthSeconds.ToString("0.00") + " s, writes " + writes + " (reg 06 " + reg6 + "), " + v.SourceFormat);
+            check("QSF: list title from tags (no run)", ChipSongs.Title(miniPath) == "Song One", ChipSongs.Title(miniPath));
+
+            // Kabuki KEY: 실제 열쇠로 명령 · 자료 바이트를 따로 암호화한 롬 → KEY 구역으로 풀려 같은 소리
+            var k = HootCps2.Kabuki.Keys[0];
+            var (plain, isOp) = QsfProgram(0x07);
+            var enc = new byte[plain.Length];
+            for (int a = 0; a < 0x100; a++)
+            {
+                int sel = isOp[a] ? (a + k.Addr) & 0xFFFF : ((a ^ 0x1FC0) + k.Addr + 1) & 0xFFFF;
+                for (int b = 0; b < 256; b++) if (HootCps2.Kabuki.Byte(b, k, sel) == plain[a]) { enc[a] = (byte)b; break; }
+            }
+            var key = new byte[11];
+            key[0] = (byte)(k.Swap1 >> 24); key[1] = (byte)(k.Swap1 >> 16); key[2] = (byte)(k.Swap1 >> 8); key[3] = (byte)k.Swap1;
+            key[4] = (byte)(k.Swap2 >> 24); key[5] = (byte)(k.Swap2 >> 16); key[6] = (byte)(k.Swap2 >> 8); key[7] = (byte)k.Swap2;
+            key[8] = (byte)(k.Addr >> 8); key[9] = (byte)k.Addr; key[10] = (byte)k.Xor;
+            string encPath = Path.Combine(dir, "enc.qsf");
+            File.WriteAllBytes(encPath, MakePsf(0x41, QsfSection("KEY", 0, key).Concat(QsfSection("Z80", 0, enc)).ToArray(), "length=0:01\nfade=0\n"));
+            var ev = ChipSongs.Load(encPath);
+            int ew = 0;
+            for (int p = ev.DataOffset; p < ev.DataEnd; p += Math.Max(1, VgmFormat.CommandLength(ev.Data, p)))
+                if (ev.Data[p] == 0xC4 && ev.Data[p + 3] == 0x07) ew++;
+            check("QSF KEY (" + k.Name + "): big-endian swap / addr / xor → Kabuki decode runs the driver", ew >= 240 && ev.SourceFormat.Contains("Kabuki"), ew + " writes, " + ev.SourceFormat);
+
+            // 잘못된 것: 판이 다른 라이브러리 · 없는 라이브러리
+            File.WriteAllBytes(Path.Combine(dir, "psx.psflib"), MakePsf(0x01, new byte[16], null));
+            File.WriteAllBytes(Path.Combine(dir, "badver.miniqsf"), MakePsf(0x41, mini, "_lib=psx.psflib\n"));
+            File.WriteAllBytes(Path.Combine(dir, "nolib.miniqsf"), MakePsf(0x41, mini, "_lib=missing.qsflib\n"));
+            bool badVer = false, noLib = false;
+            try { Qsf.Read(Path.Combine(dir, "badver.miniqsf")); } catch (InvalidDataException) { badVer = true; }
+            try { Qsf.Read(Path.Combine(dir, "nolib.miniqsf")); } catch (FileNotFoundException) { noLib = true; }
+            check("PSF: other-version library / missing library rejected", badVer && noLib, badVer + " " + noLib);
+        }
+        finally { try { Directory.Delete(dir, true); } catch (Exception) { } }
     }
 }

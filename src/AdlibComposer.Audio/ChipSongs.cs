@@ -26,6 +26,7 @@ public static class ChipSongs
         (Nsfe.Extensions, Nsfe.Load),
         (Sap.Extensions, Sap.Load),
         (Sgc.Extensions, Sgc.Load),
+        (Qsf.Extensions, Qsf.Load),
         (Hes.Extensions, Hes.Load),
         (Gbs.Extensions, Gbs.Load),
         (Mdx.Extensions, Mdx.Load),
@@ -57,6 +58,7 @@ public static class ChipSongs
     private static readonly List<(string[] ext, Func<string, string> title)> quickTitles = new List<(string[], Func<string, string>)>
     {
         (KssDrivers.Extensions, KssDrivers.Title),
+        (Qsf.Extensions, Qsf.Title),
     };
 
     /// <summary>곡이 여럿 들 수 있는 형식인가 (KSS · NSF · HES): 파일 목록이 곡마다 줄을 펼친다.</summary>

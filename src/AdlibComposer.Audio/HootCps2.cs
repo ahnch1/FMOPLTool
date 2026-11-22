@@ -195,6 +195,8 @@ public static class HootCps2
         /// </summary>
         public int Layout;
         public string KabukiKey = "";
+        /// <summary>공유 RAM을 그냥 RAM으로 (68000 핸드셰이크 · 명령 받음 셈 없음): QSF처럼 롬이 스스로 곡을 고르는 덤프.</summary>
+        public bool PlainShared;
         public Dictionary<int, int> PcCount;
 
         private int bank, dataHi, dataLo, latch;
@@ -313,7 +315,7 @@ public static class HootCps2
             a &= 0xFFFF;
             if (a >= 0xC000 && a < 0xD000)
             {
-                if (Kind != Board.Zn)
+                if (Kind != Board.Zn && !PlainShared)
                 {
                     if (a == 0xC00F && v == 0xFF && Shared[0x0F] != 0xFF) Taken++;
                     if (a == 0xCFFF && v == 0x77) { Shared[0xFFF] = 0xFF; return; }   // 68000 핸드셰이크: Z80이 77h를 쓰면 FFh로 답한다

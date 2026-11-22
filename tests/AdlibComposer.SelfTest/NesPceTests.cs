@@ -244,7 +244,7 @@ public static class NesPceTests
 
     // ------------------------------------------------------------ NSF · HES (만든 파일)
 
-    private static byte[] MakeNsf()
+    internal static byte[] MakeNsf()
     {
         var d = new byte[0x80 + 0x5000];
         Encoding.ASCII.GetBytes("NESM\x1A").CopyTo(d, 0);

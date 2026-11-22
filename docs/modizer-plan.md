@@ -107,7 +107,7 @@
 
 ### M1 — 있는 CPU · 칩만으로 (S 위주, 먼저)
 - [x] M1-1 GYM → VgmSong (v2.4.0, `GymFormat`)
-- [ ] M1-2 NSFE 청크 · NSF/GBS 곁 M3U 곡 이름 · 길이
+- [x] M1-2 NSFE 청크 · NSF/GBS 곁 M3U 곡 이름 · 길이 (v2.4.1, `Nsfe` — m3u는 NSF · GBS 모두 이미 `NezM3u`)
 - [ ] M1-3 SAP (type B · C · D) — 6502 + POKEY, 곡 여럿 (`ChipSongs.multi`)
 - [ ] M1-4 MGS · BGM · OPX · MPK · MBM → KSS 이미지 (libkss 드라이버 바이너리를 리소스로, 라이선스 확인)
 - [ ] M1-5 SGC (SMS · GG · Coleco) — 다음에 hoot SG-1000 7항목에 같은 코드

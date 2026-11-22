@@ -19,6 +19,7 @@ public static class ChipSongs
         (GymFormat.Extensions, GymFormat.Load),
         (Kss.Extensions, Kss.Load),
         (Nsf.Extensions, Nsf.Load),
+        (Nsfe.Extensions, Nsfe.Load),
         (Hes.Extensions, Hes.Load),
         (Gbs.Extensions, Gbs.Load),
         (Mdx.Extensions, Mdx.Load),
@@ -36,6 +37,7 @@ public static class ChipSongs
     {
         (Kss.Extensions, p => Kss.Tracks(p).Select(t => t.Title.Length > 0 ? t.Title : Path.GetFileNameWithoutExtension(p) + " #" + t.Song).ToList()),
         (Nsf.Extensions, p => Nsf.Tracks(p).Select(t => t.Title).ToList()),
+        (Nsfe.Extensions, p => Nsfe.Tracks(p).Select(t => t.Title).ToList()),
         (Hes.Extensions, p => Hes.Tracks(p).Select(t => t.Title).ToList()),
         (Gbs.Extensions, p => Gbs.Tracks(p).Select(t => t.Title).ToList()),
         (HootSongs.Extensions, p => HootSongs.Tracks(p).Select(t => t.Title).ToList()),

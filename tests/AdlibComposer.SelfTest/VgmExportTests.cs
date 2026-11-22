@@ -1,5 +1,6 @@
-using System;
+﻿using System;
 using System.IO;
+using System.Linq;
 using AdlibComposer.Audio;
 using AdlibComposer.Core;
 using AdlibComposer.Formats;
@@ -152,7 +153,8 @@ public static class VgmExportTests
 
     private static string FirstFile(string dir, string pattern)
     {
-        var f = Directory.GetFiles(dir, pattern, SearchOption.AllDirectories);
+        // _incoming/modizer-master = 참고 소스 (AdPlug 시험 곡 등): 우리 표본이 아니므로 뺀다
+        var f = Directory.GetFiles(dir, pattern, SearchOption.AllDirectories).Where(x => x.IndexOf("modizer-master", StringComparison.OrdinalIgnoreCase) < 0).ToArray();
         Array.Sort(f, StringComparer.OrdinalIgnoreCase);
         return f.Length > 0 ? f[0] : null;
     }

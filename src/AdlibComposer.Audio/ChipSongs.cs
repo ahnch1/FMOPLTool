@@ -16,6 +16,7 @@ public static class ChipSongs
     {
         (VgmFormat.Extensions, VgmFormat.Load),
         (S98Format.Extensions, S98Format.Load),
+        (GymFormat.Extensions, GymFormat.Load),
         (Kss.Extensions, Kss.Load),
         (Nsf.Extensions, Nsf.Load),
         (Hes.Extensions, Hes.Load),

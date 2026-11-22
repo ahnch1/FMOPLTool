@@ -183,6 +183,14 @@ public static class Program
         }
         if (args.Length > 0 && (args[0] == "--probe" || args[0] == "--render" || args[0] == "--latency" || args[0] == "--drum" || args[0] == "--drumshape")) return Probe.Run(args);
         if (args.Length > 0 && args[0] == "--transcribe") return TranscribeTests.Probe(args);
+        if (args.Length > 0 && args[0] == "--modizer")
+        {
+            // modizer 대조 형식만 (docs/modizer-plan.md)
+            ModizerFormatTests.Run(Check);
+            Console.WriteLine();
+            Console.WriteLine("passed=" + passed + " failed=" + failed);
+            return failed == 0 ? 0 : 1;
+        }
         if (args.Length > 0 && args[0].StartsWith("--")) return DemoRender.Run(args);
         TestBnk();
         TestIns();
@@ -276,6 +284,7 @@ public static class Program
         HootMegaDriveTests.Run(Check);
         HootX68kTests.Run(Check);
         PcAtTests.Run(Check);
+        ModizerFormatTests.Run(Check);
         PlayerTests.Run(Check);
         RealFileTests.Run(Check);
         Console.WriteLine();

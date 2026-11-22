@@ -44,6 +44,9 @@ public sealed class Pokey : ISoundChip
     private readonly double cyclesPerSample;
     private double cycleAcc;
 
+    /// <summary>스테레오 자리: 0 = 가운데, 1 = 왼쪽만, 2 = 오른쪽만 (SAP STEREO = POKEY 둘).</summary>
+    public int Side;
+
     public Pokey(double clock = DefaultClock, int rate = 44100)
     {
         this.clock = clock > 0 ? clock : DefaultClock;
@@ -176,6 +179,7 @@ public sealed class Pokey : ISoundChip
         double avg = n > 0 ? (double)sum / n : level;
         // 네 채널 최대 60 → 16비트의 반쯤 (다른 칩과 섞을 자리)
         left = right = SoundChips.Clip(avg * 280.0);
+        if (Side == 1) right = 0; else if (Side == 2) left = 0;
     }
 
     public void SetMute(int c, bool m) { if (c >= 0 && c < 4) { mute[c] = m; Level(); } }

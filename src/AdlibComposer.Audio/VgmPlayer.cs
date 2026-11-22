@@ -45,7 +45,7 @@ public sealed class VgmPlayer
     }
 
     private readonly List<ExtraChip> extras = new List<ExtraChip>();
-    private ExtraChip xSn2, xOki2, xUpd, xQs, xSpcm, xOpn2203b, xPokey, xCus30, xAy2, xAy3, xC140, xK53260, xK54539, xK54539b, xOpn2b, xRf, xK7232, xY89;
+    private ExtraChip xSn2, xOki2, xUpd, xQs, xSpcm, xOpn2203b, xPokey, xPokey2, xCus30, xAy2, xAy3, xC140, xK53260, xK54539, xK54539b, xOpn2b, xRf, xK7232, xY89;
     private ExtraChip xSn, xOpll, xOpn2, xOpm, xOpn, xOpna, xOpnb, xOki, xNes, xPce, xNsfx, xMsm, xSaa, xGb;
     /// <summary>YM2612 PCM 데이터 뱅크 (블록 0x00) · 읽는 위치.</summary>
     private byte[] pcmBank = new byte[0];
@@ -110,7 +110,8 @@ public sealed class VgmPlayer
         if (s.Huc6280Clock > 0) l.Add(new Huc6280Psg(s.Huc6280Clock, Rate));
         if (s.Okim6258Clock > 0) l.Add(new Msm6258(s.Okim6258Clock, s.Okim6258Flags, Rate));
         if (s.Saa1099Clock > 0) l.Add(new Saa1099(s.Saa1099Clock, Rate));
-        if (s.PokeyClock > 0) l.Add(new Pokey(s.PokeyClock, Rate));
+        if (s.PokeyClock > 0) l.Add(new Pokey(s.PokeyClock, Rate) { Side = s.PokeyStereo && s.PokeyClock2 > 0 ? 1 : 0 });
+        if (s.PokeyClock > 0 && s.PokeyClock2 > 0) l.Add(new Pokey(s.PokeyClock2, Rate) { Side = s.PokeyStereo ? 2 : 0 });   // 둘째 POKEY (명령 BBh aa bit7)
         if (s.HasPsg && s.AyClock2 > 0) l.Add(new PsgEmulator(s.AyClock2, Rate, s.AyIsYm));   // 둘째 AY (명령 A0h aa bit7)
         if (s.HasPsg && s.AyClock3 > 0) l.Add(new PsgEmulator(s.AyClock3, Rate, s.AyIsYm));   // 셋째 AY (이 프로그램 안 명령 D9h)
         if (s.K053260Clock > 0) l.Add(new K053260(s.K053260Clock, Rate));
@@ -261,7 +262,7 @@ public sealed class VgmPlayer
         }
 
         extras.Clear();
-        xSn2 = null; xOki2 = null; xUpd = null; xQs = null; xSpcm = null; xOpn2203b = null; xPokey = null; xCus30 = null; xAy2 = null; xAy3 = null; xC140 = null; xK53260 = null; xK54539 = null; xK54539b = null; xOpn2b = null; xRf = null; xK7232 = null; xY89 = null;
+        xSn2 = null; xOki2 = null; xUpd = null; xQs = null; xSpcm = null; xOpn2203b = null; xPokey = null; xPokey2 = null; xCus30 = null; xAy2 = null; xAy3 = null; xC140 = null; xK53260 = null; xK54539 = null; xK54539b = null; xOpn2b = null; xRf = null; xK7232 = null; xY89 = null;
         xSn = xOpll = xOpn2 = xOpm = xOpn = xOpna = xOpnb = xOki = xNes = xPce = xNsfx = xMsm = xSaa = xGb = null;
         foreach (var chip in CreateOtherChips(s))
         {
@@ -280,7 +281,7 @@ public sealed class VgmPlayer
             else if (chip is NsfExpansion) xNsfx = x;
             else if (chip is Msm6258) xMsm = x;
             else if (chip is Saa1099) xSaa = x;
-            else if (chip is Pokey) xPokey = x;
+            else if (chip is Pokey) { if (xPokey == null) xPokey = x; else xPokey2 = x; }
             else if (chip is PsgEmulator) { if (xAy2 == null && s.AyClock2 > 0) xAy2 = x; else xAy3 = x; }
             else if (chip is NamcoCus30) xCus30 = x;
             else if (chip is NamcoC140) xC140 = x;
@@ -460,7 +461,7 @@ public sealed class VgmPlayer
             case 0xB9: if ((d[pos + 1] & 0x80) == 0) Other(xPce, 0, d[pos + 1], d[pos + 2]); break;
             case 0xB7: if ((d[pos + 1] & 0x80) == 0) Other(xMsm, 0, d[pos + 1], d[pos + 2]); break;
             case 0xBD: if ((d[pos + 1] & 0x80) == 0) Other(xSaa, 0, d[pos + 1], d[pos + 2]); break;
-            case 0xBB: if ((d[pos + 1] & 0x80) == 0) Other(xPokey, 0, d[pos + 1], d[pos + 2]); break;   // POKEY
+            case 0xBB: if ((d[pos + 1] & 0x80) == 0) Other(xPokey, 0, d[pos + 1], d[pos + 2]); else Other(xPokey2, 0, d[pos + 1] & 0x7F, d[pos + 2]); break;   // POKEY (bit7 = 둘째)
             case 0xB3: if ((d[pos + 1] & 0x80) == 0) Other(xGb, 0, d[pos + 1], d[pos + 2]); break;
             case 0x90: case 0x91: case 0x92: case 0x93: case 0x94: case 0x95: StreamCommand(d, pos); break;
             case 0xBA: if ((d[pos + 1] & 0x80) == 0) Other(xK53260, 0, d[pos + 1], d[pos + 2]); break;   // K053260

@@ -69,6 +69,9 @@ public sealed class VgmSong
     public double SegaPcmClock;
     /// <summary>POKEY 클럭 (VGM B0h, 명령 BBh).</summary>
     public double PokeyClock;
+    /// <summary>둘째 POKEY (VGM B0h bit30, 명령 BBh aa bit7). <see cref="PokeyStereo"/> = 첫째 왼쪽 · 둘째 오른쪽 (SAP STEREO, 이 프로그램 안에서만).</summary>
+    public double PokeyClock2;
+    public bool PokeyStereo;
     /// <summary>남코 CUS30 클럭 — VGM에 없는 칩: hoot 남코 렌더가 읽은 뒤 세우고, 이 프로그램 안 명령 0xD8 aa bb dd로 온다.</summary>
     public double Cus30Clock;
     /// <summary>남코 C140 클럭 (VGM A8h) · 형식 (96h: 0 = System 2, 1 = System 21, 2 = ASIC219), 명령 D4h, ROM 블록 8Dh.</summary>
@@ -166,7 +169,7 @@ public sealed class VgmSong
             if (Upd7759Clock > 0) l.Add("uPD7759");
             if (QsoundClock > 0) l.Add("QSound");
             if (SegaPcmClock > 0) l.Add("SegaPCM");
-            if (PokeyClock > 0) l.Add("POKEY");
+            if (PokeyClock > 0) l.Add(PokeyClock2 > 0 ? "POKEY ×2" : "POKEY");
             if (C140Clock > 0) l.Add("C140");
             if (K053260Clock > 0) l.Add("K053260");
             if (Rf5c68Clock > 0) l.Add("RF5C68");
@@ -300,6 +303,7 @@ public static class VgmFormat
         s.QsoundClock = hz(0xB4);
         s.SegaPcmClock = hz(0x38);
         s.PokeyClock = hz(0xB0);
+        if (s.PokeyClock > 0 && (clock(0xB0) & 0x40000000) != 0) s.PokeyClock2 = s.PokeyClock;
         s.C140Clock = hz(0xA8);
         s.K053260Clock = hz(0xAC);
         s.K054539Clock = hz(0xA0);

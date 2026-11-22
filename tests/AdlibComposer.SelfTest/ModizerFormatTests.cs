@@ -23,6 +23,7 @@ public static class ModizerFormatTests
         LhaYmTest(check);
         QsfTest(check);
         RadTest(check);
+        D00Test(check);
     }
 
     internal static string SampleDir()
@@ -746,6 +747,23 @@ public static class ModizerFormatTests
             var v = ChipSongs.Load(Path.Combine(mus, f));
             double r = Rms(Render(v, 3, 44100));
             check("RAD " + f + ": loads as VGM (OPL3), sounds", v.Ymf262Clock > 0 && v.LengthSeconds > 20 && r > 100, v.SourceFormat + ", " + v.LengthSeconds.ToString("0") + " s, rms " + r.ToString("0"));
+        }
+    }
+
+    private static void D00Test(Action<string, bool, string> check)
+    {
+        foreach (var f in new[] { "VIB_VOL3.D00", "TheAlibi.d00" }) AdPlugRef(check, () => new D00Player(), f);
+        check("D00: ChipSongs knows .d00", ChipSongs.Extensions.Contains(".d00"), "");
+        string mus = AdPlugTestDir("testmus");
+        if (mus == null) return;
+        foreach (var f in new[] { "VIB_VOL3.D00", "TheAlibi.d00" })
+        {
+            string path = Path.Combine(mus, f);
+            var list = ChipSongs.Tracks(path);
+            var v = ChipSongs.Load(list[0].path);
+            double r = Rms(Render(v, 3, 44100));
+            check("D00 " + f + ": tracks, loads as VGM (OPL2), sounds", list.Count >= 1 && v.Ym3812Clock > 0 && v.LengthSeconds > 10 && r > 100,
+                list.Count + " track(s) '" + list[0].title + "', " + v.SourceFormat + ", " + v.LengthSeconds.ToString("0") + " s, rms " + r.ToString("0"));
         }
     }
 }

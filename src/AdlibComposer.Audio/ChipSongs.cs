@@ -38,6 +38,7 @@ public static class ChipSongs
         (AdlibStreamFormats.DroExtensions, AdlibStreamFormats.LoadDro),
         (AdlibStreamFormats.RawExtensions, AdlibStreamFormats.LoadRaw),
         (RadPlayer.Extensions, RadPlayer.Load),
+        (D00Player.Extensions, D00Player.Load),
     };
 
     /// <summary>곡이 여럿 든 형식: 확장자 → 곡 제목 목록 (목록 안 번호 = "경로::번호").</summary>
@@ -48,6 +49,7 @@ public static class ChipSongs
         (Nsfe.Extensions, p => Nsfe.Tracks(p).Select(t => t.Title).ToList()),
         (Sap.Extensions, p => Sap.Tracks(p).Select(t => t.Title).ToList()),
         (Sgc.Extensions, p => Sgc.Tracks(p).Select(t => t.Title).ToList()),
+        (D00Player.Extensions, D00Player.Tracks),
         (Hes.Extensions, p => Hes.Tracks(p).Select(t => t.Title).ToList()),
         (Gbs.Extensions, p => Gbs.Tracks(p).Select(t => t.Title).ToList()),
         (HootSongs.Extensions, p => HootSongs.Tracks(p).Select(t => t.Title).ToList()),

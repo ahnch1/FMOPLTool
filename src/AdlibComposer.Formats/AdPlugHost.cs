@@ -14,6 +14,8 @@ public interface IOplOut
     void Write(int reg, int val);
     void SetChip(int n);
     int Chip { get; }
+    /// <summary>OPL 초기화 (AdPlug Copl::init — 기록에는 "init" 줄).</summary>
+    void Init();
 }
 
 public abstract class OplPlayer
@@ -51,6 +53,7 @@ public static class AdPlugHost
         public int Chip { get; private set; }
         public void SetChip(int n) { if (n >= 0 && n < 2) { Chip = n; Log.Chip = n; } }
         public void Write(int reg, int val) { Log.Write(reg, val); }
+        public void Init() { }
     }
 
     private sealed class TextOut : IOplOut
@@ -59,6 +62,7 @@ public static class AdPlugHost
         public int Chip { get; private set; }
         public void SetChip(int n) { if (n >= 0 && n < 2) Chip = n; S.Append("setchip(").Append(n).Append(")\n"); }
         public void Write(int reg, int val) { S.Append(reg.ToString("x")).Append(" <- ").Append(val.ToString("x")).Append('\n'); }
+        public void Init() { S.Append("init\n"); }
     }
 
     /// <summary>곡 끝 (Update = false)까지 또는 maxSeconds까지 돌려 VGM으로.</summary>

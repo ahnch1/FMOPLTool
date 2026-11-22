@@ -22,6 +22,7 @@ public static class ModizerFormatTests
         SgcTest(check);
         LhaYmTest(check);
         QsfTest(check);
+        RadTest(check);
     }
 
     internal static string SampleDir()
@@ -705,5 +706,46 @@ public static class ModizerFormatTests
             check("PSF: other-version library / missing library rejected", badVer && noLib, badVer + " " + noLib);
         }
         finally { try { Directory.Delete(dir, true); } catch (Exception) { } }
+    }
+
+    // ------------------------------------------------------------ M2 AdPlug 형식 (testref 대조)
+
+    internal static string AdPlugTestDir(string sub)
+    {
+        string inc = SopTests.FindDir("_incoming");
+        string d = inc == null ? null : Path.Combine(inc, "modizer-master", "libs", "Adplug", "adplug-master", "test", sub);
+        return d != null && Directory.Exists(d) ? d : null;
+    }
+
+    /// <summary>AdPlug test/testmus의 곡을 돌린 글 기록이 testref/*.ref와 줄마다 같은가 (다르면 첫 다른 줄).</summary>
+    internal static void AdPlugRef(Action<string, bool, string> check, Func<OplPlayer> make, string file)
+    {
+        string mus = AdPlugTestDir("testmus"), refs = AdPlugTestDir("testref");
+        if (mus == null || refs == null) { Console.WriteLine("SKIP  AdPlug ref " + file + " (_incoming/modizer-master AdPlug test folder not found)"); return; }
+        string refPath = Path.Combine(refs, Path.GetFileNameWithoutExtension(file) + ".ref");
+        var want = File.ReadAllText(refPath).Replace("\r\n", "\n").Split('\n');
+        string got;
+        try { got = AdPlugHost.Trace(make(), File.ReadAllBytes(Path.Combine(mus, file)), want.Length + 10); }
+        catch (Exception e) { check("AdPlug ref " + file + ": same OPL writes as AdPlug", false, e.GetType().Name + ": " + e.Message); return; }
+        var have = got.Split('\n');
+        int n = Math.Min(want.Length, have.Length), diff = -1;
+        for (int i = 0; i < n; i++) if (want[i] != have[i]) { diff = i; break; }
+        if (diff < 0 && want.Length != have.Length) diff = n;
+        check("AdPlug ref " + file + ": same OPL writes as AdPlug (" + (want.Length - 1) + " lines)", diff < 0,
+            diff < 0 ? "" : "line " + (diff + 1) + ": want '" + (diff < want.Length ? want[diff] : "<end>") + "' got '" + (diff < have.Length ? have[diff] : "<end>") + "'");
+    }
+
+    private static void RadTest(Action<string, bool, string> check)
+    {
+        foreach (var f in new[] { "ALLOYRUN.RAD", "dystopia.rad", "canonind.rad" }) AdPlugRef(check, () => new RadPlayer(), f);
+        check("RAD: ChipSongs knows .rad", ChipSongs.Extensions.Contains(".rad"), "");
+        string mus = AdPlugTestDir("testmus");
+        if (mus == null) return;
+        foreach (var f in new[] { "ALLOYRUN.RAD", "dystopia.rad" })
+        {
+            var v = ChipSongs.Load(Path.Combine(mus, f));
+            double r = Rms(Render(v, 3, 44100));
+            check("RAD " + f + ": loads as VGM (OPL3), sounds", v.Ymf262Clock > 0 && v.LengthSeconds > 20 && r > 100, v.SourceFormat + ", " + v.LengthSeconds.ToString("0") + " s, rms " + r.ToString("0"));
+        }
     }
 }

@@ -97,7 +97,7 @@ public static class AdlibStreamFormats
     public const double Opl3Clock = 14318180;
 
     /// <summary>OPL 쓰기 기록 (시간 · 칩 0/1 · 레지스터 · 값). 다 모은 뒤 OPL2 / OPL3 / 듀얼 OPL2를 정해 VGM으로.</summary>
-    private sealed class OplLog
+    internal sealed class OplLog
     {
         public readonly List<(double t, int chip, int reg, int val)> E = new List<(double, int, int, int)>();
         public double Now;
@@ -106,13 +106,13 @@ public static class AdlibStreamFormats
     }
 
     /// <summary>하드웨어 종류 (DRO 판 2 값으로 맞춤).</summary>
-    private enum OplHw { Unknown = -1, Opl2 = 0, DualOpl2 = 1, Opl3 = 2 }
+    internal enum OplHw { Unknown = -1, Opl2 = 0, DualOpl2 = 1, Opl3 = 2 }
 
     /// <summary>
     /// 기록 → VGM. 둘째 칩을 안 쓰면 OPL2 (YM3812). OPL3이면 칩 0/1 = 레지스터 뱅크 0/1 그대로 (YMF262).
     /// 듀얼 OPL2(사운드 블래스터 프로 1)는 OPL3 하나로: 칩 0 = 왼쪽, 칩 1 = 오른쪽 (C0~C8의 좌우 비트를 바꿔 쓰고, NEW = 1로 좌우를 살린다).
     /// </summary>
-    private static VgmSong OplLogToVgm(OplLog log, OplHw hw, string title, string source, string system)
+    internal static VgmSong OplLogToVgm(OplLog log, OplHw hw, string title, string source, string system)
     {
         bool chip1 = log.E.Any(e => e.chip == 1);
         bool opl3 = hw == OplHw.Opl3 || log.E.Any(e => e.chip == 1 && e.reg == 0x05 && (e.val & 1) != 0);

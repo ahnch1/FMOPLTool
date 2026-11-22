@@ -413,11 +413,11 @@ internal sealed class FileBrowser : UserControl, ISongList
                 list.Items.Add(it);
             }
             var files = ZipPath.GetFiles(dir);
-            foreach (var z in files.Where(AdlibComposer.Formats.ZipFolder.IsZip).OrderBy(x => Path.GetFileName(x), StringComparer.OrdinalIgnoreCase))
+            foreach (var z in files.Where(AdlibComposer.Formats.ZipFolder.IsArchive).OrderBy(x => Path.GetFileName(x), StringComparer.OrdinalIgnoreCase))
             {
                 var it = new ListViewItem(Path.GetFileName(z), "zip") { Tag = new Entry { Path = z, IsDir = true, IsZip = true }, ToolTipText = z + "\n두 번 클릭: zip 안으로 (폴더처럼)" };
                 it.SubItems.Add("");
-                it.SubItems.Add("ZIP");
+                it.SubItems.Add(AdlibComposer.Formats.ZipFolder.IsZip(z) ? "ZIP" : "LZH");
                 list.Items.Add(it);
             }
             var names = new HashSet<string>(files.Select(f => Path.GetFileName(f).ToUpperInvariant()));
@@ -472,7 +472,7 @@ internal sealed class FileBrowser : UserControl, ISongList
         Cursor = Cursors.WaitCursor;
         try
         {
-            direct = !ZipPath.IsInZip(zipPath) && ZipPath.CanBrowse(zipPath, f => KindOf(f) != MusicFileKind.None) && !ZipFolder.IsHootArchive(zipPath);
+            direct = ZipFolder.IsZip(zipPath) && !ZipPath.IsInZip(zipPath) && ZipPath.CanBrowse(zipPath, f => KindOf(f) != MusicFileKind.None) && !ZipFolder.IsHootArchive(zipPath);
             cache = direct ? zipPath : ZipFolder.Extract(zipPath);
         }
         catch (Exception ex) { AppLog.Warn("파일", "zip을 열 수 없습니다: " + Path.GetFileName(zipPath), ex.Message); return; }

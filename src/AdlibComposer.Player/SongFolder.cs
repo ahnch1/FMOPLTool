@@ -60,8 +60,8 @@ public static class SongFolder
             l.Add(new FolderEntry { Kind = EntryKind.Folder, Path = d, Name = name });
         }
         var files = Directory.GetFiles(dir).OrderBy(x => System.IO.Path.GetFileName(x), cmp).ToList();
-        foreach (var z in files.Where(ZipFolder.IsZip))
-            l.Add(new FolderEntry { Kind = EntryKind.Zip, Path = z, Name = System.IO.Path.GetFileName(z), Detail = "ZIP" });
+        foreach (var z in files.Where(ZipFolder.IsArchive))
+            l.Add(new FolderEntry { Kind = EntryKind.Zip, Path = z, Name = System.IO.Path.GetFileName(z), Detail = ZipFolder.IsZip(z) ? "ZIP" : "LZH" });
         foreach (var f in files)
         {
             if (!IsSong(f)) continue;

@@ -40,6 +40,9 @@ public static class ZipFolder
         return path != null && string.Equals(Path.GetExtension(path), ".zip", StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>폴더처럼 들어가는 압축 파일 (zip · lzh · lha). lzh · lha는 언제나 임시 폴더에 푼다 (<see cref="Lha"/>).</summary>
+    public static bool IsArchive(string path) { return IsZip(path) || Lha.IsLha(path); }
+
     /// <summary>경로가 zip을 푼 임시 폴더 안인가 (저장할 때 다른 이름으로 묻기 등).</summary>
     public static bool IsCachePath(string path)
     {
@@ -73,6 +76,8 @@ public static class ZipFolder
         string root = Path.GetFullPath(tmp).TrimEnd('\\', '/') + Path.DirectorySeparatorChar;
         try
         {
+            if (Lha.IsLha(fi.FullName)) ExtractLha(fi.FullName, tmp, root);
+            else
             // Latin-1로 열면 깃발 없는 이름의 바이트가 그대로 남는다 (UTF-8 깃발이 있는 이름은 .NET이 UTF-8로 읽는다)
             using (var zip = ZipFile.Open(fi.FullName, ZipArchiveMode.Read, Encoding.Latin1))
             {
@@ -109,6 +114,33 @@ public static class ZipFolder
         }
         AddHootEntries(fi.FullName, dir);
         return dir;
+    }
+
+    /// <summary>LHA (.lzh · .lha)를 tmp 폴더에 푼다 (이름 · 크기 한도 · 밖으로 나가는 이름은 zip과 같이).</summary>
+    private static void ExtractLha(string path, string tmp, string root)
+    {
+        var bytes = File.ReadAllBytes(path);
+        var entries = Lha.ReadEntries(bytes);
+        long total = entries.Sum(e => e.OriginalSize);
+        if (total > MaxTotalBytes) throw new InvalidDataException("압축 파일이 너무 큽니다 (풀면 " + (total >> 20) + "MB, 한도 " + (MaxTotalBytes >> 20) + "MB).");
+        var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var e in entries)
+        {
+            string rel = SafeRelative(e.Name);
+            if (rel.Length == 0) continue;
+            string target = Path.GetFullPath(Path.Combine(tmp, rel));
+            if (!target.StartsWith(root, StringComparison.OrdinalIgnoreCase)) continue;
+            if (e.IsDirectory) { Directory.CreateDirectory(target); continue; }
+            string unique = target;
+            for (int n = 2; !used.Add(unique); n++)
+                unique = Path.Combine(Path.GetDirectoryName(target), Path.GetFileNameWithoutExtension(target) + " (" + n + ")" + Path.GetExtension(target));
+            Directory.CreateDirectory(Path.GetDirectoryName(unique));
+            byte[] data;
+            try { data = Lha.Extract(bytes, e); }
+            catch (InvalidDataException) { continue; }   // 풀지 못하는 방식 (-lh1- 등)은 건너뜀
+            File.WriteAllBytes(unique, data);
+            if (e.Time > DateTime.MinValue) try { File.SetLastWriteTime(unique, e.Time); } catch (Exception) { }
+        }
     }
 
     /// <summary>hoot 목록(zip 옆 xml 폴더)에 이 zip을 쓰는 흉내 항목이 있는가: 그런 zip은 풀어서 .hoot 항목을 만들어야 한다.</summary>

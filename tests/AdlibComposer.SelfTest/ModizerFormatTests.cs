@@ -20,6 +20,7 @@ public static class ModizerFormatTests
         SapTest(check);
         KssDriverTest(check);
         SgcTest(check);
+        LhaYmTest(check);
     }
 
     internal static string SampleDir()
@@ -436,5 +437,169 @@ public static class ModizerFormatTests
         for (int p = v.DataOffset; p < v.DataEnd; p += Math.Max(1, VgmFormat.CommandLength(v.Data, p)))
             if (v.Data[p] == cmd) return true;
         return false;
+    }
+
+    // ------------------------------------------------------------ M1-6 LHA · YM · VTX · PSG
+
+    /// <summary>LHA 단계 0 머리말 + 자료 (방식 그대로, 압축 안 함이면 -lh0-).</summary>
+    internal static byte[] MakeLha0(string name, byte[] data, string method = "-lh0-", int original = -1, byte[] packed = null)
+    {
+        packed ??= data;
+        var nb = System.Text.Encoding.ASCII.GetBytes(name);
+        int hsize = 22 + nb.Length + 2 - 2;
+        var h = new List<byte> { (byte)hsize, 0 };
+        h.AddRange(System.Text.Encoding.ASCII.GetBytes(method));
+        h.AddRange(BitConverter.GetBytes(packed.Length));
+        h.AddRange(BitConverter.GetBytes(original >= 0 ? original : data.Length));
+        h.AddRange(new byte[4]); h.Add(0x20); h.Add(0);   // 시간 · 속성 · 단계 0
+        h.Add((byte)nb.Length); h.AddRange(nb);
+        h.AddRange(BitConverter.GetBytes((ushort)Lha.Crc16(data)));
+        h.AddRange(packed);
+        return h.ToArray();
+    }
+
+    /// <summary>LHA 단계 2 머리말 (파일 이름 · 폴더 확장) + 자료 (-lh0-).</summary>
+    internal static byte[] MakeLha2(string dir, string name, byte[] data)
+    {
+        var nameB = System.Text.Encoding.ASCII.GetBytes(name);
+        var dirB = System.Text.Encoding.ASCII.GetBytes(dir).Concat(new byte[] { 0xFF }).ToArray();
+        // 확장 1: 파일 이름, 확장 2: 폴더 (각각 종류 1 + 자료 + 다음 크기 2)
+        int s1 = 1 + nameB.Length + 2, s2 = 1 + dirB.Length + 2;
+        var h = new List<byte>();
+        int total = 26 + s1 + s2;
+        h.AddRange(BitConverter.GetBytes((ushort)total));
+        h.AddRange(System.Text.Encoding.ASCII.GetBytes("-lh0-"));
+        h.AddRange(BitConverter.GetBytes(data.Length)); h.AddRange(BitConverter.GetBytes(data.Length));
+        h.AddRange(BitConverter.GetBytes(0)); h.Add(0x20); h.Add(2);
+        h.AddRange(BitConverter.GetBytes((ushort)Lha.Crc16(data))); h.Add((byte)'U');
+        h.AddRange(BitConverter.GetBytes((ushort)s1));
+        h.Add(0x01); h.AddRange(nameB); h.AddRange(BitConverter.GetBytes((ushort)s2));
+        h.Add(0x02); h.AddRange(dirB); h.AddRange(BitConverter.GetBytes((ushort)0));
+        h.AddRange(data);
+        return h.ToArray();
+    }
+
+    /// <summary>YM3 (레지스터 14개 평면): 채널 A 순음, frames 프레임.</summary>
+    private static byte[] MakeYm3(int frames, bool loop = false, int loopFrame = 0)
+    {
+        var d = new List<byte>(System.Text.Encoding.ASCII.GetBytes(loop ? "YM3b" : "YM3!"));
+        var planes = new byte[14 * frames];
+        for (int f = 0; f < frames; f++)
+        {
+            planes[0 * frames + f] = (byte)(0x80 + (f & 0x3F));   // R0 (프레임마다 바뀜)
+            planes[7 * frames + f] = 0x3E;                         // 톤 A만
+            planes[8 * frames + f] = 0x0F;                         // 음량 A
+            planes[13 * frames + f] = 0xFF;                        // 엔벨로프 그대로
+        }
+        d.AddRange(planes);
+        if (loop) d.AddRange(BitConverter.GetBytes(loopFrame));
+        return d.ToArray();
+    }
+
+    private static int CountAy(VgmSong v, int reg)
+    {
+        int n = 0;
+        for (int p = v.DataOffset; p < v.DataEnd; p += Math.Max(1, VgmFormat.CommandLength(v.Data, p)))
+            if (v.Data[p] == 0xA0 && v.Data[p + 1] == reg) n++;
+        return n;
+    }
+
+    private static void LhaYmTest(Action<string, bool, string> check)
+    {
+        // LHA 단계 0 (-lh0-)으로 감싼 YM3
+        var ym3 = MakeYm3(100);
+        var wrapped = MakeLha0("song.bin", ym3);
+        var e0 = Lha.ReadEntries(wrapped);
+        check("LHA level 0: entry name / method / CRC", e0.Count == 1 && e0[0].Name == "song.bin" && e0[0].Method == "-lh0-" && Lha.Crc16(Lha.Extract(wrapped, e0[0])) == e0[0].Crc, e0.Count > 0 ? e0[0].Name : "none");
+        var d = AyDumpFormats.ReadYm(wrapped);
+        check("YM3 in LHA: 100 frames, 2 MHz, 50 Hz, planar regs", d.Frames == 100 && d.Clock == 2000000 && d.FrameHz == 50 && d.Regs[16 * 5 + 0] == 0x85 && d.Regs[16 * 5 + 7] == 0x3E, d.Frames + " " + d.Format);
+        var v = AyDumpFormats.ToVgm(d, "x");
+        check("YM3 → VGM: 2 s, R0 every frame, R13 FFh never written, YM2149", Math.Abs(v.LengthSeconds - 2.0) < 0.01 && CountAy(v, 0) == 100 && CountAy(v, 13) == 0 && CountAy(v, 7) == 1 && v.AyClock == 2000000 && v.AyType == 0x10, v.LengthSeconds.ToString("0.00") + " s, R0 " + CountAy(v, 0) + ", R13 " + CountAy(v, 13));
+        check("YM3 → VGM: sounds", Rms(Render(v, 0.5)) > 200, Rms(Render(v, 0.5)).ToString("0"));
+        var lb = AyDumpFormats.ToVgm(AyDumpFormats.ReadYm(MakeYm3(100, true, 50)));
+        check("YM3b: loop frame 50 → loop 1 s", Math.Abs(lb.LoopSamples - 44100) < 2, lb.LoopSamples.ToString());
+
+        // YM5 (평면 아님 · 평면) + 제목 · 효과 비트 지움
+        foreach (bool planar in new[] { false, true })
+        {
+            var y = new List<byte>(System.Text.Encoding.ASCII.GetBytes("YM5!LeOnArD!"));
+            void Be32(long x) { y.Add((byte)(x >> 24)); y.Add((byte)(x >> 16)); y.Add((byte)(x >> 8)); y.Add((byte)x); }
+            void Be16(int x) { y.Add((byte)(x >> 8)); y.Add((byte)x); }
+            const int frames = 60;
+            Be32(frames); Be32(planar ? 1 : 0); Be16(0); Be32(1773400); Be16(60); Be32(10); Be16(0);
+            y.AddRange(System.Text.Encoding.ASCII.GetBytes("Ym Title\0Ym Author\0Comment\0"));
+            var regs = new byte[frames * 16];
+            for (int f = 0; f < frames; f++)
+            {
+                int[] r = new int[16];
+                r[0] = 0x40 + f; r[1] = 0x30 | 1; r[7] = 0x3E; r[8] = 0x0F | 0xE0; r[13] = f == 0 ? 0x08 : 0xFF;
+                for (int k = 0; k < 16; k++) { if (planar) regs[k * frames + f] = (byte)r[k]; else regs[f * 16 + k] = (byte)r[k]; }
+            }
+            y.AddRange(regs);
+            y.AddRange(System.Text.Encoding.ASCII.GetBytes("End!"));
+            var yd = AyDumpFormats.ReadYm(y.ToArray());
+            var yv = AyDumpFormats.ToVgm(yd);
+            check("YM5 " + (planar ? "planar" : "frame order") + ": header (clock, 60 Hz, loop 10, title), R13 once, effect bits cleared",
+                yd.Frames == 60 && yd.Clock == 1773400 && yd.FrameHz == 60 && yd.LoopFrame == 10 && yd.Title == "Ym Title" && yd.Author == "Ym Author" && yv.TitleEn == "Ym Title" && CountAy(yv, 13) == 1 && Math.Abs(yv.LengthSeconds - 1.0) < 0.01
+                && yd.Regs[16 * 3 + 0] == 0x43 && FirstAy(yv, 1) == 0x01 && FirstAy(yv, 8) == 0x0F,
+                yd.Frames + " " + yd.Title + " R1 " + FirstAy(yv, 1).ToString("X2") + " R8 " + FirstAy(yv, 8).ToString("X2"));
+        }
+
+        // PSG (ZX): 프레임 3개 + FEh 1 (= 4 프레임) + FDh
+        var psg = new List<byte>(System.Text.Encoding.ASCII.GetBytes("PSG\x1a")); psg.AddRange(new byte[12]);
+        psg.AddRange(new byte[] { 0x07, 0x3E, 0x08, 0x0F, 0x00, 0x50, 0xFF, 0x00, 0x51, 0xFF, 0xFF, 0xFE, 0x01, 0x00, 0x52, 0xFF, 0xFD });
+        var pd = AyDumpFormats.ReadPsg(psg.ToArray());
+        var pv = AyDumpFormats.ToVgm(pd);
+        check("PSG (ZX): FFh frames + FEh n×4, 1.7734 MHz", pd.Frames == 8 && pd.Clock == AyDumpFormats.ZxClock && Math.Abs(pv.LengthSeconds - 8 / 50.0) < 0.01 && CountAy(pv, 0) == 3, pd.Frames + " frames, R0 " + CountAy(pv, 0));
+
+        // LHA 단계 2 (폴더 · 파일 이름 확장)
+        var l2 = MakeLha2("sub", "inner.ym", ym3);
+        var e2 = Lha.ReadEntries(l2);
+        check("LHA level 2: dir + name extensions, -lh0- extract", e2.Count == 1 && e2[0].Name == "sub/inner.ym" && Lha.Extract(l2, e2[0]).SequenceEqual(ym3), e2.Count > 0 ? e2[0].Name : "none");
+
+        // LZH 압축 폴더: ZipFolder.Extract가 풀어 곡이 보임
+        string tmpLzh = Path.Combine(Path.GetTempPath(), "fmopl_lzh_test_" + Environment.ProcessId + ".lzh");
+        File.WriteAllBytes(tmpLzh, MakeLha0("a.ym", ym3).Concat(MakeLha2("dir", "b.ym", ym3)).Concat(new byte[] { 0 }).ToArray());
+        try
+        {
+            string dir = ZipFolder.Extract(tmpLzh);
+            bool a = File.Exists(Path.Combine(dir, "a.ym")), b = File.Exists(Path.Combine(dir, "dir", "b.ym"));
+            check("LZH folder: ZipFolder.Extract (level 0 + 2), IsArchive", a && b && ZipFolder.IsArchive(tmpLzh) && !ZipFolder.IsZip(tmpLzh) && ChipSongs.Load(Path.Combine(dir, "a.ym")).LengthSeconds > 1.9, a + " " + b);
+        }
+        finally { File.Delete(tmpLzh); }
+
+        // 실제 LZH (lh5 등): 모든 항목 CRC
+        string inc = SopTests.FindDir("_incoming");
+        string real = inc == null ? null : Directory.GetFiles(inc, "*.lzh", SearchOption.TopDirectoryOnly).Concat(Directory.Exists(Path.Combine(inc, "Hootarchive")) ? Directory.GetFiles(Path.Combine(inc, "Hootarchive"), "*.lzh") : new string[0]).FirstOrDefault();
+        if (real == null) { Console.WriteLine("SKIP  LHA real archive (_incoming/**/*.lzh not found)"); return; }
+        var rb = File.ReadAllBytes(real);
+        var re = Lha.ReadEntries(rb).Where(x => !x.IsDirectory).ToList();
+        int ok = 0; string bad = "";
+        var methods = new HashSet<string>();
+        foreach (var x in re)
+        {
+            methods.Add(x.Method);
+            try { var o = Lha.Extract(rb, x); if (o.Length == x.OriginalSize && Lha.Crc16(o) == x.Crc) ok++; else bad = x.Name; }
+            catch (Exception ex) { bad = x.Name + " " + ex.Message; }
+        }
+        check("LHA real " + Path.GetFileName(real) + ": every entry CRC-16 ok", re.Count > 0 && ok == re.Count, ok + "/" + re.Count + " (" + string.Join(",", methods) + ")" + (bad.Length > 0 ? " bad: " + bad : ""));
+
+        // VTX: 실제 -lh5- 흐름을 머리말 없이 붙여 VTX로
+        var lh5 = re.FirstOrDefault(x => x.Method == "-lh5-" && x.OriginalSize >= 14 * 10);
+        if (lh5 == null) return;
+        var vtx = new List<byte>(System.Text.Encoding.ASCII.GetBytes("ay"));
+        vtx.Add(1); vtx.AddRange(BitConverter.GetBytes((ushort)0)); vtx.AddRange(BitConverter.GetBytes(1773400)); vtx.Add(50); vtx.AddRange(BitConverter.GetBytes((ushort)1994));
+        vtx.AddRange(BitConverter.GetBytes((int)lh5.OriginalSize));
+        vtx.AddRange(System.Text.Encoding.ASCII.GetBytes("Vtx Title\0Vtx Author\0Prog\0Tracker\0Comment\0"));
+        vtx.AddRange(rb.Skip(lh5.DataOffset).Take((int)lh5.PackedSize));
+        var vd = AyDumpFormats.ReadVtx(vtx.ToArray());
+        check("VTX: header + raw -lh5- stream → frames = size / 14", vd.Frames == lh5.OriginalSize / 14 && vd.Title == "Vtx Title" && vd.Year == "1994" && vd.Clock == 1773400 && vd.Program.Contains("Tracker"), vd.Frames + " " + vd.Title);
+    }
+
+    private static int FirstAy(VgmSong v, int reg)
+    {
+        for (int p = v.DataOffset; p < v.DataEnd; p += Math.Max(1, VgmFormat.CommandLength(v.Data, p)))
+            if (v.Data[p] == 0xA0 && v.Data[p + 1] == reg) return v.Data[p + 2];
+        return -1;
     }
 }

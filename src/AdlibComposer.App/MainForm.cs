@@ -488,7 +488,7 @@ internal sealed class MainForm : Form
         bool ok = false;
         if (!IsDropZone(sender)) { e.Effect = DragDropEffects.None; return; }
         foreach (var item in DroppedItems(e.Data))
-            if (Directory.Exists(item) || (File.Exists(item) && (FileBrowser.KindOf(item) != MusicFileKind.None || ZipFolder.IsZip(item)))) { ok = true; break; }
+            if (Directory.Exists(item) || (File.Exists(item) && (FileBrowser.KindOf(item) != MusicFileKind.None || ZipFolder.IsArchive(item)))) { ok = true; break; }
         e.Effect = ok ? DragDropEffects.Copy : DragDropEffects.None;
     }
 
@@ -502,7 +502,7 @@ internal sealed class MainForm : Form
         var items = DroppedItems(e.Data);
         string dir = items.FirstOrDefault(Directory.Exists);
         if (dir != null) { browser.OpenFolder(dir); return; }
-        string zip = items.FirstOrDefault(f => File.Exists(f) && ZipFolder.IsZip(f));
+        string zip = items.FirstOrDefault(f => File.Exists(f) && ZipFolder.IsArchive(f));
         if (zip != null) { BeginInvoke((Action)(() => OpenDroppedZip(zip))); return; }
         var files = items.Where(f => File.Exists(f) && FileBrowser.KindOf(f) != MusicFileKind.None).Select(Path.GetFullPath).ToList();
         if (files.Count == 0) return;

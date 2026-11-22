@@ -111,7 +111,7 @@
 - [x] M1-3 SAP (type B · C · D) — 6502 + POKEY, 곡 여럿 (`ChipSongs.multi`) (v2.4.2, `Sap` + TYPE S, STEREO = VGM 둘째 POKEY)
 - [x] M1-4 MGS · BGM · OPX · MPK · MBM → KSS 이미지 (libkss 드라이버 바이너리를 리소스로, 라이선스 확인) (v2.4.3, `KssDrivers` — 드라이버는 저작물이라 사용자가 resource\kssdrv에 둠 (.bin 또는 libkss .h), 확장 I/O 끝 · 되풀이 감지. MBM은 남김, 실제 곡 파일로 귀 확인 아직)
 - [x] M1-5 SGC (SMS · GG · Coleco) — 다음에 hoot SG-1000 7항목에 같은 코드 (v2.4.4, `Sgc` — hoot SG-1000은 아직)
-- [ ] M1-6 LHA -lh5- 풀기 (Formats) → YM · VTX 재생 + LZH 압축 폴더 (todo 5장 항목 같이 닫음)
+- [x] M1-6 LHA -lh5- 풀기 (Formats) → YM · VTX 재생 + LZH 압축 폴더 (todo 5장 항목 같이 닫음) (v2.4.5, `Lha` · `AyDumpFormats` + PSG, YM5/6 특수 효과 · VTX 스테레오는 남김)
 - [ ] M1-7 PSF 컨테이너 공통 (zlib · `_lib` · 태그 · 길이) + QSF (Z80 + QSound, CPS-2 코드 재사용)
 
 ### M2 — AdLib 형식 (프로젝트 본업, AdPlug 참고)
@@ -145,6 +145,18 @@
 ### M6 — 큰 것 (나중에, 하나씩 따로 정함)
 - [ ] SSF (SCSP — hoot Model 2A · 3과 함께) · SNSF (65816) · GSF (ARM7) · PSF/PSF2 · USF · 2SF/NCSF · DSF · UADE
 - 하지 않음: Furnace · vgmstream · APE (칩 음악 재현이 목적이 아님)
+
+---
+
+## 4.1 진행 기록 · 이어 하기 (2026-11-23, v2.4.5에서 멈춤)
+
+- 끝난 단계 (커밋 하나씩, SelfTest 1676 통과): v2.4.0 GYM · v2.4.1 NSFE · v2.4.2 SAP (+ VGM 둘째 POKEY · 스테레오) · v2.4.3 MGS · BGM · MPK · OPX (`KssDrivers`, + `Kss.Render` 확장 I/O 끝 · 되풀이 감지) · v2.4.4 SGC · v2.4.5 LHA 풀기 · YM · VTX · PSG · LZH 압축 폴더.
+- 시험: `SelfTest --modizer` = 이 계획의 시험만 (`tests/AdlibComposer.SelfTest/ModizerFormatTests.cs`). 실제 표본은 `D:\Retro\fmopldata\Modizer` (환경 변수 `FMOPL_MODIZER_SAMPLES`), 지금 있는 것은 GYM · NSF · GBS · KSS · GSF · PSF2 · SPC. SAP · SGC · MGS · YM · VTX 실제 파일은 없음 → 만든 파일로만 시험함. 표본을 구하면 귀로 확인할 것.
+- 다음 할 일: **M1-7** PSF 컨테이너 공통 (zlib · `_lib` · 태그 · 길이) + QSF (Z80 + QSound, `HootCps2` 재사용, KEY 청크의 Kabuki 키). 참고 `libs/HighlyQuixotic` · `libs/libpsflib`.
+- 남긴 것: MBM (MoonBlaster — MSX-AUDIO ADPCM + MBK, `mbm2kss.c`), YM5/6 특수 효과 (SID 음 · 디지드럼 · Sinus-SID · Sync-Buzzer), VTX 스테레오 방식 (ABC · ACB …), SAP TYPE R · 코복스, SGC를 hoot SG-1000 7항목에, LZH -lh1-.
+- 사용자 표본 폴더에 GSF 155 · PSF2가 많다 (M6 "큰 것"): ARM7 (GBA) · MIPS + SPU2는 새 CPU라 따로 정할 일.
+- 작업 요령: bash heredoc 안 파이썬은 `\0` · `\t` · `\x..`를 진짜 바이트로 바꿔 버린다 → C# 글에 역슬래시가 들어가면 파일로 쓴 스크립트 (JSON 바꾸기 목록)를 쓸 것. CRLF 파일 주의.
+- 드라이버 바이너리 (MGSDRV 등)는 저작물이라 저장소에 넣지 않음: `resource\kssdrv`에 원래 파일 또는 libkss `.h`를 사용자가 둔다 (시험은 `_incoming/modizer-master`의 `.h`를 읽음).
 
 ---
 

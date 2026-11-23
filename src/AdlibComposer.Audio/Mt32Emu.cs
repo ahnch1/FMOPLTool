@@ -21,8 +21,8 @@ public sealed class Mt32Emu : IDisposable
     [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)] private static extern IntPtr mt32emu_get_library_version_string();
     [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)] private static extern IntPtr mt32emu_create_context(IntPtr reportHandler, IntPtr instanceData);
     [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)] private static extern void mt32emu_free_context(IntPtr ctx);
-    [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)] private static extern int mt32emu_add_rom_data(IntPtr ctx, byte[] data, UIntPtr size, IntPtr sha1);
-    [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)] private static extern int mt32emu_merge_and_add_rom_data(IntPtr ctx, byte[] d1, UIntPtr s1, IntPtr h1, byte[] d2, UIntPtr s2, IntPtr h2);
+    [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)] private static extern int mt32emu_add_rom_data(IntPtr ctx, IntPtr data, UIntPtr size, IntPtr sha1);
+    [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)] private static extern int mt32emu_merge_and_add_rom_data(IntPtr ctx, IntPtr d1, UIntPtr s1, IntPtr h1, IntPtr d2, UIntPtr s2, IntPtr h2);
     [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)] private static extern int mt32emu_open_synth(IntPtr ctx);
     [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)] private static extern void mt32emu_close_synth(IntPtr ctx);
     [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)] private static extern uint mt32emu_get_actual_stereo_output_samplerate(IntPtr ctx);
@@ -35,6 +35,19 @@ public sealed class Mt32Emu : IDisposable
     private const int Block = 16;
 
     private IntPtr ctx;
+    /// <summary>
+    /// ROM 데이터 (관리 밖 메모리). Munt는 add_rom_data로 받은 데이터를 복사하지 않고 가리키기만 해서
+    /// (ArrayFile), 뒤에 open_synth (Reset)가 다시 읽는다 → GC가 옮기거나 지울 수 있는 byte[]를 넘기면 안 된다. Dispose에서 푼다.
+    /// </summary>
+    private readonly List<IntPtr> romMemory = new List<IntPtr>();
+
+    private IntPtr Keep(byte[] data)
+    {
+        IntPtr p = Marshal.AllocHGlobal(data.Length);
+        Marshal.Copy(data, 0, p, data.Length);
+        romMemory.Add(p);
+        return p;
+    }
     private readonly short[] buf = new short[Block * 2];
     private int pos = Block;
 
@@ -65,22 +78,23 @@ public sealed class Mt32Emu : IDisposable
         try
         {
             string control = null, pcm = null;
-            var partials = new List<(string name, byte[] data)>();
+            var partials = new List<(string name, IntPtr data, int size)>();
             foreach (var f in Directory.GetFiles(romFolder).OrderBy(x => x, StringComparer.OrdinalIgnoreCase))
             {
                 var len = new FileInfo(f).Length;
                 if (len < 16 * 1024 || len > 2 * 1024 * 1024) continue;
-                var data = File.ReadAllBytes(f);
-                int rc = mt32emu_add_rom_data(e.ctx, data, (UIntPtr)data.Length, IntPtr.Zero);
+                var bytes = File.ReadAllBytes(f);
+                IntPtr data = e.Keep(bytes);
+                int rc = mt32emu_add_rom_data(e.ctx, data, (UIntPtr)bytes.Length, IntPtr.Zero);
                 if (rc == RcAddedControl && control == null) control = Path.GetFileName(f);
                 else if (rc == RcAddedPcm && pcm == null) pcm = Path.GetFileName(f);
-                else if (rc == RcAddedPartialControl || rc == RcAddedPartialPcm) partials.Add((Path.GetFileName(f), data));
+                else if (rc == RcAddedPartialControl || rc == RcAddedPartialPcm) partials.Add((Path.GetFileName(f), data, bytes.Length));
             }
             // 나뉜 ROM: 둘씩 합쳐 본다
             for (int i = 0; i < partials.Count && (control == null || pcm == null); i++)
                 for (int j = i + 1; j < partials.Count; j++)
                 {
-                    int rc = mt32emu_merge_and_add_rom_data(e.ctx, partials[i].data, (UIntPtr)partials[i].data.Length, IntPtr.Zero, partials[j].data, (UIntPtr)partials[j].data.Length, IntPtr.Zero);
+                    int rc = mt32emu_merge_and_add_rom_data(e.ctx, partials[i].data, (UIntPtr)partials[i].size, IntPtr.Zero, partials[j].data, (UIntPtr)partials[j].size, IntPtr.Zero);
                     string both = partials[i].name + "+" + partials[j].name;
                     if (rc == RcAddedControl && control == null) { control = both; break; }
                     if (rc == RcAddedPcm && pcm == null) { pcm = both; break; }
@@ -148,5 +162,7 @@ public sealed class Mt32Emu : IDisposable
         if (ctx == IntPtr.Zero) return;
         try { mt32emu_close_synth(ctx); mt32emu_free_context(ctx); } catch (Exception) { }
         ctx = IntPtr.Zero;
+        foreach (var p in romMemory) Marshal.FreeHGlobal(p);   // 문맥을 푼 뒤에 (Munt가 더는 가리키지 않음)
+        romMemory.Clear();
     }
 }

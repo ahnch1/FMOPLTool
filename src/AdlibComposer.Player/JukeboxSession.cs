@@ -265,14 +265,28 @@ public sealed partial class JukeboxSession
         string def = settings.DefaultBankPath;
         if (def != null && File.Exists(def))
         {
-            if (defaultBank == null || !string.Equals(defaultBankPath, def, StringComparison.OrdinalIgnoreCase))
+            // 같은 경로라도 파일을 고쳤으면 (크기 · 고친 시각) 다시 읽는다
+            string stamp = FileStamp(def);
+            if (defaultBank == null || defaultBankPath != stamp)
             {
                 defaultBank = ReadBank(def);
-                defaultBankPath = def;
+                defaultBankPath = stamp;
             }
             if (defaultBank != null) return defaultBank;
         }
         return InstrumentBank.CreateNew();
+    }
+
+    /// <summary>캐시 열쇠: 경로 + 크기 + 고친 시각 (파일을 고치면 바뀐다).</summary>
+    internal static string FileStamp(string path)
+    {
+        if (path == null) return "";
+        try
+        {
+            var fi = new FileInfo(path);
+            return fi.Exists ? path + "|" + fi.Length + "|" + fi.LastWriteTimeUtc.Ticks : path;
+        }
+        catch (Exception) { return path; }
     }
 
     private InstrumentBank ReadBank(string path)
@@ -319,7 +333,7 @@ public sealed partial class JukeboxSession
             }
             catch (Exception) { }
         }
-        string key = path ?? ("BNK:" + settings.DefaultBankPath);
+        string key = path != null ? FileStamp(path) : "BNK:" + FileStamp(settings.DefaultBankPath);
         if (gmBank != null && key == gmBankKey) return gmBank;
         GmBank b = null;
         try

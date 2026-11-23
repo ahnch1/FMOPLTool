@@ -71,6 +71,23 @@ public static class PlayerTests
             check("Player filter: in-list names, no up row", filtered.Count == 1 && filtered[0].Name == "demo.rol", string.Join(", ", filtered));
             File.Delete(Path.Combine(root, "battle.txt"));
 
+            // ---- 기본 뱅크 (STANDARD.BNK)를 고치면 다음 곡부터 새 파일 (같은 경로라도 캐시를 쓰지 않음)
+            {
+                string nb = Path.Combine(root, "nobank");
+                Directory.CreateDirectory(nb);
+                File.Copy(Path.Combine(samples, "demo.rol"), Path.Combine(nb, "solo.rol"));
+                string std = Path.Combine(root, "STD.BNK");
+                File.Copy(Path.Combine(samples, "demo.bnk"), std);
+                var ds = new JukeboxSession(new AudioEngine(), new PlayerSettings { DefaultBankPath = std });
+                bool l1 = ds.Load(Path.Combine(nb, "solo.rol"), out string e1);
+                string info1 = ds.Info;
+                File.WriteAllBytes(std, new byte[] { 1, 2, 3 });   // 망가뜨림 → 다시 읽으면 뱅크 없음
+                File.SetLastWriteTimeUtc(std, DateTime.UtcNow.AddMinutes(1));
+                bool l2 = ds.Load(Path.Combine(nb, "solo.rol"), out string e2);
+                check("Player: edited default bank is re-read on next load",
+                    l1 && l2 && info1.Contains("STD.BNK") && !ds.Info.Contains("STD.BNK"), info1 + " → " + ds.Info + (e1 ?? "") + (e2 ?? ""));
+            }
+
             string unz = SongFolder.OpenZip(zip);
             var inner = SongFolder.List(Path.Combine(unz, "songs"), true);
             check("Player zip: extracted folder lists song", inner.Any(e => e.Kind == EntryKind.Song && e.Name == "demo.rol"), string.Join(", ", inner));

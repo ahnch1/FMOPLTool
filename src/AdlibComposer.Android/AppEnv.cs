@@ -88,7 +88,15 @@ public static class AppEnv
     private static void CopyAssets(Context ctx)
     {
         string mark = Path.Combine(FilesDir, ".assets-version");
+        // 앱 버전 + 설치 시각: 버전을 올리지 않고 다시 설치해도 (자산을 고쳐 다시 빌드) 새로 복사한다
         string ver = typeof(AppEnv).Assembly.GetName().Version?.ToString() ?? "";
+        try
+        {
+#pragma warning disable CS0618, CA1422   // GetPackageInfo(string, int): 33+에서 '사용 중단'이지만 그대로 동작
+            ver += "|" + ctx.PackageManager.GetPackageInfo(ctx.PackageName, 0).LastUpdateTime;
+#pragma warning restore CS0618, CA1422
+        }
+        catch (Exception) { }
         bool fresh = !File.Exists(mark) || File.ReadAllText(mark).Trim() != ver;
         foreach (var a in Assets)
         {

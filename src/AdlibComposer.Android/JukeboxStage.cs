@@ -13,6 +13,7 @@ namespace AdlibComposer.Droid;
 /// 표시 묶음 (가로 · 세로 데크 공용): [표시 방식 단추 Implay · Ocplay · 노래방 · 노래방(Cyberfunk)] / [가사 상자] / [표시 화면].
 /// Implay = 가사 + 채널 믹서, Ocplay = 가사 + 작은 악보 · 세로 음량 막대, 노래방 = 그림 + 가사, Cyberfunk = 별 · 도형 + 가사.
 /// 채널 상태(음 · 음량 막대)도 여기서 계산하고, 건반에 칠할 음은 <see cref="Lit"/>로 내준다.
+/// <para>가로 데크(wide)는 표시 방식 단추 없이 채널 믹서(위) · 작은 악보(아래)를 함께 보이고, 가사 상자는 <see cref="LyricsBox"/>로 내줘 데크가 건반 바로 위에 놓는다.</para>
 /// </summary>
 internal sealed class JukeboxStage : LinearLayout
 {
@@ -26,6 +27,10 @@ internal sealed class JukeboxStage : LinearLayout
     private readonly KaraokeView karaoke;
     private readonly CyberView cyber;
     private int shownMode = -1;
+    private readonly bool wide;
+
+    /// <summary>가사 상자 (wide면 이 묶음에 들어 있지 않음 — 데크가 붙인다).</summary>
+    public View LyricsBox { get { return lyricsView; } }
 
     // 채널 상태
     private readonly VoiceState[] states = new VoiceState[PlaybackOptions.Voices];
@@ -37,15 +42,17 @@ internal sealed class JukeboxStage : LinearLayout
     public readonly Dictionary<int, Color> Lit = new Dictionary<int, Color>();
 
     /// <param name="lyricsDp">가사 상자 높이 (dp).</param>
-    public JukeboxStage(Context c, Func<bool> busy, int lyricsDp) : base(c)
+    /// <param name="wide">가로 데크: 단추 없이 믹서 · 악보를 위아래로, 가사 상자는 밖에서 붙임.</param>
+    public JukeboxStage(Context c, Func<bool> busy, int lyricsDp, bool wide = false) : base(c)
     {
         this.busy = busy;
+        this.wide = wide;
         Orientation = Orientation.Vertical;
         float d = c.Resources.DisplayMetrics.Density;
         int Dp(int v) => (int)(v * d + 0.5f);
 
         var modes = new LinearLayout(c) { Orientation = Orientation.Horizontal };
-        modeButtons = new Button[JukeboxPrefs.ViewModeNames.Length];
+        modeButtons = new Button[wide ? 0 : JukeboxPrefs.ViewModeNames.Length];
         for (int i = 0; i < modeButtons.Length; i++)
         {
             int m = i;
@@ -58,17 +65,26 @@ internal sealed class JukeboxStage : LinearLayout
             modeButtons[i] = b;
             modes.AddView(b, new LayoutParams(0, ViewGroup.LayoutParams.WrapContent, i == 3 ? 1.6f : 1) { RightMargin = i < modeButtons.Length - 1 ? Dp(4) : 0 });
         }
-        AddView(modes, new LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.WrapContent) { BottomMargin = Dp(6) });
+        if (!wide) AddView(modes, new LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.WrapContent) { BottomMargin = Dp(6) });
 
         lyricsView = new LyricsView(c);
-        AddView(lyricsView, new LayoutParams(ViewGroup.LayoutParams.MatchParent, Dp(lyricsDp)) { BottomMargin = Dp(6) });
-        var screen = new FrameLayout(c);
+        if (!wide) AddView(lyricsView, new LayoutParams(ViewGroup.LayoutParams.MatchParent, Dp(lyricsDp)) { BottomMargin = Dp(6) });
         mixer = new MixerView(c, this);
         ocView = new OcplayView(c);
         karaoke = new KaraokeView(c);
         cyber = new CyberView(c);
-        foreach (var v in new View[] { mixer, ocView, karaoke, cyber }) screen.AddView(v, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.MatchParent));
-        AddView(screen, new LayoutParams(ViewGroup.LayoutParams.MatchParent, 0, 1));
+        if (wide)
+        {
+            // 믹서 (채널 줄) 위 · 작은 악보 아래. 노래방 · Cyberfunk는 가로 데크에서 쓰지 않는다
+            AddView(mixer, new LayoutParams(ViewGroup.LayoutParams.MatchParent, 0, 3) { BottomMargin = Dp(6) });
+            AddView(ocView, new LayoutParams(ViewGroup.LayoutParams.MatchParent, 0, 2));
+        }
+        else
+        {
+            var screen = new FrameLayout(c);
+            foreach (var v in new View[] { mixer, ocView, karaoke, cyber }) screen.AddView(v, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.MatchParent));
+            AddView(screen, new LayoutParams(ViewGroup.LayoutParams.MatchParent, 0, 1));
+        }
 
         ApplyViewMode();
         JukeboxPrefs.Changed += ApplyViewMode;
@@ -80,6 +96,14 @@ internal sealed class JukeboxStage : LinearLayout
         int m = JukeboxPrefs.ViewMode;
         var s = S;
         bool lyricKind = s.Kind == SongKind.Adlib || s.Kind == SongKind.Sop || !s.HasSong;
+        if (wide)
+        {
+            lyricsView.Visibility = lyricKind ? ViewStates.Visible : ViewStates.Gone;
+            mixer.Visibility = ocView.Visibility = ViewStates.Visible;
+            karaoke.Visibility = cyber.Visibility = ViewStates.Gone;
+            shownMode = m;
+            return;
+        }
         lyricsView.Visibility = (m == JukeboxPrefs.Implay || m == JukeboxPrefs.Ocplay) && lyricKind ? ViewStates.Visible : ViewStates.Gone;
         mixer.Visibility = m == JukeboxPrefs.Implay ? ViewStates.Visible : ViewStates.Gone;
         ocView.Visibility = m == JukeboxPrefs.Ocplay ? ViewStates.Visible : ViewStates.Gone;

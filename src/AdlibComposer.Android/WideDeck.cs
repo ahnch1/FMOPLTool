@@ -14,10 +14,13 @@ namespace AdlibComposer.Droid;
 /// <summary>
 /// 가로 화면 재생 데크 = Windows Jukebox 배치 (안드로이드 기본 뷰 + 직접 그리기, 외부 라이브러리 없음):
 /// <code>
-///   [곡 정보: 상태 줄 · 제목 · 형식 · 게임 정보 | 조작: ⏮ −5초 ▶ ■ +5초 ⏭ · 다음 곡 자동 · 반복 / 속도 · 키 · 볼륨 · 초기화 / 진행 막대]
-///   [채널 믹서: 채널마다 한 줄 — 켜기/끄기 칸 · 번호 · 악기(+ 울리는 음) · 음량 막대 · 채널 음높이]
+///   [소리 막대 · ⚙ 설정]
+///   [채널 믹서 (채널마다 한 줄)        | 곡 정보: 상태 줄 · 제목 · 형식 · 게임 정보   ]
+///   [작은 악보 · 세로 음량 막대 (Ocplay) | 조작: 진행 막대 / ⏮ −5초 ▶ ■ +5초 ⏭ · 다음 곡 자동 · 반복 / 속도 · 키 · 볼륨 · 초기화]
+///   [가사]
 ///   [건반 C0 ~ B8: 채널마다 울리는 음을 채널 색으로]
 /// </code>
+/// 표시 방식 단추 (Implay · Ocplay · 노래방 · Cyberfunk)는 세로 화면에만 있다.
 /// 세로 화면은 MainActivity의 기존 데크를 그대로 쓴다.
 /// </summary>
 internal sealed class WideDeck : LinearLayout
@@ -69,25 +72,34 @@ internal sealed class WideDeck : LinearLayout
         bar.AddView(settingsButton);
         AddView(bar, new LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.WrapContent) { BottomMargin = Dp(4) });
 
-        // ---------------------------------------------------------------- 위: 곡 정보 | 조작
-        var top = new LinearLayout(c) { Orientation = Orientation.Horizontal };
-        AddView(top, new LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.WrapContent));
+        // ---------------------------------------------------------------- 가운데: 믹서 · 악보 (왼쪽) | 곡 정보 · 조작 (오른쪽)
+        var middle = new LinearLayout(c) { Orientation = Orientation.Horizontal };
+        AddView(middle, new LayoutParams(ViewGroup.LayoutParams.MatchParent, 0, 1) { BottomMargin = Dp(6) });
+
+        stage = new JukeboxStage(c, busy, 0, true);
+        middle.AddView(stage, new LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 55) { RightMargin = Dp(6) });
+
+        // 오른쪽: 넘치면 (작은 화면) 위아래로 넘겨 본다
+        var right = new LinearLayout(c) { Orientation = Orientation.Vertical };
+        var rightScroll = new ScrollView(c) { FillViewport = true };
+        rightScroll.AddView(right, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.WrapContent));
+        middle.AddView(rightScroll, new LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 45));
 
         var info = Box(c);
-        statusRow = Label(c, 13, Lcd, true);
+        statusRow = Label(c, 12, Lcd, true);
         statusRow.SetSingleLine(true);
         statusRow.Ellipsize = Android.Text.TextUtils.TruncateAt.End;
-        titleText = Label(c, 22, Accent, true);
+        titleText = Label(c, 19, Accent, true);
         titleText.SetSingleLine(true);
         titleText.Ellipsize = Android.Text.TextUtils.TruncateAt.End;
-        titleText.SetPadding(0, Dp(6), 0, Dp(4));
-        infoText = Label(c, 14, Text, false);
-        detailText = Label(c, 14, Muted, false);
+        titleText.SetPadding(0, Dp(4), 0, Dp(2));
+        infoText = Label(c, 13, Text, false);
+        detailText = Label(c, 13, Muted, false);
         statusLine = Label(c, 13, Color.ParseColor("#E0A060"), false);
         statusLine.Visibility = ViewStates.Gone;
-        noteText = Label(c, 12, Muted, false);
-        noteText.Text = "믹서: 왼쪽 칸을 누르면 채널 켜기/끄기 · 길게 누르면 그 채널만 · − + = 채널 음높이";
-        lyricsFileText = Label(c, 13, Muted, false);
+        noteText = Label(c, 11, Muted, false);
+        noteText.Text = "믹서: 왼쪽 칸 = 켜기/끄기 · 길게 = 그 채널만 · − + = 채널 음높이";
+        lyricsFileText = Label(c, 12, Muted, false);
         info.AddView(InsetBox(statusRow));
         info.AddView(titleText);
         info.AddView(infoText);
@@ -95,40 +107,14 @@ internal sealed class WideDeck : LinearLayout
         info.AddView(lyricsFileText);
         info.AddView(statusLine);
         info.AddView(noteText);
-        top.AddView(info, new LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1) { RightMargin = Dp(5) });
+        right.AddView(info, new LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.WrapContent) { BottomMargin = Dp(6) });
 
         var ctl = Box(c);
-        // 재생 버튼 + 다음 곡 자동 · 반복
-        var transport = new FlowRow(c, Dp(4), Dp(2));
-        transport.AddView(DeckButton(c, "⏮", delegate { PrevSong?.Invoke(); }));
-        transport.AddView(DeckButton(c, "−5초", delegate { if (!busy()) S.SeekBy(-5); }));
-        playButton = DeckButton(c, "▶ 재생", delegate { PlayPause?.Invoke(); });
-        playButton.SetBackgroundColor(Accent);
-        transport.AddView(playButton);
-        transport.AddView(DeckButton(c, "■ 정지", delegate { StopPressed?.Invoke(); }));
-        transport.AddView(DeckButton(c, "+5초", delegate { if (!busy()) S.SeekBy(5); }));
-        transport.AddView(DeckButton(c, "⏭", delegate { NextSong?.Invoke(); }));
-        AutoNext = new CheckBox(c) { Text = "다음 곡 자동" };
-        Repeat = new CheckBox(c) { Text = "반복 재생" };
-        transport.AddView(AutoNext);
-        transport.AddView(Repeat);
-        ctl.AddView(transport);
-
-        // 속도 · 키 · 볼륨 · 초기화
-        var adjust = new FlowRow(c, Dp(12), Dp(2));
-        adjust.SetPadding(0, Dp(6), 0, 0);
-        adjust.AddView(Stepper(c, "속도", "느리게", "빠르게", out speedValue, d => { if (!busy()) S.SetSpeed(Math.Round(S.Options.Speed * 100 + d * 5) / 100.0); }));
-        adjust.AddView(Stepper(c, "키", "♂", "♀", out keyValue, d => { if (!busy()) S.SetKey(S.Options.Transpose + d); }));
-        adjust.AddView(Stepper(c, "볼륨", "−", "+", out volValue, d => { if (!busy()) S.SetGain(Math.Round(S.Options.Gain * 10 + d) / 10.0); }));
-        adjust.AddView(DeckButton(c, "초기화", delegate { if (!busy()) S.ResetAdjustments(); }));
-        ctl.AddView(adjust);
-
         // 진행 막대 + 시간
         var seekRow = new LinearLayout(c) { Orientation = Orientation.Horizontal };
         seekRow.SetGravity(GravityFlags.CenterVertical);
-        seekRow.SetPadding(0, Dp(6), 0, 0);
-        posText = Label(c, 15, Lcd, true);
-        lenText = Label(c, 15, Lcd, true);
+        posText = Label(c, 14, Lcd, true);
+        lenText = Label(c, 14, Lcd, true);
         posText.Text = lenText.Text = "00:00";
         seek = new SeekBar(c) { Max = 1000 };
         seek.StartTrackingTouch += delegate { SeekDragging = true; };
@@ -142,14 +128,36 @@ internal sealed class WideDeck : LinearLayout
         seekRow.AddView(seek, new LayoutParams(0, ViewGroup.LayoutParams.WrapContent, 1));
         seekRow.AddView(InsetBox(lenText));
         ctl.AddView(seekRow);
-        top.AddView(ctl, new LayoutParams(0, ViewGroup.LayoutParams.WrapContent, 1) { LeftMargin = Dp(5) });
 
-        // ---------------------------------------------------------------- 가운데: 표시 묶음 (표시 방식에 따라)
-        // Implay = 가사 + 채널 믹서, Ocplay = 가사 + 작은 악보 · 세로 음량 막대, 노래방 = 그림 + 가사, Cyberfunk = 별 · 도형 + 가사
-        stage = new JukeboxStage(c, busy, 92);
-        AddView(stage, new LayoutParams(ViewGroup.LayoutParams.MatchParent, 0, 1) { TopMargin = Dp(8), BottomMargin = Dp(8) });
+        // 재생 버튼 + 다음 곡 자동 · 반복
+        var transport = new FlowRow(c, Dp(4), Dp(2));
+        transport.SetPadding(0, Dp(6), 0, 0);
+        transport.AddView(DeckButton(c, "⏮", delegate { PrevSong?.Invoke(); }));
+        transport.AddView(DeckButton(c, "−5초", delegate { if (!busy()) S.SeekBy(-5); }));
+        playButton = DeckButton(c, "▶ 재생", delegate { PlayPause?.Invoke(); });
+        playButton.SetBackgroundColor(Accent);
+        transport.AddView(playButton);
+        transport.AddView(DeckButton(c, "■ 정지", delegate { StopPressed?.Invoke(); }));
+        transport.AddView(DeckButton(c, "+5초", delegate { if (!busy()) S.SeekBy(5); }));
+        transport.AddView(DeckButton(c, "⏭", delegate { NextSong?.Invoke(); }));
+        AutoNext = new CheckBox(c) { Text = "다음 곡 자동", TextSize = 13 };
+        Repeat = new CheckBox(c) { Text = "반복 재생", TextSize = 13 };
+        transport.AddView(AutoNext);
+        transport.AddView(Repeat);
+        ctl.AddView(transport);
 
-        // ---------------------------------------------------------------- 아래: 건반
+        // 속도 · 키 · 볼륨 · 초기화
+        var adjust = new FlowRow(c, Dp(10), Dp(2));
+        adjust.SetPadding(0, Dp(4), 0, 0);
+        adjust.AddView(Stepper(c, "속도", "느리게", "빠르게", out speedValue, d => { if (!busy()) S.SetSpeed(Math.Round(S.Options.Speed * 100 + d * 5) / 100.0); }));
+        adjust.AddView(Stepper(c, "키", "♂", "♀", out keyValue, d => { if (!busy()) S.SetKey(S.Options.Transpose + d); }));
+        adjust.AddView(Stepper(c, "볼륨", "−", "+", out volValue, d => { if (!busy()) S.SetGain(Math.Round(S.Options.Gain * 10 + d) / 10.0); }));
+        adjust.AddView(DeckButton(c, "초기화", delegate { if (!busy()) S.ResetAdjustments(); }));
+        ctl.AddView(adjust);
+        right.AddView(ctl, new LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.WrapContent));
+
+        // ---------------------------------------------------------------- 아래: 가사 (건반 바로 위) · 건반
+        AddView(stage.LyricsBox, new LayoutParams(ViewGroup.LayoutParams.MatchParent, Dp(76)) { BottomMargin = Dp(6) });
         keys = new KeyboardView(c);
         AddView(keys, new LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.WrapContent));
 
@@ -178,7 +186,6 @@ internal sealed class WideDeck : LinearLayout
     {
         var s = S;
         bool playing = s.State == PlayState.Playing;
-        noteText.Visibility = JukeboxPrefs.ViewMode == JukeboxPrefs.Implay ? ViewStates.Visible : ViewStates.Gone;
 
         titleText.Text = s.HasSong ? s.Title : "곡을 고르세요";
         string sound = s.SoundText;
@@ -252,13 +259,13 @@ internal sealed class WideDeck : LinearLayout
 
     private Button DeckButton(Context c, string text, EventHandler click)
     {
-        var b = new Button(c) { Text = text, TextSize = 15 };
+        var b = new Button(c) { Text = text, TextSize = 14 };
         b.SetAllCaps(false);
         b.SetMinWidth(0);
-        b.SetMinimumWidth(Dp(52));
+        b.SetMinimumWidth(Dp(44));
         b.SetMinHeight(0);
-        b.SetMinimumHeight(Dp(44));
-        b.SetPadding(Dp(12), 0, Dp(12), 0);
+        b.SetMinimumHeight(Dp(40));
+        b.SetPadding(Dp(10), 0, Dp(10), 0);
         b.Click += click;
         return b;
     }
@@ -268,14 +275,14 @@ internal sealed class WideDeck : LinearLayout
     {
         var row = new LinearLayout(c) { Orientation = Orientation.Horizontal };
         row.SetGravity(GravityFlags.CenterVertical);
-        var cap = Label(c, 14, Muted, false);
+        var cap = Label(c, 13, Muted, false);
         cap.Text = caption;
-        cap.SetPadding(0, 0, Dp(6), 0);
+        cap.SetPadding(0, 0, Dp(4), 0);
         row.AddView(cap);
         row.AddView(DeckButton(c, minus, delegate { step(-1); }));
-        var v = Label(c, 15, Lcd, true);
+        var v = Label(c, 14, Lcd, true);
         v.Gravity = GravityFlags.Center;
-        v.SetMinWidth(Dp(56));
+        v.SetMinWidth(Dp(50));
         row.AddView(v);
         row.AddView(DeckButton(c, plus, delegate { step(1); }));
         value = v;

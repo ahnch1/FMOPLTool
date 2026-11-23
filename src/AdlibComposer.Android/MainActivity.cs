@@ -36,6 +36,9 @@ public class MainActivity : Activity
     private Button playButton;
     private CheckBox autoNext, repeat;
     private FrameLayout listBox;
+    /// <summary>목록 칸 = 검색 줄 (가로 화면만) + 목록.</summary>
+    private LinearLayout listPane, searchRow;
+    private EditText searchBox;
     /// <summary>가로 화면 데크 (Windows Jukebox 배치). 세로 화면은 deck.</summary>
     private WideDeck wide;
     /// <summary>세로 화면 표시 묶음 (가사 · 표시 방식).</summary>
@@ -48,6 +51,15 @@ public class MainActivity : Activity
     private sealed class Place { public string Path; public string Shown; public bool Tracks; }
     private readonly List<Place> places = new List<Place>();
     private List<FolderEntry> entries = new List<FolderEntry>();
+    /// <summary>지금 곳의 거르지 않은 목록 (검색을 지우면 이것으로).</summary>
+    private List<FolderEntry> placeEntries = new List<FolderEntry>();
+
+    // 파일 검색: 글을 고치면 잠깐 뒤 (또는 키보드 [검색]) 지금 폴더 아래 전부에서 이름으로. 세대 번호가 바뀌면 하던 검색은 버림
+    private const int SearchMax = 500, SearchDelayMs = 400;
+    private string searchQuery = "";
+    private volatile int searchGen;
+    private bool searchSilent;
+    private Action runSearch;
 
     // 재생 상태
     private List<string> playlist = new List<string>();
@@ -119,7 +131,12 @@ public class MainActivity : Activity
         emptyText = new TextView(this) { TextSize = 16, Gravity = GravityFlags.Center };
         emptyText.SetTextColor(Color.ParseColor("#8A93A0"));
         listBox.AddView(emptyText, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.MatchParent));
-        body.AddView(listBox, new LinearLayout.LayoutParams(0, 0, 1) { Weight = 1 });
+        listPane = new LinearLayout(this) { Orientation = Orientation.Vertical };
+        listPane.SetBackgroundColor(Color.ParseColor("#262B33"));
+        BuildSearchRow();
+        listPane.AddView(searchRow, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.WrapContent));
+        listPane.AddView(listBox, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, 0, 1));
+        body.AddView(listPane, new LinearLayout.LayoutParams(0, 0, 1) { Weight = 1 });
 
         // 데크
         deck = new LinearLayout(this) { Orientation = Orientation.Vertical };
@@ -209,7 +226,57 @@ public class MainActivity : Activity
         // 안드로이드 15+ (targetSdk 35 이상)는 화면을 상태 · 내비게이션 막대 밑까지 그린다 (edge-to-edge 강제)
         // → 막대 크기만큼 안쪽 여백. 그 아래 판은 시스템이 알아서 띄우므로 손대지 않는다.
         if (OperatingSystem.IsAndroidVersionAtLeast(35)) root.SetOnApplyWindowInsetsListener(new SystemBarPadding());
+        // 처음에 검색 칸이 초점을 받아 키보드가 뜨지 않게
+        root.Focusable = true;
+        root.FocusableInTouchMode = true;
+        Window.SetSoftInputMode(SoftInput.StateHidden | SoftInput.AdjustPan);
         SetContentView(root);
+        root.RequestFocus();
+    }
+
+    /// <summary>검색 줄: [🔍 파일 이름 검색 칸] [✕]. 가로 화면에서만 보인다.</summary>
+    private void BuildSearchRow()
+    {
+        searchRow = new LinearLayout(this) { Orientation = Orientation.Horizontal };
+        searchRow.SetGravity(GravityFlags.CenterVertical);
+        searchRow.SetPadding(Dp(6), Dp(4), Dp(4), Dp(2));
+        searchBox = new EditText(this) { TextSize = 15, Hint = "🔍 파일 검색 (하위 폴더까지)" };
+        searchBox.SetSingleLine(true);
+        searchBox.InputType = Android.Text.InputTypes.ClassText;
+        // 가로 화면 키보드가 전체 화면 입력 칸으로 바뀌지 않게 (목록이 보이도록)
+        searchBox.ImeOptions = Android.Views.InputMethods.ImeAction.Search | (Android.Views.InputMethods.ImeAction)Android.Views.InputMethods.ImeFlags.NoExtractUi;
+        searchBox.SetTextColor(Color.White);
+        searchBox.SetHintTextColor(Color.ParseColor("#8A93A0"));
+        searchBox.SetBackgroundColor(Color.ParseColor("#171B20"));
+        searchBox.SetPadding(Dp(10), Dp(8), Dp(10), Dp(8));
+        runSearch = RunSearch;
+        searchBox.TextChanged += delegate
+        {
+            if (searchSilent) return;
+            handler.RemoveCallbacks(runSearch);
+            handler.PostDelayed(runSearch, SearchDelayMs);
+        };
+        searchBox.EditorAction += (s, e) =>
+        {
+            var id = e.ActionId;
+            e.Handled = id == Android.Views.InputMethods.ImeAction.Search || id == Android.Views.InputMethods.ImeAction.Done || id == Android.Views.InputMethods.ImeAction.Unspecified;
+            if (!e.Handled) return;
+            handler.RemoveCallbacks(runSearch);
+            HideKeyboard();
+            RunSearch();
+        };
+        searchRow.AddView(searchBox, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WrapContent, 1));
+        var clear = SmallButton("✕", delegate { HideKeyboard(); ClearSearch(); });
+        clear.SetMinWidth(0);
+        clear.SetMinimumWidth(Dp(44));
+        searchRow.AddView(clear);
+    }
+
+    private void HideKeyboard()
+    {
+        var imm = (Android.Views.InputMethods.InputMethodManager)GetSystemService(InputMethodService);
+        imm?.HideSoftInputFromWindow(searchBox.WindowToken, 0);
+        searchBox.ClearFocus();
     }
 
     /// <summary>상태 막대 · 내비게이션 막대 · 화면 구멍(카메라) 만큼 안쪽 여백.</summary>
@@ -237,12 +304,16 @@ public class MainActivity : Activity
         body.Orientation = landscape ? Orientation.Horizontal : Orientation.Vertical;
         if (landscape)
         {
-            body.AddView(listBox, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 34));
+            searchRow.Visibility = ViewStates.Visible;
+            body.AddView(listPane, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 34));
             body.AddView(wide, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 66));
         }
         else
         {
-            body.AddView(listBox, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ListRowHeight() * 5));
+            // 세로 화면은 목록이 5줄뿐이라 검색 줄을 두지 않는다 (검색 중이었으면 폴더 목록으로)
+            if (searchQuery.Length > 0 || searchBox.Text.Length > 0) { HideKeyboard(); ClearSearch(); }
+            searchRow.Visibility = ViewStates.Gone;
+            body.AddView(listPane, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ListRowHeight() * 5));
             body.AddView(stageP, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, 0, 1));
             body.AddView(deck, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.WrapContent));
         }
@@ -489,6 +560,7 @@ public class MainActivity : Activity
 
     private void GoUp()
     {
+        if (searchQuery.Length > 0) { ClearSearch(); return; }   // 검색 결과에서 위로 = 검색 끝내고 그 폴더
         if (places.Count > 1) { places.RemoveAt(places.Count - 1); ShowPlace(); return; }
         string parent = places.Count == 1 ? RootParent(places[0]) : null;
         if (parent == null) return;
@@ -500,7 +572,7 @@ public class MainActivity : Activity
 #pragma warning disable CS0618, CS0672   // OnBackPressed: 안드로이드 13+에서 '사용 중단'이지만 enableOnBackInvokedCallback을 켜지 않으면 그대로 불린다
     public override void OnBackPressed()
     {
-        if (CanGoUp()) GoUp();
+        if (searchQuery.Length > 0 || CanGoUp()) GoUp();
         else MoveTaskToBack(true);
     }
 #pragma warning restore CS0618, CS0672
@@ -521,6 +593,7 @@ public class MainActivity : Activity
     private void ShowPlace()
     {
         var p = places[places.Count - 1];
+        ResetSearchBox();
         pathText.Text = ShownPath();
         emptyText.Text = "읽는 중…";
         adapter.Set(new List<FolderEntry>());
@@ -535,11 +608,82 @@ public class MainActivity : Activity
             RunOnUiThread(() =>
             {
                 if (places.Count == 0 || places[places.Count - 1] != p) return;   // 그사이 다른 곳으로
-                entries = l;
+                entries = placeEntries = l;
                 adapter.Set(l);
                 emptyText.Text = err != null ? "읽을 수 없습니다: " + err : l.Count == (canUp ? 1 : 0) ? "곡 · 폴더가 없습니다" : "";
                 list.SetSelection(0);
                 if (!p.Tracks && places.Count == 1 && !ZipCache(p.Path)) prefs.Edit().PutString(PrefLastFolder, p.Path).Apply();
+            });
+        });
+    }
+
+    /// <summary>검색 칸 비우기 (검색을 다시 부르지 않음) + 하던 검색 버림.</summary>
+    private void ResetSearchBox()
+    {
+        handler.RemoveCallbacks(runSearch);
+        searchGen++;
+        searchQuery = "";
+        if (searchBox.Text.Length > 0)
+        {
+            searchSilent = true;
+            searchBox.Text = "";
+            searchSilent = false;
+        }
+    }
+
+    /// <summary>검색 끝: 칸을 비우고 지금 곳의 목록을 다시 보임 (읽어 둔 것 그대로).</summary>
+    private void ClearSearch()
+    {
+        bool was = searchQuery.Length > 0;
+        ResetSearchBox();
+        if (!was || places.Count == 0) return;
+        pathText.Text = ShownPath();
+        entries = placeEntries;
+        adapter.Set(entries);
+        emptyText.Text = entries.Count == 0 ? "곡 · 폴더가 없습니다" : "";
+        list.SetSelection(0);
+    }
+
+    /// <summary>
+    /// 검색 칸의 글로 찾기: 폴더면 그 아래 모든 폴더에서 파일 · 폴더 이름 (뒤 스레드, 많아야 <see cref="SearchMax"/>개),
+    /// 곡 여럿 든 파일의 곡 목록이면 그 목록 안에서만. 빈 글이면 검색 끝.
+    /// </summary>
+    private void RunSearch()
+    {
+        if (places.Count == 0) return;
+        string q = searchBox.Text.Trim();
+        if (q.Length == 0) { ClearSearch(); return; }
+        if (q == searchQuery) return;
+        searchQuery = q;
+        int gen = ++searchGen;
+        var p = places[places.Count - 1];
+        string head = ShownPath() + " › 🔍 \"" + q + "\"";
+        if (p.Tracks)
+        {
+            entries = SongFolder.Filter(placeEntries, q);
+            adapter.Set(entries);
+            pathText.Text = head + " " + entries.Count + "개";
+            emptyText.Text = entries.Count == 0 ? "찾는 곡이 없습니다" : "";
+            list.SetSelection(0);
+            return;
+        }
+        pathText.Text = head + " 찾는 중…";
+        emptyText.Text = "찾는 중…";
+        entries = new List<FolderEntry>();
+        adapter.Set(entries);
+        Task.Run(() =>
+        {
+            List<FolderEntry> l; bool cut = false;
+            try { l = SongFolder.Search(p.Path, q, SearchMax, () => gen != searchGen, out cut); }
+            catch (Exception) { l = new List<FolderEntry>(); }
+            RunOnUiThread(() =>
+            {
+                if (gen != searchGen) return;   // 그사이 글을 고쳤거나 다른 곳으로
+                entries = l;
+                adapter.Set(l);
+                pathText.Text = head + " " + l.Count + (cut ? "개 넘음 (앞 " + SearchMax + "개만)" : "개");
+                emptyText.Text = l.Count == 0 ? "찾는 파일이 없습니다" : "";
+                list.SetSelection(0);
             });
         });
     }

@@ -93,6 +93,80 @@ public static class SongFolder
         return l;
     }
 
+    /// <summary>
+    /// 파일 이름 검색: <paramref name="dir"/>와 그 아래 모든 폴더(숨은 폴더 · 읽을 수 없는 폴더는 뺌)에서
+    /// 이름에 검색어 낱말이 모두 든 폴더 · zip · 곡 (대소문자 무시, 낱말은 빈칸으로 나눔). zip 안은 찾지 않는다.
+    /// 줄 이름 = <paramref name="dir"/>에서의 상대 경로 (폴더 구분 '/'), 차례 = 얕은 폴더부터 (폴더 안은 <see cref="List"/>와 같은 차례).
+    /// </summary>
+    /// <param name="max">이만큼 찾으면 멈춘다 (<paramref name="truncated"/> = true).</param>
+    /// <param name="cancelled">폴더마다 확인 — true면 그때까지 찾은 것.</param>
+    public static List<FolderEntry> Search(string dir, string query, int max, Func<bool> cancelled, out bool truncated)
+    {
+        truncated = false;
+        var l = new List<FolderEntry>();
+        var words = (query ?? "").Split((char[])null, StringSplitOptions.RemoveEmptyEntries);
+        if (words.Length == 0 || !Directory.Exists(dir)) return l;
+        bool Match(string name) { return words.All(w => name.IndexOf(w, StringComparison.OrdinalIgnoreCase) >= 0); }
+        string root = dir.TrimEnd('/', '\\');
+        string Rel(string p) { return p.Substring(root.Length).TrimStart('/', '\\').Replace('\\', '/'); }
+
+        var cmp = StringComparer.OrdinalIgnoreCase;
+        var queue = new Queue<string>();
+        queue.Enqueue(root);
+        while (queue.Count > 0)
+        {
+            if (cancelled != null && cancelled()) return l;
+            string cur = queue.Dequeue();
+            string[] dirs, files;
+            try
+            {
+                dirs = Directory.GetDirectories(cur);
+                files = Directory.GetFiles(cur);
+            }
+            catch (Exception) { continue; }   // 권한 없음 (Android/data 등) · 그사이 지워짐
+            Array.Sort(dirs, (a, b) => cmp.Compare(System.IO.Path.GetFileName(a), System.IO.Path.GetFileName(b)));
+            Array.Sort(files, (a, b) => cmp.Compare(System.IO.Path.GetFileName(a), System.IO.Path.GetFileName(b)));
+
+            var found = new List<FolderEntry>();
+            foreach (var d in dirs)
+            {
+                string name = System.IO.Path.GetFileName(d);
+                if (name.StartsWith(".")) continue;
+                queue.Enqueue(d);
+                if (Match(name)) found.Add(new FolderEntry { Kind = EntryKind.Folder, Path = d, Name = Rel(d) });
+            }
+            foreach (var z in files)
+                if (ZipFolder.IsArchive(z) && Match(System.IO.Path.GetFileName(z)))
+                    found.Add(new FolderEntry { Kind = EntryKind.Zip, Path = z, Name = Rel(z), Detail = ZipFolder.IsZip(z) ? "ZIP" : "LZH" });
+            foreach (var f in files)
+            {
+                if (!IsSong(f) || !Match(System.IO.Path.GetFileName(f))) continue;
+                bool multi;
+                try { multi = ChipSongs.HasTracks(f); } catch (Exception) { multi = false; }
+                found.Add(new FolderEntry
+                {
+                    Kind = multi ? EntryKind.Multi : EntryKind.Song,
+                    Path = f,
+                    Name = Rel(f),
+                    Detail = System.IO.Path.GetExtension(f).TrimStart('.').ToUpperInvariant(),
+                });
+            }
+            foreach (var e in found)
+            {
+                if (l.Count >= max) { truncated = true; return l; }
+                l.Add(e);
+            }
+        }
+        return l;
+    }
+
+    /// <summary>목록 안에서만 거르기 (곡 여럿 든 파일의 곡 목록 등): 이름에 검색어 낱말이 모두 든 줄.</summary>
+    public static List<FolderEntry> Filter(IEnumerable<FolderEntry> entries, string query)
+    {
+        var words = (query ?? "").Split((char[])null, StringSplitOptions.RemoveEmptyEntries);
+        return entries.Where(e => e.Kind != EntryKind.Up && words.All(w => (e.Name ?? "").IndexOf(w, StringComparison.OrdinalIgnoreCase) >= 0)).ToList();
+    }
+
     /// <summary>zip을 (아직이면) 캐시 폴더에 풀고 그 폴더. 실패하면 예외.</summary>
     public static string OpenZip(string zipPath) { return ZipFolder.Extract(zipPath); }
 

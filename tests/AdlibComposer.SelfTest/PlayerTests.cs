@@ -49,6 +49,28 @@ public static class PlayerTests
             check("Player list: playlist = songs only", SongFolder.Playlist(list).SequenceEqual(new[] { Path.Combine(root, "demo.rol") }));
             check("Player list: IsSong", SongFolder.IsSong("a.VGZ") && SongFolder.IsSong("x.hoot::3") && !SongFolder.IsSong("a.txt"));
 
+            // ---- 파일 이름 검색 (하위 폴더까지, 숨은 폴더 · 곡 아닌 파일은 뺌)
+            Directory.CreateDirectory(Path.Combine(root, "sub", "Battle Songs"));
+            File.Copy(Path.Combine(samples, "demo.rol"), Path.Combine(root, "sub", "Battle Theme.ROL"));
+            File.Copy(Path.Combine(samples, "demo.rol"), Path.Combine(root, "sub", "Battle Songs", "last battle.rol"));
+            File.Copy(Path.Combine(samples, "demo.rol"), Path.Combine(root, ".hidden", "battle.rol"));
+            File.WriteAllText(Path.Combine(root, "battle.txt"), "x");
+            var found = SongFolder.Search(root, "BATTLE", 100, null, out bool cut);
+            check("Player search: subfolders, case-insensitive, shallow first",
+                !cut && found.Select(e => e.Kind + ":" + e.Name).SequenceEqual(new[] { "Folder:sub/Battle Songs", "Song:sub/Battle Theme.ROL", "Song:sub/Battle Songs/last battle.rol" }),
+                string.Join(", ", found));
+            found = SongFolder.Search(root + Path.DirectorySeparatorChar, " battle  theme ", 100, null, out cut);
+            check("Player search: all words must match", found.Count == 1 && found[0].Path == Path.Combine(root, "sub", "Battle Theme.ROL"), string.Join(", ", found));
+            found = SongFolder.Search(root, "battle", 2, null, out cut);
+            check("Player search: max stops with truncated", cut && found.Count == 2, string.Join(", ", found));
+            found = SongFolder.Search(root, "pack", 100, () => true, out cut);
+            check("Player search: cancelled / empty query → nothing", found.Count == 0 && SongFolder.Search(root, "  ", 100, null, out cut).Count == 0);
+            found = SongFolder.Search(root, "pack", 100, null, out cut);
+            check("Player search: zip by name", found.Count == 1 && found[0].Kind == EntryKind.Zip, string.Join(", ", found));
+            var filtered = SongFolder.Filter(list, "DEMO");
+            check("Player filter: in-list names, no up row", filtered.Count == 1 && filtered[0].Name == "demo.rol", string.Join(", ", filtered));
+            File.Delete(Path.Combine(root, "battle.txt"));
+
             string unz = SongFolder.OpenZip(zip);
             var inner = SongFolder.List(Path.Combine(unz, "songs"), true);
             check("Player zip: extracted folder lists song", inner.Any(e => e.Kind == EntryKind.Song && e.Name == "demo.rol"), string.Join(", ", inner));
